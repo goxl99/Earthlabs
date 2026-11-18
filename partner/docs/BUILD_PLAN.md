@@ -62,21 +62,39 @@ Everything in the review prototype is in scope and must ship. Each line is a mod
 - [x] CI, branch, pull request
 - [ ] Day 1B (afternoon 18 Nov): users and access module, module switches, audit viewer, notifications table and in-app bell, public home and registration wizard
 
-### Day 2 — Partners and agreements
-- [ ] 2A: sign-in and role shell finished, applications review and approval, partner list and profile, partner portal dashboard
-- [ ] 2B: Territory Explorer map, exclusivity, agreements flow, MOU template upload and send for signing, certificates with public verification
+### Scope: the WHOLE system, all four phases (every module in the review prototype)
+Each session works through the unchecked boxes of its day, then continues into the next day's items if time remains. Nothing is "phase 1 only". A module is done only when it meets the definition of done below.
 
-### Day 3 — Catalogue, schemes, orders
-- [ ] 3A: SKU catalogue, partner-wise access, SKU-wise margins editor, slabs and GST, approvals for non-super changes
-- [ ] 3B: scheme engine and disclosure, partner ordering with lead time and hints, order workflow, hold/cancel, My orders
+### Day 2 — Partners, territories, agreements, public site
+- [ ] Sign-in, role shell and navigation per role; Users & Access (role matrix, activate users, registration-type switches)
+- [ ] Public website: home, registration wizard (dealer and distributor; installation partner behind the switch), application tracking, certificate verification
+- [ ] Applications review: more-info, field verification, reject with reason, approve with permanent Partner ID
+- [ ] Partners list and profile, territory exclusivity check, Territory Explorer (Gujarat district map and coverage gaps)
+- [ ] Agreements: MOU generation, custom MOU template upload with field mapping, send for signing, signed copy storage, certificates with QR verification
+- [ ] Notifications (in-app plus e-mail through an Edge Function)
 
-### Day 4 — Money, supply, intelligence
-- [ ] 4A: invoices, UTR/advice upload and Accounts confirmation gate, ledger, credit notes, credit ladder (pay and carry first)
-- [ ] 4B: vendors and vendor portal, stock reports, raw materials, release orders, lead-time rules, batch-system link, inventory and dispatch, AI Intelligence Edge Function, Performance Matrix, reports and exports
+### Day 3 — Catalogue, pricing, schemes, orders
+- [ ] SKU catalogue add/retire/restore, partner-wise SKU access, SKU-wise MRP and margins, tier price list, margin slabs
+- [ ] Scheme engine (percent, flat, free cartons, kit; audience, SKU scope, minimums, stack rules, budget caps), partner-wise schemes, disclosure control
+- [ ] Partner portal: dashboard, place order (own prices only, scheme hints, lead-time estimate), my orders
+- [ ] Order workflow (approval, payment gate, dispatch, delivery), hold and cancel with reasons, audit
+- [ ] Inventory and dispatch: stock, reservations, link to the Batch Management system (QC-approved batches), dispatch notes
 
-### Day 5 — Hardening and launch prep
-- [ ] 5A: security review of every policy and role, synthetic load (1,000 partners, 50,000 orders), indexes
-- [ ] 5B: end-to-end test of every flow, user guide, hand-over checklist, deploy steps, Supabase migration and advisors if the project exists
+### Day 4 — Money, vendors, procurement, intelligence
+- [ ] Invoices (GST split CGST/SGST/IGST), credit notes, ledger, manual payment entry
+- [ ] Partner payment proof (UTR or payment advice upload to Storage, duplicate-UTR block), Accounts confirmation gate
+- [ ] Vendors and vendor portal: stock reports, quotes, purchase orders, release orders, vendor payments, vendor performance
+- [ ] Procurement: raw-material inventory, reorder planning from production plan, lead-time settings, auto-email to vendor, approval limits
+- [ ] Credit ladder (pay-and-carry first; AI proposes, Super Admin approves) for partners and vendors
+- [ ] Performance Matrix: monthly score, weights, promotion/hold rules, growth ladder
+- [ ] AI Intelligence via Edge Function (Claude API key as a Supabase secret): promotion, scheme, procurement, credit recommendations; management approves
+- [ ] Approvals centre for all change requests; Reports and Exports (CSV/PDF); Audit trail viewer
+
+### Day 5 — Hardening, launch preparation, hand-over
+- [ ] Security review of every RLS policy for every role, attack tests, rate limits, storage rules
+- [ ] Performance and load test (1,000 partners, 50,000 orders), index review
+- [ ] Accessibility and mobile pass on every screen; browser test of the main journeys per role
+- [ ] User guide, hand-over checklist, backups and restore drill, deploy steps for /partner redirect (executed only after Viraj approves)
 
 ## Definition of done (every module)
 Works for every role it applies to, protected by RLS, audited, covered by a test, and checked against the prototype.

@@ -1,7 +1,7 @@
 # EPDMS progress status
-Updated at the end of every build session. Overall = modules done / 32.
+Updated at the end of every build session. Overall = modules done / 33.
 
-**Overall: 7 of 32 modules done (22%)** · last update: 18 Nov 2026, build 1 (partners). "Done" = built and database rules tested locally; screens are not yet click-tested against a live Supabase project (blocked, see below).
+**Overall: 8 of 33 modules done (24%)** · last update: 18 Nov 2026, build 1 (partners). "Done" = built and database rules tested locally; screens are not yet click-tested against a live Supabase project (blocked, see below).
 
 | # | Module | Day | Status |
 |---|---|---|---|
@@ -36,6 +36,7 @@ Updated at the end of every build session. Overall = modules done / 32.
 | 29 | Load test (1,000 partners, 50,000 orders) | 5 | Not started |
 | 30 | Accessibility, mobile, browser journeys | 5 | Not started |
 | 31 | User guide, hand-over, backup drill | 5 | Not started |
+| 33 | Architecture review and hardening (bootstrap, audit immutability, flood guard, storage rules, security headers, health probe) | 1 | Done |
 | 32 | Go-live: Supabase project, deploy, /partner redirect | 5 | Blocked: needs Supabase upgrade and Viraj's approval |
 
 ## Blockers

@@ -93,4 +93,18 @@ reset role;
 select pg_temp.as_user('00000000-0000-0000-0000-000000000002'); set role authenticated;
 do $$ begin begin perform approve_application(current_setting('t.app2')::uuid); raise exception 'sales approved allowed'; exception when raise_exception then if sqlerrm like '%allowed' then raise; end if; end; end $$;
 reset role;
+
+-- Hardening: bootstrap closes, audit is immutable, flood guard
+do $$ begin assert (select value::text from settings where key='bootstrap_open')='false', 'bootstrap closed after first Super Admin'; end $$;
+insert into auth.users(id,email) values ('00000000-0000-0000-0000-000000000009','late@x');
+do $$ begin assert (select role||active::text from profiles where id='00000000-0000-0000-0000-000000000009')='dealerfalse', 'later sign-up is inactive'; end $$;
+do $$ begin begin update audit_log set action='x'; raise exception 'audit edit allowed'; exception when raise_exception then if sqlerrm like '%allowed' then raise; end if; end; end $$;
+do $$ begin begin delete from audit_log; raise exception 'audit delete allowed'; exception when raise_exception then if sqlerrm like '%allowed' then raise; end if; end; end $$;
+select pg_temp.as_user('00000000-0000-0000-0000-000000000001'); set role authenticated;
+do $$ begin begin update audit_log set action='x'; raise exception 'super edited audit'; exception when insufficient_privilege or raise_exception then if sqlerrm like '%edited audit' then raise; end if; end; end $$;
+reset role;
+do $$ declare i int; begin
+  for i in 1..60 loop insert into applications(type_code,business_name,contact_name,phone,email,district) values ('DLR','Bulk '||i,'x','9999999999','bulk'||i||'@x.com','Anand'); end loop;
+  begin perform submit_application('DLR','Flood','A','9999999999','flood@x.com','Gujarat','Anand',null,'{}'); raise exception 'flood allowed'; exception when raise_exception then if sqlerrm like '%allowed' then raise; end if; end;
+end $$;
 \echo ALL RLS TESTS PASSED

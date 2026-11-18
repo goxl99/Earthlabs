@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+# Runs every migration plus the RLS tests on a throwaway local Postgres. Usage: ./run_local_tests.sh [host] [port]
+set -euo pipefail
+H=${1:-/tmp/pg}; P=${2:-5433}; DB=epdms_test
+psql -h "$H" -p "$P" -U postgres -qc "drop database if exists $DB" -c "create database $DB"
+Q="psql -h $H -p $P -U postgres -d $DB -q -v ON_ERROR_STOP=1"
+$Q -f "$(dirname "$0")/tests/00_shim.sql"
+for f in "$(dirname "$0")"/migrations/*.sql; do $Q -f "$f"; done
+$Q -f "$(dirname "$0")/tests/rls_test.sql"

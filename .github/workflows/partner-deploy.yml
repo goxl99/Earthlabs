@@ -1,0 +1,20 @@
+# Manual deploy of the partner app. Run it only after Supabase secrets are added in repo Settings > Secrets.
+# It builds the static app and publishes it as an artifact. Hosting target is chosen in docs/DEPLOY.md.
+name: Partner platform build for deploy
+on: workflow_dispatch
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: partner } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: partner/package-lock.json }
+      - run: npm ci
+      - run: npm run build
+        env:
+          NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
+          NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+          PARTNER_BASE_PATH: ${{ vars.PARTNER_BASE_PATH }}
+      - uses: actions/upload-artifact@v4
+        with: { name: partner-site, path: partner/out }

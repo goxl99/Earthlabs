@@ -54,6 +54,12 @@ Everything in the review prototype is in scope and must ship. Each line is a mod
 
 **System-wide rules (all 15 from the original spec) are enforced in the database or an Edge Function, each with a test.**
 
+## Session protocol (every scheduled or manual session MUST do this)
+1. Start: read this file and `STATUS.md`.
+2. Work the unchecked boxes. Finish with tests green (database tests, typecheck, unit tests, build).
+3. End: update `partner/docs/STATUS.md` (module table, percent complete, what changed, what is blocked), commit and push to `partner-platform`.
+4. Tell Viraj: call PushNotification with one line "EPDMS build N done: X% complete. Next: ..." and end the reply with a short progress report (done this session, overall percent, blocked items, next session). Do this even when little was achieved.
+
 ## Day-by-day (two working runs per day)
 ### Day 1 — Foundation (done today)
 - [x] Plan, repo folders, prototype copied

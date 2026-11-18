@@ -1,18 +1,18 @@
 # EPDMS progress status
 Updated at the end of every build session. Overall = modules done / 32.
 
-**Overall: 3 of 32 modules done (9%)** · last update: 18 Nov 2026, build 0 (foundation)
+**Overall: 7 of 32 modules done (22%)** · last update: 18 Nov 2026, build 1 (partners). "Done" = built and database rules tested locally; screens are not yet click-tested against a live Supabase project (blocked, see below).
 
 | # | Module | Day | Status |
 |---|---|---|---|
 | 1 | Database foundation, roles, audit trail, security tests | 1 | Done |
 | 2 | App shell, role navigation, CI | 1 | Done |
 | 3 | Partner IDs, territory rule, SKU access, hidden schemes (database rules) | 1 | Done |
-| 4 | Users & Access, registration-type switches | 2 | Not started |
-| 5 | Public website: home, registration wizard, tracking | 2 | Not started |
+| 4 | Users & Access, registration-type switches | 2 | Done |
+| 5 | Public website: registration wizard, tracking (landing page still to do) | 2 | Done (landing page pending) |
 | 6 | Certificate verification (QR) | 2 | Not started |
-| 7 | Applications review and approval | 2 | Not started |
-| 8 | Partners list and profile | 2 | Not started |
+| 7 | Applications review and approval | 2 | Done |
+| 8 | Partners list and profile | 2 | Done |
 | 9 | Territory Explorer (map) | 2 | Not started |
 | 10 | Agreements, MOU, custom MOU upload, e-sign | 2 | Not started |
 | 11 | Notifications | 2 | Not started |

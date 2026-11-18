@@ -72,9 +72,9 @@ Everything in the review prototype is in scope and must ship. Each line is a mod
 Each session works through the unchecked boxes of its day, then continues into the next day's items if time remains. Nothing is "phase 1 only". A module is done only when it meets the definition of done below.
 
 ### Day 2 — Partners, territories, agreements, public site
-- [ ] Sign-in, role shell and navigation per role; Users & Access (role matrix, activate users, registration-type switches)
+- [x] Sign-in, role shell and navigation per role; Users & Access (role matrix, activate users, registration-type switches)
 - [ ] Public website: home, registration wizard (dealer and distributor; installation partner behind the switch), application tracking, certificate verification
-- [ ] Applications review: more-info, field verification, reject with reason, approve with permanent Partner ID
+- [x] Applications review: more-info, field verification, reject with reason, approve with permanent Partner ID
 - [ ] Partners list and profile, territory exclusivity check, Territory Explorer (Gujarat district map and coverage gaps)
 - [ ] Agreements: MOU generation, custom MOU template upload with field mapping, send for signing, signed copy storage, certificates with QR verification
 - [ ] Notifications (in-app plus e-mail through an Edge Function)

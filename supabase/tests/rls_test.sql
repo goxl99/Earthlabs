@@ -13,8 +13,11 @@ update profiles set role='sales', active=true where id='00000000-0000-0000-0000-
 
 -- public registration: dealer open, institutional closed
 set role anon;
-insert into applications(type_code,business_name,contact_name,phone,email,district) values ('DLR','Test Traders','A','1','a@a','Anand');
-do $$ begin begin insert into applications(type_code,business_name,contact_name,phone,email,district) values ('INS','Closed','A','1','a@a','Anand'); raise exception 'INS registration should be blocked'; exception when insufficient_privilege or check_violation then null; end; end $$;
+select submit_application('DLR','Test Traders','A','9999999999','a@a.com','Gujarat','Anand',null,'{}') as appid \gset
+do $$ begin begin perform submit_application('INS','Closed','A','9999999999','b@b.com','Gujarat','Anand',null,'{}'); raise exception 'INS registration should be blocked'; exception when raise_exception then if sqlerrm like '%should be blocked' then raise; end if; end; end $$;
+do $$ begin begin perform submit_application('DLR','Dup','A','9999999999','a@a.com','Gujarat','Anand',null,'{}'); raise exception 'duplicate allowed'; exception when raise_exception then if sqlerrm like '%allowed' then raise; end if; end; end $$;
+select set_config('t.appid', :'appid', false);
+do $$ begin assert (select count(*) from track_application(current_setting('t.appid')::uuid,'A@A.com'))=1, 'tracking works with matching e-mail'; assert (select count(*) from track_application(current_setting('t.appid')::uuid,'x@y.com'))=0, 'tracking blocked with wrong e-mail'; end $$;
 do $$ begin assert (select count(*) from applications)=0, 'anon cannot read applications'; end $$;
 reset role;
 
@@ -77,4 +80,17 @@ reset role;
 do $$ begin assert (select role from profiles where id='00000000-0000-0000-0000-000000000003')='dealer', 'self promotion blocked'; end $$;
 -- Audit trail captured changes
 do $$ begin assert (select count(*) from audit_log where table_name='partners')>=1 and (select count(*) from audit_log where table_name='skus')>=1, 'audit rows written'; end $$;
+
+-- Application workflow guards
+select submit_application('DST','Wholesale Co','B','8888888888','w@w.com','Gujarat','Surat',null,'{}') as app2 \gset
+select set_config('t.app2', :'app2', false);
+select pg_temp.as_user('00000000-0000-0000-0000-000000000001'); set role authenticated;
+do $$ begin begin update applications set status='Rejected' where id=current_setting('t.app2')::uuid; raise exception 'reject without reason allowed'; exception when raise_exception then if sqlerrm like '%allowed' then raise; end if; end; end $$;
+do $$ begin begin update applications set status='Approved' where id=current_setting('t.app2')::uuid; raise exception 'direct approve allowed'; exception when raise_exception then if sqlerrm like '%allowed' then raise; end if; end; end $$;
+update applications set status='Rejected', reason='Outside service area' where id=current_setting('t.app2')::uuid;
+do $$ begin begin perform approve_application(current_setting('t.app2')::uuid); raise exception 'approved a rejected one allowed'; exception when raise_exception then if sqlerrm like '%allowed' then raise; end if; end; end $$;
+reset role;
+select pg_temp.as_user('00000000-0000-0000-0000-000000000002'); set role authenticated;
+do $$ begin begin perform approve_application(current_setting('t.app2')::uuid); raise exception 'sales approved allowed'; exception when raise_exception then if sqlerrm like '%allowed' then raise; end if; end; end $$;
+reset role;
 \echo ALL RLS TESTS PASSED

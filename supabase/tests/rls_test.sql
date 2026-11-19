@@ -30,6 +30,7 @@ reset role;
 insert into partners(id,type_code,name,district,status) values ('ELP-DLR-0002','DLR','Second','Anand','Active');
 update profiles set role='dealer', active=true, partner_id='ELP-DLR-0001' where id='00000000-0000-0000-0000-000000000003';
 update profiles set role='dealer', active=true, partner_id='ELP-DLR-0002' where id='00000000-0000-0000-0000-000000000004';
+insert into agreements(partner_id,status,signed_path,signed_at) values ('ELP-DLR-0001','Signed','ELP-DLR-0001/mou.pdf',now());
 update partners set status='Active' where id='ELP-DLR-0001';
 
 -- Catalogue: only Super Admin writes
@@ -107,4 +108,71 @@ do $$ declare i int; begin
   for i in 1..60 loop insert into applications(type_code,business_name,contact_name,phone,email,district) values ('DLR','Bulk '||i,'x','9999999999','bulk'||i||'@x.com','Anand'); end loop;
   begin perform submit_application('DLR','Flood','A','9999999999','flood@x.com','Gujarat','Anand',null,'{}'); raise exception 'flood allowed'; exception when raise_exception then if sqlerrm like '%allowed' then raise; end if; end;
 end $$;
+
+-- Day 2: territory exclusivity (more rules)
+insert into partners(id,type_code,name,district,status) values ('ELP-DLR-0003','DLR','Third','Surat','Active'),('ELP-DST-0001','DST','Dist One','Anand','Active');
+do $$ begin begin insert into territory_claims(partner_id,state,district,exclusive) values ('ELP-DLR-0003','Gujarat','Anand',false); raise exception 'share of exclusive district allowed'; exception when raise_exception then if sqlerrm like '%allowed' then raise; end if; end; end $$;
+insert into territory_claims(partner_id,state,district,exclusive) values ('ELP-DST-0001','Gujarat','Anand',true);  -- different type, same district is fine
+insert into territory_claims(partner_id,state,district,exclusive) values ('ELP-DLR-0002','Gujarat','Surat',false);
+do $$ begin begin insert into territory_claims(partner_id,state,district,exclusive) values ('ELP-DLR-0003','Gujarat','Surat',true); raise exception 'exclusive over existing partner allowed'; exception when raise_exception then if sqlerrm like '%allowed' then raise; end if; end; end $$;
+select pg_temp.as_user('00000000-0000-0000-0000-000000000002'); set role authenticated;
+do $$ begin assert (select available from check_territory('Gujarat','Anand','DLR'))=false and (select exclusive_holder from check_territory('Gujarat','Anand','DLR'))='ELP-DLR-0001', 'staff exclusivity check'; end $$;
+do $$ begin assert (select count(*) from territory_map() where district='Anand')=2, 'map shows both types in Anand'; end $$;
+reset role;
+select pg_temp.as_user('00000000-0000-0000-0000-000000000003'); set role authenticated;
+do $$ begin assert (select count(*) from territory_map())=0 and (select count(*) from check_territory('Gujarat','Anand','DLR') where other_partners>0)=0, 'partners cannot see the map'; end $$;
+reset role;
+
+-- Day 2: MOU templates (Super Admin only, known fields only)
+select pg_temp.as_user('00000000-0000-0000-0000-000000000002'); set role authenticated;
+do $$ begin begin insert into mou_templates(name,storage_path) values ('Sales template','_templates/a.docx'); raise exception 'sales uploaded template'; exception when insufficient_privilege then null; end; end $$;
+reset role;
+select pg_temp.as_user('00000000-0000-0000-0000-000000000001'); set role authenticated;
+do $$ begin begin insert into mou_templates(name,storage_path,field_map) values ('Bad','_templates/b.docx','{"{{X}}":"bank_password"}'); raise exception 'unknown field allowed'; exception when raise_exception then if sqlerrm like '%allowed' then raise; end if; end; end $$;
+insert into mou_templates(name,storage_path,field_map,type_code) values ('Dealer MOU v1','_templates/dealer-v1.docx','{"{{NAME}}":"partner_name","{{ID}}":"partner_id"}','DLR');
+reset role;
+
+-- Day 2: agreement flow, activation gate, certificate and public verification
+insert into partners(id,type_code,name,district,email) values ('ELP-DLR-0004','DLR','Fourth Traders','Rajkot','d4@example.com');
+select pg_temp.as_user('00000000-0000-0000-0000-000000000001'); set role authenticated;
+do $$ begin begin update partners set status='Active' where id='ELP-DLR-0004'; raise exception 'activation without agreement allowed'; exception when raise_exception then if sqlerrm like '%allowed' then raise; end if; end; end $$;
+select create_agreement('ELP-DLR-0004',(select id from mou_templates limit 1)) as agr \gset
+select set_config('t.agr', :'agr', false);
+do $$ begin begin perform create_agreement('ELP-DLR-0004',(select id from mou_templates limit 1)); raise exception 'second open agreement allowed'; exception when raise_exception then if sqlerrm like '%allowed' then raise; end if; end; end $$;
+do $$ begin begin perform record_signed_agreement(current_setting('t.agr')::uuid,'x.pdf'); raise exception 'signing an unsent agreement allowed'; exception when raise_exception then if sqlerrm like '%allowed' then raise; end if; end; end $$;
+select send_agreement(current_setting('t.agr')::uuid);
+reset role;
+select pg_temp.as_user('00000000-0000-0000-0000-000000000002'); set role authenticated;
+do $$ begin begin perform record_signed_agreement(current_setting('t.agr')::uuid,'x.pdf'); raise exception 'sales recorded signature allowed'; exception when raise_exception then if sqlerrm like '%allowed' then raise; end if; end; end $$;
+reset role;
+select pg_temp.as_user('00000000-0000-0000-0000-000000000001'); set role authenticated;
+select record_signed_agreement(current_setting('t.agr')::uuid,'ELP-DLR-0004/signed.pdf') as certcode \gset
+select set_config('t.cert', :'certcode', false);
+do $$ begin begin update agreements set status='Sent' where id=current_setting('t.agr')::uuid; raise exception 'reopening signed allowed'; exception when raise_exception then if sqlerrm like '%allowed' then raise; end if; end; end $$;
+reset role;
+do $$ begin assert (select status from partners where id='ELP-DLR-0004')='Active', 'partner active after signing'; end $$;
+select pg_temp.as_user(null); set role anon;
+do $$ begin assert (select valid from verify_certificate(lower(current_setting('t.cert'))))=true, 'public verify works'; assert (select count(*) from verify_certificate('NOSUCHCODE'))=0, 'unknown code not valid'; assert (select count(*) from certificates)=0, 'anon cannot list certificates'; end $$;
+reset role;
+update certificates set revoked=true where code=current_setting('t.cert');
+select pg_temp.as_user(null); set role anon;
+do $$ begin assert (select valid from verify_certificate(current_setting('t.cert')))=false, 'revoked certificate invalid'; end $$;
+reset role;
+
+-- Day 2: notifications are private and cannot be forged
+insert into auth.users(id,email) values ('00000000-0000-0000-0000-00000000000a','d4@x');
+update profiles set role='dealer', active=true, partner_id='ELP-DLR-0004' where id='00000000-0000-0000-0000-00000000000a';
+select notify_partner('ELP-DLR-0004','Hello','Test message','/x');
+select pg_temp.as_user('00000000-0000-0000-0000-00000000000a'); set role authenticated;
+do $$ begin assert (select count(*) from notifications)=1, 'user sees own notification'; end $$;
+update notifications set read_at=now();
+do $$ begin assert (select count(*) from notifications where read_at is not null)=1, 'user can mark read'; end $$;
+do $$ begin begin insert into notifications(user_id,title) values (auth.uid(),'forged'); raise exception 'forged notification allowed'; exception when insufficient_privilege then null; end; end $$;
+do $$ begin begin perform notify_partner('ELP-DLR-0004','x','y','z'); raise exception 'user called notify allowed'; exception when insufficient_privilege then null; end; end $$;
+do $$ begin begin perform count(*) from email_outbox; raise exception 'outbox readable allowed'; exception when insufficient_privilege then null; end; end $$;
+reset role;
+select pg_temp.as_user('00000000-0000-0000-0000-000000000003'); set role authenticated;
+do $$ begin assert (select count(*) from notifications)=0, 'other users cannot read it'; end $$;
+reset role;
+do $$ begin assert (select count(*) from email_outbox where status='queued')>=2, 'e-mails queued for sending'; end $$;
 \echo ALL RLS TESTS PASSED

@@ -75,9 +75,9 @@ Each session works through the unchecked boxes of its day, then continues into t
 - [x] Sign-in, role shell and navigation per role; Users & Access (role matrix, activate users, registration-type switches)
 - [ ] Public website: home, registration wizard (dealer and distributor; installation partner behind the switch), application tracking, certificate verification
 - [x] Applications review: more-info, field verification, reject with reason, approve with permanent Partner ID
-- [ ] Partners list and profile, territory exclusivity check, Territory Explorer (Gujarat district map and coverage gaps)
-- [ ] Agreements: MOU generation, custom MOU template upload with field mapping, send for signing, signed copy storage, certificates with QR verification
-- [ ] Notifications (in-app plus e-mail through an Edge Function)
+- [x] Partners list and profile, territory exclusivity check, Territory Explorer (Gujarat district map and coverage gaps) (build 2)
+- [ ] Agreements (build 2 done: template upload with field mapping, send, signed copy, certificate and public verify page. Still to do: filling the template into a real MOU file, QR image on certificate, e-sign provider): MOU generation, custom MOU template upload with field mapping, send for signing, signed copy storage, certificates with QR verification
+- [x] Notifications (in-app plus e-mail through an Edge Function) (build 2; e-mail delivery needs RESEND_API_KEY, MAIL_FROM, CRON_SECRET secrets and a schedule once Supabase exists)
 
 ### Day 3 — Catalogue, pricing, schemes, orders
 - [ ] SKU catalogue add/retire/restore, partner-wise SKU access, SKU-wise MRP and margins, tier price list, margin slabs

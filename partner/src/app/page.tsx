@@ -21,7 +21,7 @@ export default function Login() {
         <p><a href="#" onClick={(e) => { e.preventDefault(); setMode(mode === "in" ? "up" : "in"); }}>{mode === "in" ? "New here? Create an account" : "Have an account? Sign in"}</a></p>
         {msg && <div className="note">{msg}</div>}
       </div>
-      <p><a href="./register/">Become a partner</a> · <a href="./track/">Track an application</a></p>
+      <p><a href="./register/">Become a partner</a> · <a href="./track/">Track an application</a> · <a href="./verify/">Verify a certificate</a></p>
     </main>
   );
 }

@@ -3,11 +3,12 @@ import { useEffect, useState } from "react";
 import Shell from "@/components/Shell";
 import { supabase } from "@/lib/supabase";
 import { Msg, when } from "@/components/ui";
-import { parseFieldMap, templateFileOk, safeName } from "@/lib/mou";
+import { parseFieldMap, templateFileOk, safeName, fillDocx, mouValues, type MouField } from "@/lib/mou";
+import { qrSvg, verifyUrl } from "@/lib/qr";
 import type { Role } from "@/lib/roles";
 
 type A = { id: string; partner_id: string; status: string; sent_at: string | null; signed_at: string | null; template_id: string | null };
-type T = { id: string; name: string; version: number; type_code: string | null; active: boolean };
+type T = { id: string; name: string; version: number; type_code: string | null; active: boolean; storage_path: string; field_map: Record<string, MouField> };
 type Cert = { code: string; partner_id: string; issued_at: string; revoked: boolean };
 function Inner({ role }: { role: Role }) {
   const isSuper = role === "super_admin"; const canPrepare = isSuper || role === "sales"; const staff = ["super_admin", "sales", "accounts", "warehouse"].includes(role);
@@ -17,7 +18,7 @@ function Inner({ role }: { role: Role }) {
   async function load() {
     setAg(((await supabase.from("agreements").select("id,partner_id,status,sent_at,signed_at,template_id").order("created_at", { ascending: false }).limit(50)).data as A[]) ?? []);
     setCerts(((await supabase.from("certificates").select("code,partner_id,issued_at,revoked").order("issued_at", { ascending: false }).limit(50)).data as Cert[]) ?? []);
-    if (staff) setTp(((await supabase.from("mou_templates").select("id,name,version,type_code,active").order("created_at", { ascending: false }).limit(50)).data as T[]) ?? []);
+    if (staff) setTp(((await supabase.from("mou_templates").select("id,name,version,type_code,active,storage_path,field_map").order("created_at", { ascending: false }).limit(50)).data as T[]) ?? []);
   }
   useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   async function upload(f: File | undefined) {
@@ -34,11 +35,31 @@ function Inner({ role }: { role: Role }) {
     const up = await supabase.storage.from("agreements").upload(path, f); if (up.error) return say(up.error.message, true);
     rpc("record_signed_agreement", { aid: a.id, path }, "Signed copy stored. Partner activated and certificate issued.");
   }
+  const esc = (x: string) => x.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c] as string);
+  async function filledMou(a: A) {
+    const t = tp.find((x) => x.id === a.template_id); if (!t) return say("Template not found", true);
+    if (!t.storage_path.toLowerCase().endsWith(".docx")) return say("Only .docx templates can be filled automatically. Download the template and fill it by hand.", true);
+    const { data: p } = await supabase.from("partners").select("id,name,contact_name,district,state,gstin,type_code").eq("id", a.partner_id).single();
+    const { data: ty } = await supabase.from("partner_types").select("name").eq("code", (p as { type_code: string } | null)?.type_code ?? "").single();
+    const { data: file, error } = await supabase.storage.from("agreements").download(t.storage_path);
+    if (error || !file || !p) return say(error?.message ?? "Could not load the template", true);
+    try {
+      const out = fillDocx(new Uint8Array(await file.arrayBuffer()), t.field_map, mouValues({ ...(p as { id: string; name: string; district: string; state: string }), contact_name: (p as { contact_name?: string }).contact_name, gstin: (p as { gstin?: string }).gstin, type_name: (ty as { name: string } | null)?.name ?? "" }));
+      const url = URL.createObjectURL(new Blob([out.bytes as BlobPart], { type: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" }));
+      const el = document.createElement("a"); el.href = url; el.download = `MOU-${a.partner_id}.docx`; el.click(); URL.revokeObjectURL(url);
+      say(`MOU prepared with ${out.replaced} field(s) filled. Check it before sending.`);
+    } catch (e) { say((e as Error).message, true); }
+  }
+  async function showCert(c: Cert) {
+    const { data } = await supabase.rpc("verify_certificate", { c: c.code }); const v = (data as { partner_name: string; type_name: string; district: string; partner_id: string }[] | null)?.[0];
+    const svg = await qrSvg(verifyUrl(location.origin, location.pathname.replace(/\/agreements\/?$/, ""), c.code)); const w = window.open("", "_blank"); if (!w || !v) return;
+    w.document.write(`<title>Certificate ${c.code}</title><body style="font-family:Georgia,serif;text-align:center;padding:48px;border:8px double #13595a;margin:24px"><h1 style="color:#13595a">EarthLabs Partner Certificate</h1><p>This certifies that</p><h2>${esc(v.partner_name)}</h2><p>${esc(v.type_name)} · ${esc(v.district)}, Gujarat<br/>Partner ID <b>${esc(v.partner_id)}</b></p><p>Issued ${when(c.issued_at)}</p><div style="width:160px;margin:auto">${svg}</div><p style="font-size:12px">Scan to verify · code ${esc(c.code)}</p></body>`); w.document.close();
+  }
   return (<><h1>Agreements & certificates</h1>{msg && <Msg kind={bad ? "bad" : "ok"}>{msg}</Msg>}
     {canPrepare && <><h2>Prepare an agreement</h2><div className="card"><input placeholder="Partner ID, e.g. ELP-DLR-0001" value={pid} onChange={(e) => setPid(e.target.value)} /> <select value={tpl} onChange={(e) => setTpl(e.target.value)}><option value="">Template</option>{tp.filter((t) => t.active).map((t) => <option key={t.id} value={t.id}>{t.name} v{t.version}</option>)}</select> <button className="btn" disabled={!pid || !tpl} onClick={() => rpc("create_agreement", { pid: pid.trim(), tpl }, "Draft agreement created")}>Create draft</button></div></>}
     <h2>Agreements</h2><div className="card"><table><thead><tr><th>Partner</th><th>Status</th><th>Sent</th><th>Signed</th><th></th></tr></thead><tbody>{ag.map((a) => <tr key={a.id}><td>{a.partner_id}</td><td>{a.status}</td><td>{when(a.sent_at)}</td><td>{when(a.signed_at)}</td>
-      <td>{canPrepare && a.status === "Draft" && <button className="btn" onClick={() => rpc("send_agreement", { aid: a.id }, "Sent to partner")}>Send for signing</button>}{isSuper && a.status === "Sent" && <label>Upload signed copy <input type="file" accept=".pdf,.jpg,.png" onChange={(e) => sign(a, e.target.files?.[0])} /></label>}</td></tr>)}{ag.length === 0 && <tr><td colSpan={5}>No agreements yet.</td></tr>}</tbody></table></div>
-    <h2>Certificates</h2><div className="card"><table><tbody>{certs.map((c) => <tr key={c.code}><td>{c.partner_id}</td><td>{c.code}</td><td>{when(c.issued_at)}</td><td>{c.revoked ? "Revoked" : <a href={`../verify/?code=${c.code}`}>Public page</a>}</td></tr>)}{certs.length === 0 && <tr><td>No certificates yet.</td></tr>}</tbody></table></div>
+      <td>{canPrepare && a.status === "Draft" && <button className="btn" onClick={() => rpc("send_agreement", { aid: a.id }, "Sent to partner")}>Send for signing</button>}{staff && a.template_id && a.status !== "Signed" && <button className="btn" onClick={() => filledMou(a)}>Download filled MOU</button>} {isSuper && a.status === "Sent" && <label>Upload signed copy <input type="file" accept=".pdf,.jpg,.png" onChange={(e) => sign(a, e.target.files?.[0])} /></label>}</td></tr>)}{ag.length === 0 && <tr><td colSpan={5}>No agreements yet.</td></tr>}</tbody></table></div>
+    <h2>Certificates</h2><div className="card"><table><tbody>{certs.map((c) => <tr key={c.code}><td>{c.partner_id}</td><td>{c.code}</td><td>{when(c.issued_at)}</td><td>{c.revoked ? "Revoked" : <><a href={`../verify/?code=${c.code}`}>Public page</a> · <a href="#" onClick={(e) => { e.preventDefault(); showCert(c); }}>Print certificate with QR</a></>}</td></tr>)}{certs.length === 0 && <tr><td>No certificates yet.</td></tr>}</tbody></table></div>
     {staff && <><h2>MOU templates</h2><div className="card"><table><tbody>{tp.map((t) => <tr key={t.id}><td>{t.name} v{t.version}</td><td>{t.type_code ?? "All types"}</td><td>{t.active ? "Active" : "Retired"}</td></tr>)}</tbody></table>
       {isSuper && <><h3>Upload your own MOU template</h3><input placeholder="Template name" value={name} onChange={(e) => setName(e.target.value)} /> <select value={type} onChange={(e) => setType(e.target.value)}><option value="">All partner types</option><option value="DLR">Dealer</option><option value="DST">Distributor</option></select>
         <p>Field mapping (one per line: placeholder in your file = partner field)</p><textarea rows={4} style={{ width: "100%" }} value={map} onChange={(e) => setMap(e.target.value)} />

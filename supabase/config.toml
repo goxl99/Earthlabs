@@ -12,3 +12,5 @@ enable_signup = true
 enable_confirmations = true
 [functions.health]
 verify_jwt = false
+[functions.batch-qc]
+verify_jwt = true

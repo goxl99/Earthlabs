@@ -29,10 +29,10 @@ Everything in the review prototype is in scope and must ship. Each line is a mod
 - [ ] Partners: list, profile, status, territories, ledger [partners]
 - [ ] Agreements and certificates: MOU flow, custom MOU template upload, send for signing, certificate with public verify [agree]
 - [ ] Performance Matrix: monthly score, weights, promotion/hold rules [perf]
-- [ ] Products and pricing: SKU add/retire, partner-wise SKUs, SKU-wise MRP and margins, slabs, GST, policies [catalog]
-- [ ] Schemes: partner-wise, engine, budget, disclosure control
-- [ ] Orders: workflow, payment gate, hold/cancel, lead time [orders]
-- [ ] Inventory and dispatch, linked to the batch system (read batch/QC data from the batch Supabase project through a secured Edge Function) [inv]
+- [x] Products and pricing: SKU add/retire, partner-wise SKUs, SKU-wise MRP and margins, slabs, GST, policies [catalog] (build 3: tested in DB; screen not click-tested on live)
+- [x] Schemes: partner-wise, engine, budget, disclosure control (build 3)
+- [x] Orders: workflow, payment gate, hold/cancel, lead time [orders] (build 3)
+- [x] Inventory and dispatch, linked to the batch system (read batch/QC data from the batch Supabase project through a secured Edge Function) [inv]  (build 3: stock, reservations, dispatch notes done; `batch-qc` Edge Function written, needs BATCH_* secrets and the read-only view in the batch project)
 - [ ] Procurement and raw materials: inventory, vendor stock reports, release orders, lead-time rules [proc]
 - [ ] Invoices and payments: invoices, UTR/advice review, ledger, credit notes [fin]
 - [ ] AI Intelligence: recommendations (credit, schemes, reorder, promotion), management approves [ai]
@@ -50,7 +50,7 @@ Everything in the review prototype is in scope and must ship. Each line is a mod
 - [ ] Dashboard, quotes, purchase orders, payments, performance, stock reports, release orders
 
 **Public website area**
-- [ ] Home with registration types (only dealer and distributor on; installation partner behind switch), registration wizard, application tracking, certificate verification
+- [x] Home with registration types (only dealer and distributor on; installation partner behind switch), registration wizard, application tracking, certificate verification (build 3)
 
 **System-wide rules (all 15 from the original spec) are enforced in the database or an Edge Function, each with a test.**
 
@@ -73,18 +73,18 @@ Each session works through the unchecked boxes of its day, then continues into t
 
 ### Day 2 — Partners, territories, agreements, public site
 - [x] Sign-in, role shell and navigation per role; Users & Access (role matrix, activate users, registration-type switches)
-- [ ] Public website: home, registration wizard (dealer and distributor; installation partner behind the switch), application tracking, certificate verification
+- [x] Public website: home, registration wizard (dealer and distributor; installation partner behind the switch), application tracking, certificate verification (build 3: landing page added)
 - [x] Applications review: more-info, field verification, reject with reason, approve with permanent Partner ID
 - [x] Partners list and profile, territory exclusivity check, Territory Explorer (Gujarat district map and coverage gaps) (build 2)
-- [ ] Agreements (build 2 done: template upload with field mapping, send, signed copy, certificate and public verify page. Still to do: filling the template into a real MOU file, QR image on certificate, e-sign provider): MOU generation, custom MOU template upload with field mapping, send for signing, signed copy storage, certificates with QR verification
+- [ ] Agreements (builds 2-3 done: template upload with field mapping, filling a .docx template into a MOU file, send, signed copy, certificate with printable QR and public verify page. Only the external e-sign provider remains: needs Viraj's choice of provider and an account): MOU generation, custom MOU template upload with field mapping, send for signing, signed copy storage, certificates with QR verification
 - [x] Notifications (in-app plus e-mail through an Edge Function) (build 2; e-mail delivery needs RESEND_API_KEY, MAIL_FROM, CRON_SECRET secrets and a schedule once Supabase exists)
 
 ### Day 3 — Catalogue, pricing, schemes, orders
-- [ ] SKU catalogue add/retire/restore, partner-wise SKU access, SKU-wise MRP and margins, tier price list, margin slabs
-- [ ] Scheme engine (percent, flat, free cartons, kit; audience, SKU scope, minimums, stack rules, budget caps), partner-wise schemes, disclosure control
-- [ ] Partner portal: dashboard, place order (own prices only, scheme hints, lead-time estimate), my orders
-- [ ] Order workflow (approval, payment gate, dispatch, delivery), hold and cancel with reasons, audit
-- [ ] Inventory and dispatch: stock, reservations, link to the Batch Management system (QC-approved batches), dispatch notes
+- [x] SKU catalogue add/retire/restore, partner-wise SKU access, SKU-wise MRP and margins, tier price list, margin slabs
+- [x] Scheme engine (percent, flat, free cartons, kit; audience, SKU scope, minimums, stack rules, budget caps), partner-wise schemes, disclosure control
+- [x] Partner portal: dashboard, place order (own prices only, scheme hints, lead-time estimate), my orders
+- [x] Order workflow (approval, payment gate, dispatch, delivery), hold and cancel with reasons, audit
+- [x] Inventory and dispatch: stock, reservations, link to the Batch Management system (QC-approved batches), dispatch notes
 
 ### Day 4 — Money, vendors, procurement, intelligence
 - [ ] Invoices (GST split CGST/SGST/IGST), credit notes, ledger, manual payment entry

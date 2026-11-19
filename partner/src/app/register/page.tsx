@@ -9,7 +9,7 @@ const BLURB: Record<string, string> = { DLR: "Sell EarthLabs to workshops, garag
 export default function Register() {
   const [types, setTypes] = useState<PType[]>([]); const [f, setF] = useState({ t: "", biz: "", contact: "", ph: "", mail: "", dist: "Vadodara", gst: "", exp: "", area: "" });
   const [msg, setMsg] = useState<{ k: "ok" | "bad"; t: string } | null>(null); const [busy, setBusy] = useState(false);
-  useEffect(() => { supabase.from("partner_types").select("code,name").eq("registration_open", true).order("level").then(({ data }) => { const d = (data as PType[]) ?? []; setTypes(d); if (d[0]) setF((x) => ({ ...x, t: d[0].code })); }); }, []);
+  useEffect(() => { supabase.from("partner_types").select("code,name").eq("registration_open", true).order("level").then(({ data }) => { const d = (data as PType[]) ?? []; setTypes(d); const want = new URLSearchParams(location.search).get("type"); const pick = d.find((x) => x.code === want) ?? d[0]; if (pick) setF((x) => ({ ...x, t: pick.code })); }); }, []);
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>) => setF({ ...f, [k]: e.target.value });
   async function submit() {
     setMsg(null); setBusy(true);

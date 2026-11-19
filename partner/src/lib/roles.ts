@@ -18,6 +18,8 @@ export const NAV: NavItem[] = [
   { href: "/agreements/", label: "Agreements", roles: ["super_admin", "sales", "accounts", "dealer", "distributor"] },
   { href: "/notifications/", label: "Notifications", roles: ["super_admin", "sales", "accounts", "warehouse", "dealer", "distributor", "vendor"] },
   { href: "/catalogue/", label: "Products & pricing", roles: ["super_admin", "sales", "warehouse"] },
+  { href: "/schemes/", label: "Schemes", roles: ["super_admin", "sales"] },
+  { href: "/inventory/", label: "Inventory", roles: ["super_admin", "sales", "warehouse"] },
   { href: "/orders/", label: "Orders", roles: ["super_admin", "sales", "accounts", "warehouse", "dealer", "distributor"] },
 ];
 

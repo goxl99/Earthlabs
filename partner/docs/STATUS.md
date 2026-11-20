@@ -53,3 +53,9 @@ Updated at the end of every build session. Overall = modules done / 33.
 - Not done / blocked: e-sign provider (needs decision), live batch link (needs secrets and batch-side view; the batch app files were not touched), screens not click-tested against live Supabase (still blocked on the project).
 - Day 4 items already partly in place: duplicate-UTR block and Accounts confirmation exist for order payments; partner-side proof upload, invoices, credit notes and ledger are not built.
 - add_repo was not needed: goxl99/earthlabs was already in scope and cloned.
+
+## Build 4 notes (20 Nov 2026)
+- Re-verified all Day 3 items on a fresh local Postgres: migrations 001-008, rls_test and build3_test pass; typecheck, 17 unit tests and the static build (PARTNER_BASE_PATH=/partner) pass. No Day 3 box was open, so no code changed.
+- Orders are priced only by the database function; no client price is trusted.
+- Still blocked: Supabase project (org at free-project limit), e-sign provider choice, live batch link secrets, deploy and /partner redirect (need Viraj).
+- add_repo tool was again not available; repo already cloned and in scope.

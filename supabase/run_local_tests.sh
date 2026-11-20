@@ -8,3 +8,4 @@ $Q -f "$(dirname "$0")/tests/00_shim.sql"
 for f in "$(dirname "$0")"/migrations/*.sql; do $Q -f "$f"; done
 $Q -f "$(dirname "$0")/tests/rls_test.sql"
 $Q -f "$(dirname "$0")/tests/build3_test.sql"
+$Q -f "$(dirname "$0")/tests/build4_test.sql"

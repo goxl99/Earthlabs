@@ -34,13 +34,13 @@ Everything in the review prototype is in scope and must ship. Each line is a mod
 - [x] Orders: workflow, payment gate, hold/cancel, lead time [orders] (build 3)
 - [x] Inventory and dispatch, linked to the batch system (read batch/QC data from the batch Supabase project through a secured Edge Function) [inv]  (build 3: stock, reservations, dispatch notes done; `batch-qc` Edge Function written, needs BATCH_* secrets and the read-only view in the batch project)
 - [ ] Procurement and raw materials: inventory, vendor stock reports, release orders, lead-time rules [proc]
-- [ ] Invoices and payments: invoices, UTR/advice review, ledger, credit notes [fin]
+- [x] Invoices and payments: invoices, UTR/advice review, ledger, credit notes [fin] (build 5)
 - [ ] AI Intelligence: recommendations (credit, schemes, reorder, promotion), management approves [ai]
 - [ ] Vendors: master, performance, vendor credit [vendors]
 - [ ] Reports and exports (CSV/PDF) [reports]
 - [ ] Notifications: in-app, email, WhatsApp-ready hooks [notifs]
 - [ ] Users and access: roles, permissions per module, module on/off switches, registration-type switches [users]
-- [ ] Audit trail viewer [audit]
+- [x] Audit trail viewer [audit] (build 5: Super Admin screen /audit with table and record filter)
 
 **Partner portal (dealer, distributor)**
 - [ ] Dashboard, Place an order (price, schemes, hints, lead time), My orders, payment details (UTR/advice), Invoices and ledger
@@ -87,8 +87,8 @@ Each session works through the unchecked boxes of its day, then continues into t
 - [x] Inventory and dispatch: stock, reservations, link to the Batch Management system (QC-approved batches), dispatch notes
 
 ### Day 4 — Money, vendors, procurement, intelligence
-- [ ] Invoices (GST split CGST/SGST/IGST), credit notes, ledger, manual payment entry
-- [ ] Partner payment proof (UTR or payment advice upload to Storage, duplicate-UTR block), Accounts confirmation gate
+- [x] Invoices (GST split CGST/SGST/IGST), credit notes, ledger, manual payment entry (build 5: migration 009, tested; screen /invoices)
+- [x] Partner payment proof (UTR or payment advice upload to Storage, duplicate-UTR block), Accounts confirmation gate (build 5)
 - [ ] Vendors and vendor portal: stock reports, quotes, purchase orders, release orders, vendor payments, vendor performance
 - [ ] Procurement: raw-material inventory, reorder planning from production plan, lead-time settings, auto-email to vendor, approval limits
 - [ ] Credit ladder (pay-and-carry first; AI proposes, Super Admin approves) for partners and vendors

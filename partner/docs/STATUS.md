@@ -1,7 +1,7 @@
 # EPDMS progress status
 Updated at the end of every build session. Overall = modules done / 33.
 
-**Overall: 17 of 33 modules done (52%)** · last update: 19 Nov 2026, build 3 (public landing, MOU filling, certificate QR, catalogue and prices, schemes, orders with payment gate, inventory and dispatch). "Done" = built and database rules tested locally; screens are not yet click-tested against a live Supabase project (blocked, see below).
+**Overall: 20 of 33 modules done (61%)** · last update: 20 Nov 2026, build 5 (invoices, credit notes, ledger, payment proof, audit viewer). Earlier: build 3 (public landing, MOU filling, certificate QR, catalogue and prices, schemes, orders with payment gate, inventory and dispatch). "Done" = built and database rules tested locally; screens are not yet click-tested against a live Supabase project (blocked, see below).
 
 | # | Module | Day | Status |
 |---|---|---|---|
@@ -22,8 +22,8 @@ Updated at the end of every build session. Overall = modules done / 33.
 | 15 | Partner portal: dashboard, order, my orders | 3 | Done: own prices, scheme hints, lead-time estimate, order history with timeline |
 | 16 | Order workflow with payment gate | 3 | Done: approve, accounts confirms payment (duplicate UTR blocked), warehouse dispatches, hold/cancel with reason, audit |
 | 17 | Inventory, dispatch, batch-system link | 3 | Done except live link: stock, reservations, logged adjustments, dispatch notes. `batch-qc` Edge Function written, needs BATCH_* secrets and a read-only view in the batch project |
-| 18 | Invoices, credit notes, ledger | 4 | Not started |
-| 19 | Payment proof (UTR / advice) and Accounts confirmation | 4 | Not started |
+| 18 | Invoices, credit notes, ledger | 4 | Done: CGST/SGST inside Gujarat, IGST outside, amounts copied from the database-priced order, append-only ledger, credit notes capped at the invoice, manual payment entry |
+| 19 | Payment proof (UTR / advice) and Accounts confirmation | 4 | Done: partner reports UTR and uploads advice to own folder, duplicate UTR blocked everywhere, only Accounts confirms, order moves on only through the payment gate |
 | 20 | Vendor portal | 4 | Not started |
 | 21 | Procurement, raw materials, release orders, lead times | 4 | Not started |
 | 22 | Credit ladder (pay-and-carry first) | 4 | Not started |
@@ -31,7 +31,7 @@ Updated at the end of every build session. Overall = modules done / 33.
 | 24 | AI Intelligence (Edge Function) | 4 | Not started |
 | 25 | Approvals centre | 4 | Not started |
 | 26 | Reports and exports | 4 | Not started |
-| 27 | Audit trail viewer | 4 | Not started |
+| 27 | Audit trail viewer | 4 | Done: Super Admin screen, filter by table and record, before/after view |
 | 28 | Security review and attack tests | 5 | Not started |
 | 29 | Load test (1,000 partners, 50,000 orders) | 5 | Not started |
 | 30 | Accessibility, mobile, browser journeys | 5 | Not started |
@@ -59,3 +59,12 @@ Updated at the end of every build session. Overall = modules done / 33.
 - Orders are priced only by the database function; no client price is trusted.
 - Still blocked: Supabase project (org at free-project limit), e-sign provider choice, live batch link secrets, deploy and /partner redirect (need Viraj).
 - add_repo tool was again not available; repo already cloned and in scope.
+
+## Build 5 notes (20 Nov 2026)
+- Day 3 had no open box. Left over from Day 2: only the external e-sign provider (needs Viraj's choice and an account). So this run started Day 4.
+- Migration 009 (new file only): ledger (append-only, one UTR once), invoices and invoice lines, credit notes, manual payment entry, payment proofs with confirm/reject, dashboard queue numbers. Order cancel is refused while an invoice is not fully credited.
+- Tests: `supabase/tests/build4_test.sql` (wired into run_local_tests.sh) covers roles, GST split both ways, invoice amounts equal the database-priced order, immutability, visibility per partner, credit-note cap, duplicate UTR across order payments, manual payments and proofs, confirmation gate, reject/resubmit, audit. 6 new unit tests (23 in total).
+- App: /invoices (Accounts: proof queue, issue invoice, credit note, record payment, ledger by partner; partners: own invoices, credit notes, ledger), "I have paid" with advice upload on My orders, /audit.
+- Not started (Day 4 remainder): vendors and vendor portal, procurement, credit ladder, Performance Matrix, AI Intelligence, Approvals centre completion, Reports and exports.
+- Still blocked: Supabase project (org at free-project limit), e-sign provider, live batch link secrets, deploy and /partner redirect (need Viraj). Screens are not click-tested against a live Supabase project.
+- add_repo tool was not available; the repo was already cloned and in scope. Invoice numbers use a plain sequence (not yet a financial-year format; confirm with the accountant before go-live).

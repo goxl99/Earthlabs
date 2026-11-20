@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import Shell from "@/components/Shell";
 import { supabase } from "@/lib/supabase";
 import { Msg, when } from "@/components/ui";
+import { canSubmitProof } from "@/lib/money";
 import { actionsFor, inr, STATUS_HELP, type OrderAction, type OrderStatus, type Quote } from "@/lib/orders";
 import { isStaff, type Role } from "@/lib/roles";
 
@@ -34,6 +35,10 @@ function Place({ onDone }: { onDone: () => void }) {
       <button className="btn" disabled={busy} onClick={place}>{busy ? "Placing…" : "Place order"}</button></div>}</div></>);
 }
 
+function pickFile(): Promise<File | null> {
+  return new Promise((res) => { const i = document.createElement("input"); i.type = "file"; i.accept = "image/*,application/pdf"; i.onchange = () => res(i.files?.[0] && i.files[0].size <= 5_000_000 ? i.files[0] : null); i.oncancel = () => res(null); i.click(); });
+}
+
 function Inner({ role }: { role: Role }) {
   const staff = isStaff(role); const [orders, setOrders] = useState<Order[]>([]); const [open, setOpen] = useState<string | null>(null); const [lines, setLines] = useState<Line[]>([]); const [ev, setEv] = useState<Ev[]>([]);
   const [filter, setFilter] = useState(""); const [msg, setMsg] = useState<{ ok: boolean; t: string } | null>(null);
@@ -57,6 +62,14 @@ function Inner({ role }: { role: Role }) {
     else if (a === "dispatch") { const vehicle = prompt("Vehicle number"); if (vehicle === null) return; const lr = prompt("LR / docket number") ?? ""; const batch = prompt("QC-approved batch reference") ?? ""; fn = "dispatch_order"; args = { oid: o.id, vehicle, lr, batch }; }
     const { error } = await supabase.rpc(fn, args); setMsg({ ok: !error, t: error ? error.message : "Done" }); load(); if (open === o.id) { setOpen(null); }
   }
+  async function sendProof(o: Order) {
+    const utr = prompt(`UTR / reference number of your payment of ${inr(o.total)}`); if (!utr) return;
+    const amt = prompt("Amount you paid (₹)", String(o.total)); if (!amt) return;
+    const f = await pickFile(); let path: string | null = null;
+    if (f) { path = `${o.partner_id}/${o.id}-${Date.now()}-${f.name.replace(/[^A-Za-z0-9._-]/g, "_")}`; const up = await supabase.storage.from("payment-proofs").upload(path, f); if (up.error) { setMsg({ ok: false, t: up.error.message }); return; } }
+    const { error } = await supabase.rpc("submit_payment_proof", { oid: o.id, utr, amt: Number(amt), path, note: null });
+    setMsg({ ok: !error, t: error ? error.message : "Payment details sent. EarthLabs Accounts will confirm and your order will move on." });
+  }
   const [refresh, setRefresh] = useState(0);
   return (<><h1>{staff ? "Orders" : "My orders"}</h1>{msg && <Msg kind={msg.ok ? "ok" : "bad"}>{msg.t}</Msg>}
     {!staff && <Place onDone={() => { setRefresh(refresh + 1); load(); }} />}
@@ -66,7 +79,7 @@ function Inner({ role }: { role: Role }) {
       {orders.map((o) => (<><tr key={o.id}><td><a href="#" onClick={(e) => { e.preventDefault(); show(o.id); }}>{o.id}</a></td>{staff && <td>{o.partner_id}</td>}<td>{when(o.created_at)}</td><td>{inr(o.total)}</td>
         <td>{o.status}{!staff && <div style={{ fontSize: 12 }}>{STATUS_HELP[o.status]}</div>}{o.hold_reason && <div style={{ fontSize: 12 }}>Reason: {o.hold_reason}</div>}{o.cancel_reason && <div style={{ fontSize: 12 }}>Reason: {o.cancel_reason}</div>}</td>
         <td>{o.eta_from ? `${when(o.eta_from)} to ${when(o.eta_to)}` : ""}</td>
-        <td style={{ whiteSpace: "nowrap" }}>{actionsFor(role, o.status).map((a) => <button key={a} className="btn" style={{ marginRight: 6 }} onClick={() => act(o, a)}>{({ approve: "Approve", pay: "Confirm payment", dispatch: "Dispatch", deliver: "Mark delivered", hold: "Hold", resume: "Resume", cancel: "Cancel" } as const)[a]}</button>)}</td></tr>
+        <td style={{ whiteSpace: "nowrap" }}>{canSubmitProof(role, o.status) && <button className="btn" style={{ marginRight: 6 }} onClick={() => sendProof(o)}>I have paid</button>}{actionsFor(role, o.status).map((a) => <button key={a} className="btn" style={{ marginRight: 6 }} onClick={() => act(o, a)}>{({ approve: "Approve", pay: "Confirm payment", dispatch: "Dispatch", deliver: "Mark delivered", hold: "Hold", resume: "Resume", cancel: "Cancel" } as const)[a]}</button>)}</td></tr>
         {open === o.id && <tr key={o.id + "d"}><td colSpan={7}><table><tbody>{lines.map((l) => <tr key={l.sku}><td>{l.sku}</td><td>{l.cartons} cartons</td><td>{inr(l.unit_price)} / unit</td><td>{inr(l.amount)}</td><td>{l.short_cartons > 0 ? `${l.short_cartons} to be made` : ""}</td></tr>)}</tbody></table>
           {o.applied?.length > 0 && <p>Schemes applied: {o.applied.map((a) => a.name).join(", ")} (− {inr(o.discount)})</p>}
           <ul>{ev.map((e, i) => <li key={i}>{when(e.at)} · {e.status}{e.note ? ` · ${e.note}` : ""}</li>)}</ul></td></tr>}</>))}

@@ -14,7 +14,7 @@ Updated at the end of every build session. Overall = modules done / 33.
 | 7 | Applications review and approval | 2 | Done |
 | 8 | Partners list and profile | 2 | Done |
 | 9 | Territory Explorer (map) | 2 | Done: district grid, coverage, white-space, exclusivity check (list view, not a drawn map) |
-| 10 | Agreements, MOU, custom MOU upload, e-sign | 2 | Mostly done: template upload and field mapping, .docx template filled with partner data, send, signed copy, activation gate, certificate. Left: external e-sign provider (needs Viraj's choice and an account); PDF/ODT templates are sent as uploaded |
+| 10 | Agreements, MOU, custom MOU upload, e-sign | 2 | Done except live credentials: e-sign through Leegality built (esign-send and esign-webhook Edge Functions, migration 010, MAC check tested). Needs LEEGALITY_AUTH_TOKEN, LEEGALITY_PROFILE_ID, LEEGALITY_PRIVATE_SALT, webhook URL in the Leegality workflow. Earlier: template upload and field mapping, .docx template filled with partner data, send, signed copy, activation gate, certificate. Left: external e-sign provider (needs Viraj's choice and an account); PDF/ODT templates are sent as uploaded |
 | 11 | Notifications | 2 | Done: in-app, e-mail outbox and send-emails Edge Function (needs secrets once Supabase exists) |
 | 12 | Catalogue, SKU add/retire/restore, partner-wise access | 3 | Done: Super Admin only, margin required before a SKU goes active, retired SKU cannot return to draft |
 | 13 | SKU-wise MRP and margins, price list | 3 | Done: slabs, SKU overrides, staff price list, partner sees only own price |
@@ -68,3 +68,9 @@ Updated at the end of every build session. Overall = modules done / 33.
 - Not started (Day 4 remainder): vendors and vendor portal, procurement, credit ladder, Performance Matrix, AI Intelligence, Approvals centre completion, Reports and exports.
 - Still blocked: Supabase project (org at free-project limit), e-sign provider, live batch link secrets, deploy and /partner redirect (need Viraj). Screens are not click-tested against a live Supabase project.
 - add_repo tool was not available; the repo was already cloned and in scope. Invoice numbers use a plain sequence (not yet a financial-year format; confirm with the accountant before go-live).
+
+## Build 5b notes (20 Nov 2026): e-sign provider chosen = Leegality
+- Migration 010 (new file): esign_started and esign_completed, callable only with the service key. Tests in build4_test.sql: not callable from the app, wrong folder refused, completion activates the partner and issues one certificate, repeated webhook changes nothing.
+- Edge Functions: esign-send (staff, uploads PDF, sends to Leegality, agreement becomes Sent) and esign-webhook (verifies HMAC-SHA1 of documentId with the private salt, downloads the signed PDF within its 15-second link, stores it, completes the agreement). Verify the MAC encoding (hex assumed, base64 also accepted) against a real sandbox webhook.
+- The agreement must be a PDF for Leegality. A filled .docx has to be saved as PDF first.
+- Secrets to set in Supabase (never in the repo): LEEGALITY_AUTH_TOKEN, LEEGALITY_PROFILE_ID, LEEGALITY_PRIVATE_SALT, LEEGALITY_BASE_URL (production https://app1.leegality.com/api).

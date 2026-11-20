@@ -76,7 +76,7 @@ Each session works through the unchecked boxes of its day, then continues into t
 - [x] Public website: home, registration wizard (dealer and distributor; installation partner behind the switch), application tracking, certificate verification (build 3: landing page added)
 - [x] Applications review: more-info, field verification, reject with reason, approve with permanent Partner ID
 - [x] Partners list and profile, territory exclusivity check, Territory Explorer (Gujarat district map and coverage gaps) (build 2)
-- [ ] Agreements (builds 2-3 done: template upload with field mapping, filling a .docx template into a MOU file, send, signed copy, certificate with printable QR and public verify page. Only the external e-sign provider remains: needs Viraj's choice of provider and an account): MOU generation, custom MOU template upload with field mapping, send for signing, signed copy storage, certificates with QR verification
+- [x] Agreements (build 5b: Leegality e-sign built, needs live credentials; builds 2-3 done: template upload with field mapping, filling a .docx template into a MOU file, send, signed copy, certificate with printable QR and public verify page. Only the external e-sign provider remains: needs Viraj's choice of provider and an account): MOU generation, custom MOU template upload with field mapping, send for signing, signed copy storage, certificates with QR verification
 - [x] Notifications (in-app plus e-mail through an Edge Function) (build 2; e-mail delivery needs RESEND_API_KEY, MAIL_FROM, CRON_SECRET secrets and a schedule once Supabase exists)
 
 ### Day 3 — Catalogue, pricing, schemes, orders

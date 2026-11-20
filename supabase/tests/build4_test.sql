@@ -200,3 +200,27 @@ do $$ begin
   assert (select count(*) from audit_log where table_name='ledger_entries')>=8, 'ledger postings audited';
 end $$;
 \echo BUILD 4 (money) TESTS PASSED
+
+-- ===== E-sign (Leegality) database side =====
+select pg_temp.as_user('00000000-0000-0000-0000-000000000001'); set role authenticated;
+select pg_temp.fails($q$select esign_started(gen_random_uuid(),'DOC1','https://x')$q$, 'permission denied');
+select pg_temp.fails($q$select esign_completed('DOC1','ELP-DLR-0005/a.pdf')$q$, 'permission denied');
+reset role;
+insert into partners(id,type_code,name,district,state) values ('ELP-DLR-0006','DLR','E-sign Test','Surat','Gujarat');
+insert into mou_templates(name,storage_path) values ('Plain MOU','_templates/plain.pdf');
+select create_agreement('ELP-DLR-0006', (select id from mou_templates where name='Plain MOU')) as ag \gset
+select esign_started(:'ag', 'LGDOC-1', 'https://sandbox.example/sign/abc');
+do $$ begin assert (select status from agreements where esign_document_id='LGDOC-1')='Sent' and (select esign_provider from agreements where esign_document_id='LGDOC-1')='leegality', 'e-sign request marks the agreement Sent'; end $$;
+select pg_temp.fails($q$select esign_completed('LGDOC-1','ELP-DLR-0001/signed.pdf')$q$, 'Bad file path');   -- another partner's folder
+select pg_temp.fails($q$select esign_completed('UNKNOWN','ELP-DLR-0006/signed.pdf')$q$, 'No agreement');
+do $$ begin assert (select status from partners where id='ELP-DLR-0006')='Agreement Pending', 'partner not active before the signature'; end $$;
+select esign_completed('LGDOC-1','ELP-DLR-0006/signed.pdf') as code \gset
+do $$ begin
+  assert (select status from agreements where esign_document_id='LGDOC-1')='Signed', 'verified completion marks the agreement Signed';
+  assert (select status from partners where id='ELP-DLR-0006')='Active', 'partner becomes Active after e-sign';
+  assert (select count(*) from certificates where partner_id='ELP-DLR-0006')=1, 'certificate issued';
+  assert esign_completed('LGDOC-1','ELP-DLR-0006/signed.pdf') is null, 'a repeated webhook changes nothing';
+  assert (select count(*) from certificates where partner_id='ELP-DLR-0006')=1, 'no second certificate';
+end $$;
+select pg_temp.fails($q$select esign_started((select id from agreements where esign_document_id='LGDOC-1'),'DOC9','x')$q$, 'already signed');
+\echo E-SIGN DB TESTS PASSED

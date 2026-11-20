@@ -35,6 +35,15 @@ function Inner({ role }: { role: Role }) {
     const up = await supabase.storage.from("agreements").upload(path, f); if (up.error) return say(up.error.message, true);
     rpc("record_signed_agreement", { aid: a.id, path }, "Signed copy stored. Partner activated and certificate issued.");
   }
+  async function esign(a: A, f: File | undefined) {
+    if (!f) return; if (!f.name.toLowerCase().endsWith(".pdf")) return say("E-sign needs the final agreement as a PDF", true);
+    if (f.size > 15_000_000) return say("The PDF is over 15 MB", true);
+    const path = `${a.partner_id}/${a.id}-for-esign.pdf`;
+    const up = await supabase.storage.from("agreements").upload(path, f, { upsert: true }); if (up.error) return say(up.error.message, true);
+    say("Sending to Leegality…");
+    const { data, error } = await supabase.functions.invoke("esign-send", { body: { agreement_id: a.id, pdf_path: path } });
+    say(error || data?.error ? (data?.error ?? error?.message ?? "Failed") : "Sent through Leegality. The partner receives the signing link; the signed copy and certificate follow automatically.", !!(error || data?.error)); load();
+  }
   const esc = (x: string) => x.replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c] as string);
   async function filledMou(a: A) {
     const t = tp.find((x) => x.id === a.template_id); if (!t) return say("Template not found", true);
@@ -58,7 +67,7 @@ function Inner({ role }: { role: Role }) {
   return (<><h1>Agreements & certificates</h1>{msg && <Msg kind={bad ? "bad" : "ok"}>{msg}</Msg>}
     {canPrepare && <><h2>Prepare an agreement</h2><div className="card"><input placeholder="Partner ID, e.g. ELP-DLR-0001" value={pid} onChange={(e) => setPid(e.target.value)} /> <select value={tpl} onChange={(e) => setTpl(e.target.value)}><option value="">Template</option>{tp.filter((t) => t.active).map((t) => <option key={t.id} value={t.id}>{t.name} v{t.version}</option>)}</select> <button className="btn" disabled={!pid || !tpl} onClick={() => rpc("create_agreement", { pid: pid.trim(), tpl }, "Draft agreement created")}>Create draft</button></div></>}
     <h2>Agreements</h2><div className="card"><table><thead><tr><th>Partner</th><th>Status</th><th>Sent</th><th>Signed</th><th></th></tr></thead><tbody>{ag.map((a) => <tr key={a.id}><td>{a.partner_id}</td><td>{a.status}</td><td>{when(a.sent_at)}</td><td>{when(a.signed_at)}</td>
-      <td>{canPrepare && a.status === "Draft" && <button className="btn" onClick={() => rpc("send_agreement", { aid: a.id }, "Sent to partner")}>Send for signing</button>}{staff && a.template_id && a.status !== "Signed" && <button className="btn" onClick={() => filledMou(a)}>Download filled MOU</button>} {isSuper && a.status === "Sent" && <label>Upload signed copy <input type="file" accept=".pdf,.jpg,.png" onChange={(e) => sign(a, e.target.files?.[0])} /></label>}</td></tr>)}{ag.length === 0 && <tr><td colSpan={5}>No agreements yet.</td></tr>}</tbody></table></div>
+      <td>{canPrepare && a.status === "Draft" && <button className="btn" onClick={() => rpc("send_agreement", { aid: a.id }, "Sent to partner")}>Send for signing</button>}{staff && a.template_id && a.status !== "Signed" && <button className="btn" onClick={() => filledMou(a)}>Download filled MOU</button>} {canPrepare && a.status !== "Signed" && <label>Send for e-sign (PDF) <input type="file" accept=".pdf" onChange={(e) => esign(a, e.target.files?.[0])} /></label>} {isSuper && a.status === "Sent" && <label>Upload signed copy <input type="file" accept=".pdf,.jpg,.png" onChange={(e) => sign(a, e.target.files?.[0])} /></label>}</td></tr>)}{ag.length === 0 && <tr><td colSpan={5}>No agreements yet.</td></tr>}</tbody></table></div>
     <h2>Certificates</h2><div className="card"><table><tbody>{certs.map((c) => <tr key={c.code}><td>{c.partner_id}</td><td>{c.code}</td><td>{when(c.issued_at)}</td><td>{c.revoked ? "Revoked" : <><a href={`../verify/?code=${c.code}`}>Public page</a> · <a href="#" onClick={(e) => { e.preventDefault(); showCert(c); }}>Print certificate with QR</a></>}</td></tr>)}{certs.length === 0 && <tr><td>No certificates yet.</td></tr>}</tbody></table></div>
     {staff && <><h2>MOU templates</h2><div className="card"><table><tbody>{tp.map((t) => <tr key={t.id}><td>{t.name} v{t.version}</td><td>{t.type_code ?? "All types"}</td><td>{t.active ? "Active" : "Retired"}</td></tr>)}</tbody></table>
       {isSuper && <><h3>Upload your own MOU template</h3><input placeholder="Template name" value={name} onChange={(e) => setName(e.target.value)} /> <select value={type} onChange={(e) => setType(e.target.value)}><option value="">All partner types</option><option value="DLR">Dealer</option><option value="DST">Distributor</option></select>

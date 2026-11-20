@@ -14,3 +14,7 @@ enable_confirmations = true
 verify_jwt = false
 [functions.batch-qc]
 verify_jwt = true
+[functions.esign-send]
+verify_jwt = true
+[functions.esign-webhook]
+verify_jwt = false

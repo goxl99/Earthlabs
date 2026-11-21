@@ -40,7 +40,7 @@ Updated at the end of every build session. Overall = modules done / 33.
 | 32 | Go-live: Supabase project, deploy, /partner redirect | 5 | Blocked: needs Supabase upgrade and Viraj's approval |
 
 ## Blockers
-- Supabase `earthlabs.work` org is at its free-project limit. Upgrade or pause a project so `earthlabs-partner-platform` can be created.
+- CLEARED 21 Nov 2026: project `earthlabs-partner-platform` (ref dkkwlipkhvuigkgjwizn, ap-south-1) exists. Build 6 migrations were applied to it (live names epdms_012 and epdms_013). Screens are still to be click-tested against it.
 - Deploy and the www.earthlabsproducts.com/partner redirect need Viraj's approval.
 
 ## Build 2 notes (19 Nov 2026)
@@ -98,3 +98,11 @@ Updated at the end of every build session. Overall = modules done / 33.
 - AI features still run only in the `ai-recommend` Edge Function; the key is the Supabase secret ANTHROPIC_API_KEY, not in the repo.
 - Not done in this run: Day 1B leftovers and the unticked Dashboard-by-role, Partner portal and Vendor portal lines (vendor quotes, purchase orders, vendor performance scoring), BOM reorder planning, Day 5 items. Performance decisions are not yet in the Approvals centre queue (they have their own list on /performance).
 - Still blocked: Supabase project (org at free-project limit), live batch link secrets, Leegality credentials, deploy and /partner redirect (need Viraj). Screens are not click-tested against a live Supabase project.
+
+- Still blocked: live batch link secrets, Leegality credentials, deploy and /partner redirect (need Viraj). Screens are not click-tested against a live Supabase project.
+
+## Build 6 follow-up (21 Nov 2026): live project
+- Live project `earthlabs-partner-platform` found with migrations 001-010 applied. Build 6 (repo 011) and the grant fix (repo 012) were applied to it; the repo and live migration names differ in number only (live has an extra advisor-fixes migration).
+- The live security advisor showed the new functions executable by the logged-out role through the default PUBLIC grant. Fixed in repo migration 012; verified live (anon no longer has execute; AI-only and internal functions have no user execute).
+- Remaining advisor items are older ones: leaked-password protection is off (enable in Auth settings), a few pre-existing helper functions are callable by anon but return nothing without a session, `ledger_immutable` has a mutable search_path.
+- Not yet done live: `ai-recommend` Edge Function deploy (needs the ANTHROPIC_API_KEY secret), email secrets, Storage buckets check, click-test of each role.

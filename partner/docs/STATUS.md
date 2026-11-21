@@ -1,7 +1,7 @@
 # EPDMS progress status
 Updated at the end of every build session. Overall = modules done / 33.
 
-**Overall: 20 of 33 modules done (61%)** · last update: 20 Nov 2026, build 5 (invoices, credit notes, ledger, payment proof, audit viewer). Earlier: build 3 (public landing, MOU filling, certificate QR, catalogue and prices, schemes, orders with payment gate, inventory and dispatch). "Done" = built and database rules tested locally; screens are not yet click-tested against a live Supabase project (blocked, see below).
+**Overall: 25 of 33 modules done (76%)** · last update: 21 Nov 2026, build 6 (vendors, procurement, release orders, credit ladder, AI recommendations, approvals centre). Earlier: build 5 (invoices, credit notes, ledger, payment proof, audit viewer). Earlier: build 3 (public landing, MOU filling, certificate QR, catalogue and prices, schemes, orders with payment gate, inventory and dispatch). "Done" = built and database rules tested locally; screens are not yet click-tested against a live Supabase project (blocked, see below).
 
 | # | Module | Day | Status |
 |---|---|---|---|
@@ -24,12 +24,12 @@ Updated at the end of every build session. Overall = modules done / 33.
 | 17 | Inventory, dispatch, batch-system link | 3 | Done except live link: stock, reservations, logged adjustments, dispatch notes. `batch-qc` Edge Function written, needs BATCH_* secrets and a read-only view in the batch project |
 | 18 | Invoices, credit notes, ledger | 4 | Done: CGST/SGST inside Gujarat, IGST outside, amounts copied from the database-priced order, append-only ledger, credit notes capped at the invoice, manual payment entry |
 | 19 | Payment proof (UTR / advice) and Accounts confirmation | 4 | Done: partner reports UTR and uploads advice to own folder, duplicate UTR blocked everywhere, only Accounts confirms, order moves on only through the payment gate |
-| 20 | Vendor portal | 4 | Not started |
-| 21 | Procurement, raw materials, release orders, lead times | 4 | Not started |
-| 22 | Credit ladder (pay-and-carry first) | 4 | Not started |
+| 20 | Vendor portal | 4 | Done: vendors master (Super Admin adds and approves), vendor sees own record and items, stock reports (Super Admin approves), release orders, payment gate. Left: quotes, purchase orders, vendor performance scoring |
+| 21 | Procurement, raw materials, release orders, lead times | 4 | Done: raw-material inventory with logged moves, lead time and reorder level (Super Admin only), release orders priced by the database, auto-approve limit and advance % set by Super Admin, e-mail to vendor queued, receive adds stock. Left: planning from a production plan (BOM) |
+| 22 | Credit ladder (pay-and-carry first) | 4 | Done: levels change only through Super Admin approval, one step at a time, nothing opens while pay-and-carry is on, vendor on credit ships without an advance |
 | 23 | Performance Matrix, growth ladder | 4 | Not started |
-| 24 | AI Intelligence (Edge Function) | 4 | Not started |
-| 25 | Approvals centre | 4 | Not started |
+| 24 | AI Intelligence (Edge Function) | 4 | Done except live key: `ai-recommend` Edge Function (ANTHROPIC_API_KEY secret), facts are ids and numbers only, output validated against the facts, stored Pending, only Super Admin decides |
+| 25 | Approvals centre | 4 | Done: one queue (release orders, vendor stock reports, credit, AI, payments, orders, change requests) |
 | 26 | Reports and exports | 4 | Not started |
 | 27 | Audit trail viewer | 4 | Done: Super Admin screen, filter by table and record, before/after view |
 | 28 | Security review and attack tests | 5 | Not started |
@@ -74,3 +74,14 @@ Updated at the end of every build session. Overall = modules done / 33.
 - Edge Functions: esign-send (staff, uploads PDF, sends to Leegality, agreement becomes Sent) and esign-webhook (verifies HMAC-SHA1 of documentId with the private salt, downloads the signed PDF within its 15-second link, stores it, completes the agreement). Verify the MAC encoding (hex assumed, base64 also accepted) against a real sandbox webhook.
 - The agreement must be a PDF for Leegality. A filled .docx has to be saved as PDF first.
 - Secrets to set in Supabase (never in the repo): LEEGALITY_AUTH_TOKEN, LEEGALITY_PROFILE_ID, LEEGALITY_PRIVATE_SALT, LEEGALITY_BASE_URL (production https://app1.leegality.com/api).
+
+## Build 6 notes (21 Nov 2026)
+- add_repo tool was not available; repo goxl99/earthlabs was already cloned and in scope, branch partner-platform checked out.
+- Migration 011 (new file only): vendors, raw materials and logged stock moves, vendor stock reports, release orders with their own payment gate (vendor ships only after Accounts releases the advance or the vendor is on approved credit), procurement settings, credit ladder and proposals, AI recommendations, approvals queue, `my_vendor_items`, `ai_facts`.
+- Order payment gate is now also a table trigger (`orders_payment_gate`): no path can move an order to Payment Confirmed, Dispatched or Delivered without confirmed payments covering the total (only the documented credit exception, which needs a credit level and pay-and-carry off, can dispatch from Approved).
+- Credit levels cannot be written directly by anyone; a build 3 test fixture now sets the `epdms.credit_apply` flag.
+- Tests: `supabase/tests/build6_test.sql` (wired into run_local_tests.sh) covers the payment gate end to end, vendor visibility, lead-time settings Super Admin only, stock reports, release-order gates and UTR reuse, auto-approval limit, credit ladder and the pay-and-carry launch rule, AI storing and deciding, AI facts carry no names or prices, approvals queue, audit. 11 new unit tests (38 in total): AI output validation, release-order buttons, approval routing, nav, no secrets in the repo.
+- Secrets to set in Supabase once the project exists (never in the repo): ANTHROPIC_API_KEY, optional AI_MODEL.
+- Custom MOU template upload and send for signing was already done in builds 2-5b; not changed.
+- Not done in this run: Performance Matrix (monthly score, weights, promotion rules), Reports and exports (CSV/PDF), vendor quotes and purchase orders, vendor performance scoring, BOM-based reorder planning. The credit-step score minimum is not enforced in the database yet because the Performance Matrix does not exist.
+- Still blocked: Supabase project (org at free-project limit), live batch link secrets, Leegality credentials, deploy and /partner redirect (need Viraj). Screens are not click-tested against a live Supabase project.

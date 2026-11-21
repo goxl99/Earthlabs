@@ -23,7 +23,7 @@ Everything in the review prototype is in scope and must ship. Each line is a mod
 
 **Internal portal (Super Admin, Sales, Accounts, Warehouse)**
 - [ ] Dashboard by role [dashboard]
-- [ ] Approvals centre: catalogue, scheme, procurement, credit, payments [appr]
+- [x] Approvals centre: catalogue, scheme, procurement, credit, payments [appr] (build 6: one queue, decisions through guarded functions; orders, proofs and change requests are decided on their own screens)
 - [ ] Applications: review, more-info, field verification, approve/reject, permanent Partner ID [applications]
 - [ ] Territory Explorer: Gujarat district map, coverage, exclusivity, white-space [territory]
 - [ ] Partners: list, profile, status, territories, ledger [partners]
@@ -33,10 +33,10 @@ Everything in the review prototype is in scope and must ship. Each line is a mod
 - [x] Schemes: partner-wise, engine, budget, disclosure control (build 3)
 - [x] Orders: workflow, payment gate, hold/cancel, lead time [orders] (build 3)
 - [x] Inventory and dispatch, linked to the batch system (read batch/QC data from the batch Supabase project through a secured Edge Function) [inv]  (build 3: stock, reservations, dispatch notes done; `batch-qc` Edge Function written, needs BATCH_* secrets and the read-only view in the batch project)
-- [ ] Procurement and raw materials: inventory, vendor stock reports, release orders, lead-time rules [proc]
+- [x] Procurement and raw materials: inventory, vendor stock reports, release orders, lead-time rules [proc] (build 6)
 - [x] Invoices and payments: invoices, UTR/advice review, ledger, credit notes [fin] (build 5)
-- [ ] AI Intelligence: recommendations (credit, schemes, reorder, promotion), management approves [ai]
-- [ ] Vendors: master, performance, vendor credit [vendors]
+- [x] AI Intelligence: recommendations (credit, schemes, reorder, promotion), management approves [ai] (build 6: `ai-recommend` Edge Function; needs the ANTHROPIC_API_KEY secret)
+- [x] Vendors: master, vendor credit [vendors] (build 6; vendor performance scoring not built, see Day 4)
 - [ ] Reports and exports (CSV/PDF) [reports]
 - [ ] Notifications: in-app, email, WhatsApp-ready hooks [notifs]
 - [ ] Users and access: roles, permissions per module, module on/off switches, registration-type switches [users]
@@ -89,12 +89,13 @@ Each session works through the unchecked boxes of its day, then continues into t
 ### Day 4 — Money, vendors, procurement, intelligence
 - [x] Invoices (GST split CGST/SGST/IGST), credit notes, ledger, manual payment entry (build 5: migration 009, tested; screen /invoices)
 - [x] Partner payment proof (UTR or payment advice upload to Storage, duplicate-UTR block), Accounts confirmation gate (build 5)
-- [ ] Vendors and vendor portal: stock reports, quotes, purchase orders, release orders, vendor payments, vendor performance
-- [ ] Procurement: raw-material inventory, reorder planning from production plan, lead-time settings, auto-email to vendor, approval limits
-- [ ] Credit ladder (pay-and-carry first; AI proposes, Super Admin approves) for partners and vendors
+- [x] Vendors and vendor portal: stock reports, release orders, vendor payments (build 6; quotes, purchase orders and vendor performance scoring not built yet)
+- [x] Procurement: raw-material inventory, lead-time settings, auto-email to vendor, approval limits (build 6; reorder planning from a production plan/BOM not built, AI reorder uses usage per day)
+- [x] Credit ladder (pay-and-carry first; AI proposes, Super Admin approves) for partners and vendors (build 6)
 - [ ] Performance Matrix: monthly score, weights, promotion/hold rules, growth ladder
-- [ ] AI Intelligence via Edge Function (Claude API key as a Supabase secret): promotion, scheme, procurement, credit recommendations; management approves
-- [ ] Approvals centre for all change requests; Reports and Exports (CSV/PDF); Audit trail viewer
+- [x] AI Intelligence via Edge Function (Claude API key as a Supabase secret): procurement, credit, lead-time, scheme and promotion recommendations; management approves (build 6)
+- [x] Approvals centre for all change requests; Audit trail viewer (build 5-6)
+- [ ] Reports and Exports (CSV/PDF)
 
 ### Day 5 — Hardening, launch preparation, hand-over
 - [ ] Security review of every RLS policy for every role, attack tests, rate limits, storage rules

@@ -228,7 +228,7 @@ select pg_temp.fails(format($q$update orders set status='Dispatched' where id=%L
 reset role;
 
 -- credit exception only when pay-and-carry is switched off AND the partner has a credit level
-update partners set credit_level=1 where id='ELP-DLR-0001';
+select set_config('epdms.credit_apply','on',false); update partners set credit_level=1 where id='ELP-DLR-0001'; select set_config('epdms.credit_apply','off',false);
 select pg_temp.as_user('00000000-0000-0000-0000-000000000006'); set role authenticated;
 select pg_temp.fails(format($q$select dispatch_order(%L,'v','l','b')$q$, current_setting('t.o3')), 'Payment is not confirmed');
 reset role;
@@ -238,7 +238,7 @@ select dispatch_order(current_setting('t.o3'), 'GJ01', 'LR-78', 'B2');
 do $$ begin assert (select status from orders where id=current_setting('t.o3'))='Dispatched', 'credit partner ships when pay-and-carry is off'; end $$;
 reset role;
 update settings set value='{"enabled":true,"advance_pct":100}' where key='pay_and_carry';
-update partners set credit_level=0 where id='ELP-DLR-0001';
+select set_config('epdms.credit_apply','on',false); update partners set credit_level=0 where id='ELP-DLR-0001'; select set_config('epdms.credit_apply','off',false);
 
 -- batch reference can be made mandatory (link to the batch system)
 update settings set value='true' where key='batch_ref_required';

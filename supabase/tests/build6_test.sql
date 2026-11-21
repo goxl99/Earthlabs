@@ -244,6 +244,8 @@ select pg_temp.fails($q$select propose_credit_change('partner','ELP-DLR-0001',2,
 select pg_temp.fails($q$select propose_credit_change('partner','ELP-DLR-0001',9,'no such level')$q$, 'does not exist');
 select pg_temp.fails($q$select propose_credit_change('partner','ELP-DLR-0001',1,'')$q$, 'reason');
 select pg_temp.fails($q$select propose_credit_change('partner','ELP-NOPE-0001',1,'x y z')$q$, 'not found');
+reset role; insert into partner_scores(partner_id,month,params,weights,score,verified_weight,band) values ('ELP-DLR-0001',date_trunc('month',current_date)::date,'[1,1,1,1,1,1,1,1]','[]',90,100,'Outstanding') on conflict do nothing;   -- build 7: credit steps need a score
+set role authenticated;
 select propose_credit_change('partner','ELP-DLR-0001',1,'steady orders, no overdue') as cp \gset
 select pg_temp.fails($q$select propose_credit_change('partner','ELP-DLR-0001',1,'again again')$q$, 'duplicate|unique');           -- one open proposal per entity
 select pg_temp.fails(format($q$select decide_credit_change(%s,true,null)$q$, :'cp'), 'Only Super Admin');

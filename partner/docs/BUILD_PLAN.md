@@ -28,7 +28,7 @@ Everything in the review prototype is in scope and must ship. Each line is a mod
 - [ ] Territory Explorer: Gujarat district map, coverage, exclusivity, white-space [territory]
 - [ ] Partners: list, profile, status, territories, ledger [partners]
 - [ ] Agreements and certificates: MOU flow, custom MOU template upload, send for signing, certificate with public verify [agree]
-- [ ] Performance Matrix: monthly score, weights, promotion/hold rules [perf]
+- [x] Performance Matrix: monthly score, weights, promotion/hold rules [perf] (build 7: migration 012, screen /performance)
 - [x] Products and pricing: SKU add/retire, partner-wise SKUs, SKU-wise MRP and margins, slabs, GST, policies [catalog] (build 3: tested in DB; screen not click-tested on live)
 - [x] Schemes: partner-wise, engine, budget, disclosure control (build 3)
 - [x] Orders: workflow, payment gate, hold/cancel, lead time [orders] (build 3)
@@ -37,7 +37,7 @@ Everything in the review prototype is in scope and must ship. Each line is a mod
 - [x] Invoices and payments: invoices, UTR/advice review, ledger, credit notes [fin] (build 5)
 - [x] AI Intelligence: recommendations (credit, schemes, reorder, promotion), management approves [ai] (build 6: `ai-recommend` Edge Function; needs the ANTHROPIC_API_KEY secret)
 - [x] Vendors: master, vendor credit [vendors] (build 6; vendor performance scoring not built, see Day 4)
-- [ ] Reports and exports (CSV/PDF) [reports]
+- [x] Reports and exports (CSV/PDF) [reports] (build 7: 19 role-gated reports, CSV download, print to PDF, every run audited)
 - [ ] Notifications: in-app, email, WhatsApp-ready hooks [notifs]
 - [ ] Users and access: roles, permissions per module, module on/off switches, registration-type switches [users]
 - [x] Audit trail viewer [audit] (build 5: Super Admin screen /audit with table and record filter)
@@ -92,10 +92,10 @@ Each session works through the unchecked boxes of its day, then continues into t
 - [x] Vendors and vendor portal: stock reports, release orders, vendor payments (build 6; quotes, purchase orders and vendor performance scoring not built yet)
 - [x] Procurement: raw-material inventory, lead-time settings, auto-email to vendor, approval limits (build 6; reorder planning from a production plan/BOM not built, AI reorder uses usage per day)
 - [x] Credit ladder (pay-and-carry first; AI proposes, Super Admin approves) for partners and vendors (build 6)
-- [ ] Performance Matrix: monthly score, weights, promotion/hold rules, growth ladder
+- [x] Performance Matrix: monthly score, weights, promotion/hold rules, growth ladder (build 7)
 - [x] AI Intelligence via Edge Function (Claude API key as a Supabase secret): procurement, credit, lead-time, scheme and promotion recommendations; management approves (build 6)
 - [x] Approvals centre for all change requests; Audit trail viewer (build 5-6)
-- [ ] Reports and Exports (CSV/PDF)
+- [x] Reports and Exports (CSV/PDF) (build 7)
 
 ### Day 5 — Hardening, launch preparation, hand-over
 - [ ] Security review of every RLS policy for every role, attack tests, rate limits, storage rules

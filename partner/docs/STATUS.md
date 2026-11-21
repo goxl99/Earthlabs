@@ -1,7 +1,7 @@
 # EPDMS progress status
 Updated at the end of every build session. Overall = modules done / 33.
 
-**Overall: 25 of 33 modules done (76%)** · last update: 21 Nov 2026, build 6 (vendors, procurement, release orders, credit ladder, AI recommendations, approvals centre). Earlier: build 5 (invoices, credit notes, ledger, payment proof, audit viewer). Earlier: build 3 (public landing, MOU filling, certificate QR, catalogue and prices, schemes, orders with payment gate, inventory and dispatch). "Done" = built and database rules tested locally; screens are not yet click-tested against a live Supabase project (blocked, see below).
+**Overall: 27 of 33 modules done (82%)** · last update: 21 Nov 2026, build 7 (Performance Matrix, promotion rules, growth ladder, credit score minimum, reports and exports). Earlier: build 6 (vendors, procurement, release orders, credit ladder, AI recommendations, approvals centre). Earlier: build 5 (invoices, credit notes, ledger, payment proof, audit viewer). Earlier: build 3 (public landing, MOU filling, certificate QR, catalogue and prices, schemes, orders with payment gate, inventory and dispatch). "Done" = built and database rules tested locally; screens are not yet click-tested against a live Supabase project (blocked, see below).
 
 | # | Module | Day | Status |
 |---|---|---|---|
@@ -27,10 +27,10 @@ Updated at the end of every build session. Overall = modules done / 33.
 | 20 | Vendor portal | 4 | Done: vendors master (Super Admin adds and approves), vendor sees own record and items, stock reports (Super Admin approves), release orders, payment gate. Left: quotes, purchase orders, vendor performance scoring |
 | 21 | Procurement, raw materials, release orders, lead times | 4 | Done: raw-material inventory with logged moves, lead time and reorder level (Super Admin only), release orders priced by the database, auto-approve limit and advance % set by Super Admin, e-mail to vendor queued, receive adds stock. Left: planning from a production plan (BOM) |
 | 22 | Credit ladder (pay-and-carry first) | 4 | Done: levels change only through Super Admin approval, one step at a time, nothing opens while pay-and-carry is on, vendor on credit ships without an advance |
-| 23 | Performance Matrix, growth ladder | 4 | Not started |
+| 23 | Performance Matrix, growth ladder | 4 | Done: monthly score from 8 weighted parameters (Super Admin edits weights, must total 100), unverified kept out not zero, bands, direction, quarterly promotion assessments with gates and consecutive-quarter rule, Super Admin decides, Partner ID unchanged, territory conflict blocks, partner My performance and growth ladder |
 | 24 | AI Intelligence (Edge Function) | 4 | Done except live key: `ai-recommend` Edge Function (ANTHROPIC_API_KEY secret), facts are ids and numbers only, output validated against the facts, stored Pending, only Super Admin decides |
 | 25 | Approvals centre | 4 | Done: one queue (release orders, vendor stock reports, credit, AI, payments, orders, change requests) |
-| 26 | Reports and exports | 4 | Not started |
+| 26 | Reports and exports | 4 | Done: 19 reports, each limited to the roles that may see that module, date filters, 5,000-row cap, CSV (formula-safe) and print to PDF, every run audited. Left: native Excel/PDF files (CSV and browser print used) |
 | 27 | Audit trail viewer | 4 | Done: Super Admin screen, filter by table and record, before/after view |
 | 28 | Security review and attack tests | 5 | Not started |
 | 29 | Load test (1,000 partners, 50,000 orders) | 5 | Not started |
@@ -84,4 +84,17 @@ Updated at the end of every build session. Overall = modules done / 33.
 - Secrets to set in Supabase once the project exists (never in the repo): ANTHROPIC_API_KEY, optional AI_MODEL.
 - Custom MOU template upload and send for signing was already done in builds 2-5b; not changed.
 - Not done in this run: Performance Matrix (monthly score, weights, promotion rules), Reports and exports (CSV/PDF), vendor quotes and purchase orders, vendor performance scoring, BOM-based reorder planning. The credit-step score minimum is not enforced in the database yet because the Performance Matrix does not exist.
+- Still blocked: Supabase project (org at free-project limit), live batch link secrets, Leegality credentials, deploy and /partner redirect (need Viraj). Screens are not click-tested against a live Supabase project.
+
+## Build 7 notes (21 Nov 2026)
+- add_repo tool was not available; repo goxl99/earthlabs was already cloned and in scope, branch partner-platform checked out and up to date.
+- Migration 012 (new file only): `partner_scores`, `promotion_assessments`, score weights and promotion rules in settings (validated by a trigger: 8 weights total 100, rule weights total 1, promote above hold), `record_partner_score`, `performance_overview` (paged, max 200), `partner_performance`, `growth_ladder`, `assess_promotion`, `decide_promotion`, `report_roles`, `report_catalogue`, `run_report`.
+- Credit-step score minimum now enforced in the database, at proposal (staff and AI path) and again at approval, because the score can fall in between. Partners with no verified score cannot move up. Existing build 6 test got a score fixture for this.
+- Who records scores: Super Admin, Sales, Accounts. Promotion assessments: Super Admin and Sales. Decisions: Super Admin only. These role choices are my reading of the prototype; confirm.
+- Promotion approval changes the category only. A new agreement draft for the new category is not created yet (manual); the partner is notified.
+- Scores are entered by staff for now. Automatic scoring from invoices, payments and secondary-sales data is not built (no secondary-sales data source exists yet).
+- Tests: `supabase/tests/build7_test.sql` (wired into run_local_tests.sh) covers scoring maths, unverified not zero, roles, own-record visibility, policy validation, promotion states and hold rules, failed gate resets the chain, one decision only, Partner ID unchanged, territory conflict, credit minimum (proposal, AI path, approval after score drop), growth ladder, 19 reports per role, export audit, and an order payment-gate regression (Delivered and Payment Confirmed cannot be forced; dispatch refused). 13 new unit tests (51 in total).
+- The order payment gate (no order advances without verified payment) is tested in build6_test.sql section A and again in build7_test.sql section F.
+- AI features still run only in the `ai-recommend` Edge Function; the key is the Supabase secret ANTHROPIC_API_KEY, not in the repo.
+- Not done in this run: Day 1B leftovers and the unticked Dashboard-by-role, Partner portal and Vendor portal lines (vendor quotes, purchase orders, vendor performance scoring), BOM reorder planning, Day 5 items. Performance decisions are not yet in the Approvals centre queue (they have their own list on /performance).
 - Still blocked: Supabase project (org at free-project limit), live batch link secrets, Leegality credentials, deploy and /partner redirect (need Viraj). Screens are not click-tested against a live Supabase project.

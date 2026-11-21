@@ -102,7 +102,7 @@ Updated at the end of every build session. Overall = modules done / 33.
 - Still blocked: live batch link secrets, Leegality credentials, deploy and /partner redirect (need Viraj). Screens are not click-tested against a live Supabase project.
 
 ## Build 6 follow-up (21 Nov 2026): live project
-- Live project `earthlabs-partner-platform` found with migrations 001-010 applied. Build 6 (repo 011) and the grant fix (repo 012) were applied to it; the repo and live migration names differ in number only (live has an extra advisor-fixes migration).
-- The live security advisor showed the new functions executable by the logged-out role through the default PUBLIC grant. Fixed in repo migration 012; verified live (anon no longer has execute; AI-only and internal functions have no user execute).
+- Live project `earthlabs-partner-platform` found with migrations 001-010 applied. Build 6 (repo 011) and the grant fix (repo 013) were applied; build 7 (repo 012, Performance Matrix) is NOT applied live yet to it; the repo and live migration names differ in number only (live has an extra advisor-fixes migration).
+- The live security advisor showed the new functions executable by the logged-out role through the default PUBLIC grant. Fixed in repo migration 013; verified live (anon no longer has execute; AI-only and internal functions have no user execute).
 - Remaining advisor items are older ones: leaked-password protection is off (enable in Auth settings), a few pre-existing helper functions are callable by anon but return nothing without a session, `ledger_immutable` has a mutable search_path.
 - Not yet done live: `ai-recommend` Edge Function deploy (needs the ANTHROPIC_API_KEY secret), email secrets, Storage buckets check, click-test of each role.

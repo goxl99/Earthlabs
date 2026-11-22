@@ -98,10 +98,10 @@ Each session works through the unchecked boxes of its day, then continues into t
 - [x] Reports and Exports (CSV/PDF) (build 7)
 
 ### Day 5 — Hardening, launch preparation, hand-over
-- [ ] Security review of every RLS policy for every role, attack tests, rate limits, storage rules
-- [ ] Performance and load test (1,000 partners, 50,000 orders), index review
+- [x] Security review of every RLS policy for every role, attack tests, rate limits, storage rules (build 8: tests/build8_test.sql, migration 014; rate limits and Auth CAPTCHA are dashboard settings, listed in HANDOVER.md)
+- [x] Performance and load test (1,000 partners, 50,000 orders), index review (build 8: run_load_test.sh, migration 015)
 - [ ] Accessibility and mobile pass on every screen; browser test of the main journeys per role
-- [ ] User guide, hand-over checklist, backups and restore drill, deploy steps for /partner redirect (executed only after Viraj approves)
+- [x] User guide, hand-over checklist, deploy steps for /partner redirect written (USER_GUIDE.md, HANDOVER.md, DEPLOY.md). Backups and the restore drill need Viraj: Pro plan and a person to run it (HANDOVER.md section D)
 
 ## Definition of done (every module)
 Works for every role it applies to, protected by RLS, audited, covered by a test, and checked against the prototype.

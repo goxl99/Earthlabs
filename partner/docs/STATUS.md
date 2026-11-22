@@ -1,7 +1,7 @@
 # EPDMS progress status
 Updated at the end of every build session. Overall = modules done / 33.
 
-**Overall: 27 of 33 modules done (82%)** · last update: 21 Nov 2026, build 7 (Performance Matrix, promotion rules, growth ladder, credit score minimum, reports and exports). Earlier: build 6 (vendors, procurement, release orders, credit ladder, AI recommendations, approvals centre). Earlier: build 5 (invoices, credit notes, ledger, payment proof, audit viewer). Earlier: build 3 (public landing, MOU filling, certificate QR, catalogue and prices, schemes, orders with payment gate, inventory and dispatch). "Done" = built and database rules tested locally; screens are not yet click-tested against a live Supabase project (blocked, see below).
+**Overall: 29 of 33 modules done (88%)** · last update: 21 Nov 2026, build 7 (Performance Matrix, promotion rules, growth ladder, credit score minimum, reports and exports). Earlier: build 6 (vendors, procurement, release orders, credit ladder, AI recommendations, approvals centre). Earlier: build 5 (invoices, credit notes, ledger, payment proof, audit viewer). Earlier: build 3 (public landing, MOU filling, certificate QR, catalogue and prices, schemes, orders with payment gate, inventory and dispatch). "Done" = built and database rules tested locally; screens are not yet click-tested against a live Supabase project (blocked, see below).
 
 | # | Module | Day | Status |
 |---|---|---|---|
@@ -32,10 +32,10 @@ Updated at the end of every build session. Overall = modules done / 33.
 | 25 | Approvals centre | 4 | Done: one queue (release orders, vendor stock reports, credit, AI, payments, orders, change requests) |
 | 26 | Reports and exports | 4 | Done: 19 reports, each limited to the roles that may see that module, date filters, 5,000-row cap, CSV (formula-safe) and print to PDF, every run audited. Left: native Excel/PDF files (CSV and browser print used) |
 | 27 | Audit trail viewer | 4 | Done: Super Admin screen, filter by table and record, before/after view |
-| 28 | Security review and attack tests | 5 | Not started |
-| 29 | Load test (1,000 partners, 50,000 orders) | 5 | Not started |
+| 28 | Security review and attack tests | 5 | Done in build 8: every table and role attacked in `build8_test.sql`; 3 real leaks fixed (migration 014) |
+| 29 | Load test (1,000 partners, 50,000 orders) | 5 | Done in build 8: all screens' queries under 40 ms after migration 015 |
 | 30 | Accessibility, mobile, browser journeys | 5 | Not started |
-| 31 | User guide, hand-over, backup drill | 5 | Not started |
+| 31 | User guide, hand-over, backup drill | 5 | Guide, hand-over checklist and exact deploy steps written; backup restore drill needs Viraj (Pro plan) |
 | 33 | Architecture review and hardening (bootstrap, audit immutability, flood guard, storage rules, security headers, health probe) | 1 | Done |
 | 32 | Go-live: Supabase project, deploy, /partner redirect | 5 | Blocked: needs Supabase upgrade and Viraj's approval |
 
@@ -106,3 +106,11 @@ Updated at the end of every build session. Overall = modules done / 33.
 - The live security advisor showed the new functions executable by the logged-out role through the default PUBLIC grant. Fixed in repo migration 013; verified live (anon no longer has execute; AI-only and internal functions have no user execute).
 - Remaining advisor items are older ones: leaked-password protection is off (enable in Auth settings), a few pre-existing helper functions are callable by anon but return nothing without a session, `ledger_immutable` has a mutable search_path.
 - Not yet done live: `ai-recommend` Edge Function deploy (needs the ANTHROPIC_API_KEY secret), email secrets, Storage buckets check, click-test of each role.
+
+## Build 8 notes (22 Nov 2026): Day 5 hardening
+- add_repo does not exist in this environment; the repo was already cloned, branch partner-platform checked out.
+- **Security review** (`supabase/tests/build8_test.sql`, wired into run_local_tests.sh): a dealer reads none of another partner's orders, lines, payments, invoices, ledger, proofs, credit notes, scores, agreements, certificates, claims; partners and vendors read no staff-only table; direct writes by dealer, Sales, Accounts and Warehouse to prices, margins, schemes, settings, roles, order totals, ledger, invoices, payments, stock, audit and scores all fail; no one can self-promote or switch partner; logged-out role has no table access and may execute only submit_application, track_application, verify_certificate; every table has RLS; every security-definer function pins search_path.
+- **Real findings fixed (migration 014):** (1) Warehouse could read margins, slabs, price list and schemes: now Super Admin, Sales, Accounts only (the Products & pricing menu no longer lists Warehouse). (2) A disclosed all-partners scheme was readable by vendors: partners only. (3) The logged-out role still held table privileges and execute on every function through default grants (blocked only by RLS and in-function checks): revoked, and defaults changed so new objects stay closed.
+- **Load test** (`supabase/run_load_test.sh`, synthetic data only: 1,000 partners, 1,002 users, 50,000 orders, 100,000 lines, 163,000 audit rows, 20,000 notifications). Before: latest 50 orders 1.3 s (staff), my orders 1.5 s, my order lines 1.4 s, orders ready to invoice 0.8 s. Cause: row-level-security helpers ran once per row and forced full scans. Fix (migration 015): helpers evaluated once per statement. After: all 28 screen queries between 0.0 and 35 ms (slowest: approval queue 35 ms, orders report 35 ms). Also in 015: 12 "FOR ALL" policies split (advisor: multiple permissive policies) and 6 missing foreign-key indexes.
+- **Live project:** `earthlabs-partner-platform` is ACTIVE; migrations through build 7 and the helper search-path fix are applied (live names epdms_001 to 016). Migrations 014 and 015 were NOT applied live: the apply_migration call asked for confirmation that nobody answered in this unattended run, so it timed out and nothing changed. Apply them after approval (the SQL is in the repo files). Advisor results on the live project BEFORE 014/015: security: logged-out role can execute 10 definer functions (fixed by 014), signed-in executable definer functions (by design), email_outbox and id_counters have RLS and no policy (intended), leaked-password protection off (dashboard setting); performance: 6 unindexed foreign keys and 60 multiple-permissive-policy notes (fixed by 015), unused indexes (empty project, ignore for now). Re-run the advisors after applying.
+- Not done: accessibility and mobile pass, browser journeys per role (need a live project and a browser run), backup restore drill, click-test of screens against the live project, Day 1B leftovers and vendor quotes/purchase orders/performance scoring.

@@ -18,7 +18,7 @@ do $$ begin begin perform submit_application('INS','Closed','A','9999999999','b@
 do $$ begin begin perform submit_application('DLR','Dup','A','9999999999','a@a.com','Gujarat','Anand',null,'{}'); raise exception 'duplicate allowed'; exception when raise_exception then if sqlerrm like '%allowed' then raise; end if; end; end $$;
 select set_config('t.appid', :'appid', false);
 do $$ begin assert (select count(*) from track_application(current_setting('t.appid')::uuid,'A@A.com'))=1, 'tracking works with matching e-mail'; assert (select count(*) from track_application(current_setting('t.appid')::uuid,'x@y.com'))=0, 'tracking blocked with wrong e-mail'; end $$;
-do $$ begin assert (select count(*) from applications)=0, 'anon cannot read applications'; end $$;
+do $$ begin begin assert (select count(*) from applications)=0, 'anon cannot read applications'; exception when insufficient_privilege then null; end; end $$; -- build 8: anon now has no table privilege at all (also fine)
 reset role;
 
 -- Super Admin approves: permanent ID issued
@@ -152,7 +152,7 @@ do $$ begin begin update agreements set status='Sent' where id=current_setting('
 reset role;
 do $$ begin assert (select status from partners where id='ELP-DLR-0004')='Active', 'partner active after signing'; end $$;
 select pg_temp.as_user(null); set role anon;
-do $$ begin assert (select valid from verify_certificate(lower(current_setting('t.cert'))))=true, 'public verify works'; assert (select count(*) from verify_certificate('NOSUCHCODE'))=0, 'unknown code not valid'; assert (select count(*) from certificates)=0, 'anon cannot list certificates'; end $$;
+do $$ begin assert (select valid from verify_certificate(lower(current_setting('t.cert'))))=true, 'public verify works'; assert (select count(*) from verify_certificate('NOSUCHCODE'))=0, 'unknown code not valid'; begin assert (select count(*) from certificates)=0, 'anon cannot list certificates'; exception when insufficient_privilege then null; end; end $$;
 reset role;
 update certificates set revoked=true where code=current_setting('t.cert');
 select pg_temp.as_user(null); set role anon;

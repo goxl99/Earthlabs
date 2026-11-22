@@ -1,0 +1,22 @@
+# Supabase CLI configuration (local development). Production values are set in the dashboard.
+project_id = "earthlabs-partner-platform"
+[api]
+port = 54321
+[db]
+port = 54322
+major_version = 17
+[auth]
+site_url = "http://localhost:3000"
+enable_signup = true
+[auth.email]
+enable_confirmations = true
+[functions.health]
+verify_jwt = false
+[functions.batch-qc]
+verify_jwt = true
+[functions.esign-send]
+verify_jwt = true
+[functions.esign-webhook]
+verify_jwt = false
+[functions.ai-recommend]
+verify_jwt = true

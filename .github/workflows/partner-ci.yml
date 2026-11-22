@@ -1,0 +1,31 @@
+name: Partner platform CI
+on:
+  pull_request:
+    paths: ["partner/**", "supabase/**", ".github/workflows/partner-*.yml"]
+  push:
+    branches: [partner-platform]
+  workflow_dispatch:
+jobs:
+  app:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: partner } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm, cache-dependency-path: partner/package-lock.json }
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: PARTNER_BASE_PATH=/partner npm run build
+  database:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env: { POSTGRES_PASSWORD: postgres }
+        ports: ["5432:5432"]
+        options: --health-cmd pg_isready --health-interval 5s --health-retries 10
+    env: { PGPASSWORD: postgres }
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./supabase/run_local_tests.sh localhost 5432

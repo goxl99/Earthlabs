@@ -22,12 +22,12 @@ The Supabase organisation `earthlabs.work` has reached its free-project limit, s
 Everything in the review prototype is in scope and must ship. Each line is a module with its done-box. Pages in brackets are the prototype pages to match.
 
 **Internal portal (Super Admin, Sales, Accounts, Warehouse)**
-- [ ] Dashboard by role [dashboard]
+- [x] Dashboard by role [dashboard] (build 3-8: role dashboards, database numbers per role)
 - [x] Approvals centre: catalogue, scheme, procurement, credit, payments [appr] (build 6: one queue, decisions through guarded functions; orders, proofs and change requests are decided on their own screens)
-- [ ] Applications: review, more-info, field verification, approve/reject, permanent Partner ID [applications]
-- [ ] Territory Explorer: Gujarat district map, coverage, exclusivity, white-space [territory]
-- [ ] Partners: list, profile, status, territories, ledger [partners]
-- [ ] Agreements and certificates: MOU flow, custom MOU template upload, send for signing, certificate with public verify [agree]
+- [x] Applications: review, more-info, field verification, approve/reject, permanent Partner ID [applications] (build 2)
+- [x] Territory Explorer: Gujarat district map, coverage, exclusivity, white-space [territory] (build 2: district grid list view, not a drawn map)
+- [x] Partners: list, profile, status, territories, ledger [partners] (build 2)
+- [x] Agreements and certificates: MOU flow, custom MOU template upload, send for signing, certificate with public verify [agree] (builds 2-5b; Leegality needs credentials)
 - [x] Performance Matrix: monthly score, weights, promotion/hold rules [perf] (build 7: migration 012, screen /performance)
 - [x] Products and pricing: SKU add/retire, partner-wise SKUs, SKU-wise MRP and margins, slabs, GST, policies [catalog] (build 3: tested in DB; screen not click-tested on live)
 - [x] Schemes: partner-wise, engine, budget, disclosure control (build 3)
@@ -38,12 +38,12 @@ Everything in the review prototype is in scope and must ship. Each line is a mod
 - [x] AI Intelligence: recommendations (credit, schemes, reorder, promotion), management approves [ai] (build 6: `ai-recommend` Edge Function; needs the ANTHROPIC_API_KEY secret)
 - [x] Vendors: master, vendor credit [vendors] (build 6; vendor performance scoring not built, see Day 4)
 - [x] Reports and exports (CSV/PDF) [reports] (build 7: 19 role-gated reports, CSV download, print to PDF, every run audited)
-- [ ] Notifications: in-app, email, WhatsApp-ready hooks [notifs]
+- [x] Notifications: in-app, email, WhatsApp-ready hooks [notifs] (build 2: in-app and e-mail; WhatsApp hook not built)
 - [ ] Users and access: roles, permissions per module, module on/off switches, registration-type switches [users]
 - [x] Audit trail viewer [audit] (build 5: Super Admin screen /audit with table and record filter)
 
 **Partner portal (dealer, distributor)**
-- [ ] Dashboard, Place an order (price, schemes, hints, lead time), My orders, payment details (UTR/advice), Invoices and ledger
+- [x] Dashboard, Place an order (price, schemes, hints, lead time), My orders, payment details (UTR/advice), Invoices and ledger
 - [ ] My performance, Growth ladder, Agreement and certificate, My network, Offers and credit
 
 **Vendor portal**

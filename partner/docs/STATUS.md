@@ -114,3 +114,31 @@ Updated at the end of every build session. Overall = modules done / 33.
 - **Load test** (`supabase/run_load_test.sh`, synthetic data only: 1,000 partners, 1,002 users, 50,000 orders, 100,000 lines, 163,000 audit rows, 20,000 notifications). Before: latest 50 orders 1.3 s (staff), my orders 1.5 s, my order lines 1.4 s, orders ready to invoice 0.8 s. Cause: row-level-security helpers ran once per row and forced full scans. Fix (migration 015): helpers evaluated once per statement. After: all 28 screen queries between 0.0 and 35 ms (slowest: approval queue 35 ms, orders report 35 ms). Also in 015: 12 "FOR ALL" policies split (advisor: multiple permissive policies) and 6 missing foreign-key indexes.
 - **Live project:** `earthlabs-partner-platform` is ACTIVE; migrations through build 7 and the helper search-path fix are applied (live names epdms_001 to 016). Migrations 014 and 015 were NOT applied live: the apply_migration call asked for confirmation that nobody answered in this unattended run, so it timed out and nothing changed. Apply them after approval (the SQL is in the repo files). Advisor results on the live project BEFORE 014/015: security: logged-out role can execute 10 definer functions (fixed by 014), signed-in executable definer functions (by design), email_outbox and id_counters have RLS and no policy (intended), leaked-password protection off (dashboard setting); performance: 6 unindexed foreign keys and 60 multiple-permissive-policy notes (fixed by 015), unused indexes (empty project, ignore for now). Re-run the advisors after applying.
 - Not done: accessibility and mobile pass, browser journeys per role (need a live project and a browser run), backup restore drill, click-test of screens against the live project, Day 1B leftovers and vendor quotes/purchase orders/performance scoring.
+
+## Build 9 notes (22 Nov 2026): final completion sweep (unattended run)
+**Checks run today, all green:** local Postgres 16, migrations 001-015 plus rls_test, build3, build4, build6, build7, build8 tests all pass (`run_local_tests.sh`); `npm run typecheck` clean; `npm test` 51 of 51; `PARTNER_BASE_PATH=/partner npm run build` succeeds (all routes static). `add_repo` does not exist here; repo was already in scope.
+
+**Done:** the BUILD_PLAN boxes for Dashboard, Applications, Territory, Partners, Agreements, Notifications and the first partner-portal line were ticked, because STATUS and the tests already showed them built (they were stale). No new feature code in this run.
+
+**Not done (still open in BUILD_PLAN):**
+1. Module on/off switches in Users & Access (roles, permissions and registration-type switches exist; per-module switches do not).
+2. Partner portal: "My network" (distributor view of own dealers) is missing; "Offers and credit" exists as /credit and partner schemes.
+3. Vendor portal: RFQs and quotations, purchase orders and delivery tracking, vendor performance scoring are missing (stock reports, release orders, payments, own record exist). Prototype nav: vquote, vpo, vpay, vperf.
+4. BOM-based reorder planning; automatic partner scoring from invoices and payments (scores are entered by staff); WhatsApp notification hook; native Excel/PDF exports (CSV and print used); Territory Explorer is a district list, not a drawn map.
+5. Accessibility and mobile pass, and browser click-test of each role's journey: not done (needs the live project, test users and a browser run).
+6. Day 1B leftover line is stale: its parts (users, audit viewer, notifications, public home, wizard) are built; only module switches remain.
+
+**Screen comparison with the prototype (by navigation list):** every internal screen and the public pages (home, register, track, verify) exist as routes. Missing vs prototype: My network, vendor RFQs and quotations, vendor purchase orders and delivery, vendor performance. I did not compare field by field or visually; that needs a browser run.
+
+**Live Supabase project `earthlabs-partner-platform` (dkkwlipkhvuigkgjwizn):**
+- Migrations through live name epdms_016 are applied. Repo migrations 014 (security hardening) and 015 (speed and policy split) are STILL NOT applied: the apply_migration call again waited for a confirmation nobody could give in an unattended run and timed out. Nothing changed live.
+- Advisors re-run (unchanged from build 8): security: 10 definer functions executable by the logged-out role (migration 014 fixes), RLS-no-policy on email_outbox and id_counters (intended), leaked-password protection off (dashboard setting), signed-in executable definer functions (by design). Performance: 6 unindexed foreign keys and 60 multiple-permissive-policy notes (migration 015 fixes), unused indexes (empty project).
+
+## What Viraj must do next
+1. Apply migrations 014 and 015 to the live project (run apply_migration in an interactive session and approve the prompt, or paste the two SQL files in the Supabase SQL editor, 014 first), then re-run the advisors. They are tested locally.
+2. Supabase dashboard: turn on leaked-password protection; set auth rate limits and CAPTCHA (HANDOVER.md).
+3. Set secrets: ANTHROPIC_API_KEY, RESEND_API_KEY, MAIL_FROM, CRON_SECRET, LEEGALITY_* (4), BATCH_* (see SECRETS_SETUP.md); deploy the Edge Functions.
+4. Create real test users per role and click-test each journey on the live project; tell me what looks wrong against the prototype.
+5. Decide whether vendor quotes, purchase orders and My network are needed on day one; they are the largest remaining feature gaps.
+6. Confirm role choices noted in build 7 and the invoice-number format with the accountant.
+7. Approve deploy and the /partner redirect (not done; main and website redirects untouched). PR #1 stays open.

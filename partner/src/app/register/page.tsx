@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { DISTRICTS, Field, Msg } from "@/components/ui";
 import { PATHS, PublicTop } from "@/components/Public";
 import { markPartner } from "@/lib/visitor";
+import PotentialCard from "@/components/Potential";
 
 type PType = { code: string; name: string };
 const STEPS = ["Partner type", "Business", "Location", "Review"];
@@ -38,7 +39,7 @@ export default function Register() {
         <div className="frm2"><Field label="Business name"><input value={f.biz} onChange={set("biz")} autoComplete="organization" /></Field><Field label="Contact person"><input value={f.contact} onChange={set("contact")} autoComplete="name" /></Field>
           <Field label="Mobile"><input value={f.ph} onChange={set("ph")} inputMode="tel" autoComplete="tel" /></Field><Field label="E-mail"><input type="email" value={f.mail} onChange={set("mail")} autoComplete="email" /></Field>
           <Field label="GSTIN (if you have one)"><input value={f.gst} onChange={set("gst")} /></Field><Field label="Years in business"><input value={f.exp} onChange={set("exp")} inputMode="numeric" /></Field></div></>}
-      {step === 2 && <><h2>Where will you operate?</h2><Field label="District"><select value={f.dist} onChange={set("dist")}>{DISTRICTS.map((d) => <option key={d}>{d}</option>)}</select></Field><Field label="Other areas you serve"><input value={f.area} onChange={set("area")} /></Field></>}
+      {step === 2 && <><h2>Where will you operate?</h2><Field label="District"><select value={f.dist} onChange={set("dist")}>{DISTRICTS.map((d) => <option key={d}>{d}</option>)}</select></Field><PotentialCard district={f.dist} /><Field label="Other areas you serve"><input value={f.area} onChange={set("area")} /></Field></>}
       {step === 3 && <><h2>Check and submit</h2><table><tbody>{([["Type", tname], ["Business", f.biz], ["Contact", f.contact], ["Mobile", f.ph], ["E-mail", f.mail], ["GSTIN", f.gst || "—"], ["Years in business", f.exp || "—"], ["District", f.dist], ["Other areas", f.area || "—"]] as [string, string][]).map(([k, v]) => <tr key={k}><th scope="row">{k}</th><td>{v}</td></tr>)}</tbody></table>
         <p className="mini">We will ask for identity and business documents when your application is verified.</p></>}
       {step === 4 && msg && <><h2>Thank you</h2><Msg kind={msg.k}>{msg.t}</Msg><p><Link className="btn" href="../track/">Track my application</Link></p></>}

@@ -3,12 +3,17 @@ import"./chunk-QHDNOTBI.js";
 
 const INR = n => new Intl.NumberFormat("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(n) || 0);
 const R = n => "₹" + INR(n);
-const CATS = [["raw_material", "Raw material"], ["packaging", "Packaging"], ["marketing", "Marketing"], ["transport", "Transport"], ["utilities", "Utilities"], ["salary", "Salary"], ["rent", "Rent"], ["other", "Other"]];
+const CATS = [["raw_material", "Raw material"], ["packaging", "Packaging"], ["marketing", "Marketing"], ["transport", "Transport"], ["utilities", "Utilities"], ["salary", "Salary"], ["rent", "Rent"], ["asset", "Asset / investment"], ["other", "Other"]];
 const CAT = Object.fromEntries(CATS);
 const MODES = [["bank", "Bank transfer"], ["upi", "UPI"], ["cash", "Cash"], ["cheque", "Cheque"], ["other", "Other"]];
 const MODE = Object.fromEntries(MODES);
 const PAYERS = ["Company", "Gaurang", "Viraj"];
 let TAB = "overview", SUB = "all";
+const ASSET_TYPES = [["machinery", "Machinery", 10], ["drums_containers", "Drums & containers", 10], ["vehicle", "Vehicle", 15], ["furniture", "Furniture & fittings", 10], ["computer", "Computers & electronics", 30], ["tools", "Tools & equipment", 15], ["building", "Building / civil", 5], ["other", "Other", 0]];
+const ATYPE = Object.fromEntries(ASSET_TYPES.map(a => [a[0], a[1]])), ADEP = Object.fromEntries(ASSET_TYPES.map(a => [a[0], a[2]]));
+export const guessAsset = t => { const s = String(t || "").toLowerCase();
+  return /drum|barrel|container|carboy|crate|pallet|\bjar\b/.test(s) ? "drums_containers" : /vehicle|truck|tempo|\bvan\b|bike|\bcar\b|scooter/.test(s) ? "vehicle" : /computer|laptop|printer|phone|tablet|scanner|cctv|server|camera/.test(s) ? "computer"
+    : /furniture|chair|table|desk|rack|shelf|almirah|cabinet/.test(s) ? "furniture" : /\btool|drill|cutter|spanner|trolley/.test(s) ? "tools" : /building|shed|civil|construction|flooring/.test(s) ? "building" : "machinery"; };
 const today = () => new Date().toISOString().slice(0, 10);
 const mAgo = () => { const d = new Date(); d.setMonth(d.getMonth() - 3); return d.toISOString().slice(0, 10); };
 
@@ -33,6 +38,7 @@ export const toISO = v => {
 export const toNum = v => { if (typeof v === "number") return v; const s = String(v ?? "").replace(/[^0-9.\-]/g, ""); const n = parseFloat(s); return isNaN(n) ? 0 : n; };
 export const normCat = v => {
   const s = String(v || "").toLowerCase();
+  if (/asset|machin|equipment|capex|drum|vehicle|computer|laptop|furniture|compressor|mixer|boiler|reactor|stirrer|\bpump\b|investment/.test(s)) return "asset";
   if (/raw|material|chemical/.test(s)) return "raw_material"; if (/pack|bottle|carton|label|box/.test(s)) return "packaging";
   if (/market|advert|promo|\bads?\b|brand|social/.test(s)) return "marketing"; if (/transport|freight|logistic|tempo|truck|courier|cartage|delivery/.test(s)) return "transport";
   if (/electric|water|utilit|power|fuel|internet|phone|diesel/.test(s)) return "utilities"; if (/salary|wage|payroll|labou?r/.test(s)) return "salary"; if (/rent|lease/.test(s)) return "rent";
@@ -108,7 +114,7 @@ const compress = async file => {
 
 export async function accountsPage(el) {
   if (!hasRole("admin")) { el.innerHTML = '<p class="muted">Accounts is for admin only.</p>'; return; }
-  const tabs = [["overview", "Overview"], ["account", "Overall account"], ["ledger", "Party ledger"], ["expenses", "Expenses"], ["bank", "Bank statement"], ["profit", "Profitability"]];
+  const tabs = [["overview", "Overview"], ["account", "Overall account"], ["ledger", "Party ledger"], ["expenses", "Expenses"], ["assets", "Assets"], ["bank", "Bank statement"], ["profit", "Profitability"]];
   if (!tabs.some(([k]) => k === TAB)) TAB = "overview";
   el.innerHTML = `<div class="tabs wrapt">${tabs.map(([k, t]) => `<button class="tab ${k === TAB ? "on" : ""}" data-k="${k}">${t}</button>`).join("")}</div><div id="av"><p class="muted">Loading…</p></div>`;
   $$(".tab", el).forEach(b => b.onclick = () => { TAB = b.dataset.k; accountsPage(el); });
@@ -134,9 +140,16 @@ export async function accountsPage(el) {
       <label>For order (optional)<select name="order_id"><option value="">Not linked</option>${orders.map(r => `<option value="${r.id}" ${x.order_id === r.id ? "selected" : ""}>${esc(r.order_no)} · ${esc(r.customers?.name || "")}</option>`).join("")}</select></label>
       <label>For delivery / challan (optional)<select name="challan_id"><option value="">Not linked</option>${chs.map(r => `<option value="${r.id}" ${x.challan_id === r.id ? "selected" : ""}>${esc(r.dc_no)}</option>`).join("")}</select></label>
       <label class="full">Description<input name="description" value="${esc(x.description || "")}"></label>
+      ${x.id ? "" : `<div id="afx" class="form-grid full" style="display:${(x.category || "") === "asset" ? "grid" : "none"};margin:0;padding:0"><div class="notice full">This is an asset (investment). It is added to the Assets register and is not counted as a running cost.</div>
+        <label>Asset type<select name="asset_type">${ASSET_TYPES.map(a => `<option value="${a[0]}" ${(x.asset_type || guessAsset(x.description)) === a[0] ? "selected" : ""}>${a[1]}</option>`).join("")}</select></label>
+        <label>Quantity<input type="number" step="0.001" min="0.001" name="qty" value="${x.qty > 0 ? x.qty : 1}"></label>
+        <label>Depreciation % per year<input type="number" step="0.1" min="0" max="100" name="dep_rate" value="${x.dep_rate ?? ADEP[x.asset_type || guessAsset(x.description)]}"></label></div>`}
       <label class="full">Notes<input name="notes" value="${esc(x.notes || "")}"></label>
       <div class="full row end"><button class="btn" id="es">Save expense</button></div></form>`, {
       onMount: (m, close) => {
+        const cs = $("[name=category]", m), at = $("[name=asset_type]", m), dr = $("[name=dep_rate]", m);
+        if (cs && $("#afx", m)) cs.onchange = () => { $("#afx", m).style.display = cs.value === "asset" ? "grid" : "none"; };
+        if (at && dr) at.onchange = () => { dr.value = ADEP[at.value] ?? 0; };
         $("#ef", m).onsubmit = async e => {
           e.preventDefault();
           const f = Object.fromEntries(new FormData(e.target));
@@ -230,6 +243,7 @@ export async function accountsPage(el) {
           ok.forEach(r => {
             const mat = r.item && STOCK[r.row.category] ? mats.find(x => x.id === r.item) : null;
             if (mat) toStock.push({ ...r.row, raw_material_id: mat.id, unit: UNITS.test(r.row.unit || "") ? r.row.unit : mat.unit, rate: r.row.rate > 0 ? r.row.rate : null });
+            else if (r.row.category === "asset") { const t = guessAsset(r.row.description || r.row.vendor); toExp.push({ ...r.row, asset_type: t, dep_rate: ADEP[t] ?? 0, qty: Number(r.row.qty) > 0 ? r.row.qty : 1 }); }
             else { const q = Number(r.row.qty) > 0 ? ` (${+Number(r.row.qty).toFixed(3)}${r.row.unit ? " " + r.row.unit : ""})` : ""; toExp.push({ ...r.row, description: (r.row.description + q + (r.row.bill_no ? " · Bill " + r.row.bill_no : "")).trim() }); }
           });
           let nb = 0, ns = 0, ne = 0; const fails = [];
@@ -280,9 +294,9 @@ export async function accountsPage(el) {
 
   // =================== OVERVIEW ===================
   const overview = async () => {
-    const [rm, ols, invs, pays, exps, sinv] = await Promise.all([
+    const [rm, ols, invs, pays, exps, sinv, ast] = await Promise.all([
       get(sb.from("v_rm_value").select("*").order("name")), get(sb.from("v_sales_order_lines").select("order_id,qty,rate,gst_pct")), get(sb.from("tax_invoices").select("total").eq("status", "issued")),
-      get(sb.from("customer_payments").select("amount")), get(sb.from("expenses").select("amount,category,paid_by,reimbursed")), get(sb.from("supplier_invoices").select("total")),
+      get(sb.from("customer_payments").select("amount")), get(sb.from("expenses").select("amount,category,paid_by,reimbursed")), get(sb.from("supplier_invoices").select("total")), get(sb.from("v_assets").select("cost,book_value,status")),
     ]);
     const sum = (a, f) => a.reduce((s, x) => s + (Number(f(x)) || 0), 0);
     const stock = sum(rm, r => r.value), noRate = rm.filter(r => r.no_rate && Number(r.on_hand) > 0).length;
@@ -298,6 +312,7 @@ export async function accountsPage(el) {
       ${stat("Received", R(rec), "", "good")}
       ${stat("To collect", R(billed - rec), "Invoiced minus received", billed - rec > 0 ? "warn" : "")}
       ${stat("Expenses recorded", R(exTot))}
+      ${stat("Investment in assets", R(sum(ast, a => a.cost)), `Book value now ${R(sum(ast.filter(a => a.status === "in_use"), a => a.book_value))}`)}
     </div>
     <div class="card"><h3>Expenses by label</h3>${table([{ h: "Label", v: r => r[0] }, { h: "Amount", v: r => R(r[1]) }], CATS.map(([k, t]) => [t, byCat[k]]), { empty: "No expenses yet" })}</div>
     <div class="card"><h3>Expenses by who paid</h3>${table([{ h: "Paid by", v: r => r[0] }, { h: "Total paid", v: r => R(r[1]) }, { h: "Still to be paid back", v: r => owed[r[0]] ? R(owed[r[0]]) : "–" }], Object.entries(byPayer), { empty: "No expenses yet" })}</div>
@@ -426,6 +441,62 @@ export async function accountsPage(el) {
     go();
   };
 
+  // =================== ASSETS ===================
+  const assets = async () => {
+    const list = await get(sb.from("v_assets").select("*").order("purchase_date", { ascending: false }));
+    const n = x => Number(x) || 0, sum = (a, f) => a.reduce((t, x) => t + n(f(x)), 0), live = list.filter(a => a.status === "in_use");
+    const byT = ASSET_TYPES.map(([k, t]) => { const g = live.filter(a => a.asset_type === k); return [t, sum(g, a => a.qty), sum(g, a => a.cost), sum(g, a => a.book_value)]; }).filter(r => r[2] > 0 || r[1] > 0);
+    av.innerHTML = `<div class="toolbar"><button class="btn" id="aa">Add asset</button><button class="btn ghost" id="ax">Upload Excel</button><span class="grow"></span><input id="q" type="search" placeholder="Search asset…"><select id="fs"><option value="in_use">In use</option><option value="sold">Sold</option><option value="scrapped">Scrapped</option><option value="">All</option></select></div>
+      <div class="stats">${stat("Total investment", R(sum(list, a => a.cost)), `${list.length} assets`)}${stat("Book value (in use)", R(sum(live, a => a.book_value)), "Cost minus depreciation", "good")}${stat("Depreciation so far", R(sum(live, a => a.depreciation)))}${stat("Sold / scrapped", String(list.length - live.length))}</div>
+      <div class="card"><h3>By type</h3>${table([{ h: "Type", v: r => r[0] }, { h: "Quantity", v: r => +Number(r[1]).toFixed(3) }, { h: "Cost", v: r => R(r[2]) }, { h: "Book value", v: r => R(r[3]) }], byT, { empty: "No assets yet" })}</div><div id="tb"></div>`;
+    const draw = () => {
+      const st = $("#fs", av).value, q = ($("#q", av).value || "").toLowerCase(), rows = list.filter(a => (!st || a.status === st) && (!q || (a.name + " " + (a.vendor || "") + " " + (a.location || "")).toLowerCase().includes(q)));
+      $("#tb", av).innerHTML = table([{ h: "Asset", v: a => a.name }, { h: "Type", v: a => ATYPE[a.asset_type] }, { h: "Qty", v: a => +Number(a.qty).toFixed(3) }, { h: "Bought", v: a => dfmt(a.purchase_date) }, { h: "Vendor", v: a => a.vendor || "–" }, { h: "Cost", v: a => R(a.cost) },
+        { h: "Dep. %/yr", v: a => a.dep_rate }, { h: "Book value", v: a => a.status === "in_use" ? R(a.book_value) : (a.status === "sold" ? "Sold" + (a.sale_value != null ? " " + R(a.sale_value) : "") : "Scrapped") }, { h: "Location", v: a => a.location || "–" },
+        { h: "", html: a => `<button class="btn ghost sm ae" data-id="${a.id}">Edit</button> ${a.status === "in_use" ? `<button class="btn ghost sm ad" data-id="${a.id}">Sold / scrapped</button>` : `<button class="btn ghost sm au" data-id="${a.id}">Back in use</button>`} <button class="btn ghost sm ax2" data-id="${a.id}">Delete</button>` }], rows, { empty: "No assets here. Add machinery, drums or other investments." });
+      $$(".ae", av).forEach(b => b.onclick = () => openAsset(list.find(a => a.id === b.dataset.id)));
+      $$(".ad", av).forEach(b => b.onclick = () => openDispose(list.find(a => a.id === b.dataset.id)));
+      $$(".au", av).forEach(b => b.onclick = async () => { if (await run(sb.rpc("set_asset_status", { p_id: b.dataset.id, p_status: "in_use", p_on: null, p_sale: null }), "Back in use") !== null) reload(); });
+      $$(".ax2", av).forEach(b => b.onclick = async () => { const a = list.find(x => x.id === b.dataset.id); if (!confirm(`Delete "${a.name}"?${a.expense_id ? " The payment entry recorded with it is removed too." : ""}`)) return; if (await run(sb.rpc("delete_asset", { p_id: a.id }), "Deleted") !== null) reload(); });
+    };
+    draw(); $("#fs", av).onchange = draw; $("#q", av).oninput = draw;
+    $("#aa", av).onclick = () => openAsset(); $("#ax", av).onclick = () => openBulkExpenses("asset");
+  };
+  const openAsset = (a = {}) => modal(a.id ? "Edit asset" : "Add asset", `<form id="asf" class="form-grid">
+    <label class="full">Asset name<input name="name" required value="${esc(a.name || "")}" placeholder="e.g. Mixing tank 1000 L, HDPE drums 200 L"></label>
+    <label>Type<select name="asset_type">${ASSET_TYPES.map(t => `<option value="${t[0]}" ${(a.asset_type || "machinery") === t[0] ? "selected" : ""}>${t[1]}</option>`).join("")}</select></label>
+    <label>Quantity<input type="number" step="0.001" min="0.001" name="qty" required value="${a.qty ?? 1}"></label>
+    <label>Purchase date<input type="date" name="purchase_date" required value="${esc(String(a.purchase_date || today()).slice(0, 10))}"></label>
+    <label>Vendor<input name="vendor" value="${esc(a.vendor || "")}"></label>
+    <label>Total cost paid (₹, incl. GST)<input type="number" step="0.01" min="0" name="cost" required value="${a.cost ?? ""}"></label>
+    <label>of which GST (₹)<input type="number" step="0.01" min="0" name="gst_amount" value="${a.gst_amount ?? 0}"></label>
+    <label>Depreciation % per year<input type="number" step="0.1" min="0" max="100" name="dep_rate" value="${a.dep_rate ?? ADEP.machinery}"></label>
+    <label>Where it is kept<input name="location" value="${esc(a.location || "")}" placeholder="Plant, godown…"></label>
+    ${a.id ? "" : `<label class="full row" style="gap:8px"><input type="checkbox" name="already_owned" id="own"> Already owned. Only add to the register (no payment recorded now)</label>
+      <label id="pbw">Paid by<input name="paid_by" list="payers2" value="Company"><datalist id="payers2">${PAYERS.map(p => `<option>${p}</option>`).join("")}</datalist></label>
+      <label id="pmw">Payment mode<select name="payment_mode">${MODES.map(([v, t]) => `<option value="${v}">${t}</option>`).join("")}</select></label>`}
+    <label class="full">Notes<input name="notes" value="${esc(a.notes || "")}"></label>
+    <div class="full row end"><button class="btn" id="ass">Save asset</button></div></form>`, {
+    onMount: (m, close) => {
+      const ty = $("[name=asset_type]", m), dr = $("[name=dep_rate]", m), own = $("#own", m);
+      if (!a.id) ty.onchange = () => { dr.value = ADEP[ty.value] ?? 0; };
+      if (own) own.onchange = () => { $("#pbw", m).style.display = $("#pmw", m).style.display = own.checked ? "none" : ""; };
+      $("#asf", m).onsubmit = async e => {
+        e.preventDefault();
+        const f = Object.fromEntries(new FormData(e.target)); f.already_owned = !!f.already_owned;
+        $("#ass", m).disabled = true;
+        const r = await run(sb.rpc("save_asset", { p: { ...f, id: a.id || null } }), "Asset saved");
+        $("#ass", m).disabled = false;
+        if (r) { close(); reload(); }
+      };
+    },
+  });
+  const openDispose = a => modal("Sold or scrapped: " + a.name, `<form id="df2" class="form-grid"><label>What happened<select name="st"><option value="sold">Sold</option><option value="scrapped">Scrapped / written off</option></select></label>
+    <label>Date<input type="date" name="on" value="${today()}" required></label><label>Sale value (₹, if sold)<input type="number" step="0.01" min="0" name="sale"></label>
+    <div class="full row end"><button class="btn" id="dsv">Save</button></div></form>`, {
+    onMount: (m, close) => { $("#df2", m).onsubmit = async e => { e.preventDefault(); const f = Object.fromEntries(new FormData(e.target)); const r = await run(sb.rpc("set_asset_status", { p_id: a.id, p_status: f.st, p_on: f.on, p_sale: f.st === "sold" && f.sale !== "" ? Number(f.sale) : null }), "Updated"); if (r !== null) { close(); reload(); } }; },
+  });
+
   // =================== BANK ===================
   const bank = async () => {
     const [txns, ib, cb] = await Promise.all([get(sb.from("bank_txns").select("*").order("txn_date", { ascending: false }).order("created_at", { ascending: false }).limit(1500)), get(sb.from("v_invoice_balance").select("*")), get(sb.from("v_customer_balance").select("customer_id,name"))]);
@@ -487,7 +558,8 @@ export async function accountsPage(el) {
       try {
         const [lines, exps] = await Promise.all([get(sb.from("v_sale_lines").select("*").gte("dc_date", df).lte("dc_date", dt)), get(sb.from("expenses").select("*").gte("exp_date", df).lte("exp_date", dt))]);
         const n = x => Number(x) || 0, dcOrder = {}; lines.forEach(l => { dcOrder[l.challan_id] = l.order_id; });
-        const ops = exps.filter(e => e.category !== "raw_material" && e.category !== "packaging");
+        const ops = exps.filter(e => e.category !== "raw_material" && e.category !== "packaging" && e.category !== "asset");
+        const dep = Number((await sb.rpc("asset_dep_between", { p_from: df, p_to: dt })).data) || 0;
         const rev = lines.reduce((s, l) => s + n(l.revenue), 0), cogs = lines.reduce((s, l) => s + n(l.cogs), 0), opx = ops.reduce((s, e) => s + n(e.amount) - n(e.gst_amount), 0);
         const keyOf = { order: l => l.order_id, delivery: l => l.challan_id, customer: l => l.customer_id, site: l => l.facility_id || "none" }[by];
         const nameOf = { order: l => `${l.order_no} · ${l.customer}`, delivery: l => `${l.dc_no}${l.invoice_no ? " / " + l.invoice_no : ""} · ${l.customer}`, customer: l => l.customer, site: l => l.facility }[by];
@@ -502,7 +574,7 @@ export async function accountsPage(el) {
         const rows = Object.values(g).map(r => ({ ...r, gp: r.rev - r.cogs, np: r.rev - r.cogs - r.exp })).sort((a, b) => b.np - a.np);
         const noCost = lines.filter(l => n(l.cogs) === 0).length;
         pv.innerHTML = `<div class="stats">${stat("Sales (before GST)", R(rev))}${stat("Material & packing cost", R(cogs), "Batch materials + packaging at last purchase rates")}${stat("Gross profit", R(rev - cogs), rev ? ((rev - cogs) / rev * 100).toFixed(1) + "% margin" : "", rev - cogs >= 0 ? "good" : "bad")}
-          ${stat("Operating expenses (before GST)", R(opx), "Marketing, transport, utilities, salary, rent, other")}${stat("Net profit", R(rev - cogs - opx), "", rev - cogs - opx >= 0 ? "good" : "bad")}</div>
+          ${stat("Operating expenses (before GST)", R(opx), "Marketing, transport, utilities, salary, rent, other")}${stat("Depreciation on assets", R(dep), "Machinery, drums etc. spread over their life")}${stat("Net profit", R(rev - cogs - opx - dep), "After expenses and depreciation", rev - cogs - opx - dep >= 0 ? "good" : "bad")}</div>
           ${noCost ? `<div class="notice">${noCost} delivered line(s) show zero material cost because the raw materials used have no purchase bill yet. Upload supplier bills (Stock → Bills) to get true margins.</div>` : ""}
           ${!lines.length ? '<div class="notice">No deliveries in this period yet. Profit is counted when a challan is issued.</div>' : ""}
           <div class="card"><h3>${{ order: "Profit by order", delivery: "Profit by delivery", customer: "Profit by customer", site: "Profit by site / plant" }[by]}</h3>
@@ -513,5 +585,5 @@ export async function accountsPage(el) {
     $$("input,select", $(".toolbar", av)).forEach(x => x.onchange = go); go();
   };
 
-  try { await ({ overview, account, ledger, expenses, bank, profit }[TAB])(); } catch (e) { fail(e); }
+  try { await ({ overview, account, ledger, expenses, assets, bank, profit }[TAB])(); } catch (e) { fail(e); }
 }

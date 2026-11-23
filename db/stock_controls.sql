@@ -66,22 +66,29 @@ begin
   return v_new;
 end $$;
 
--- take a bill back out of stock (reverses every receipt it created)
+-- take a bill back out of stock (removes the net quantity it added, including any earlier corrections)
 create or replace function public.unpost_invoice_from_stock(p_invoice uuid, p_reason text) returns integer
 language plpgsql security definer set search_path = public as $$
-declare i supplier_invoices; r raw_material_stock; v_new uuid; n int := 0;
+declare i supplier_invoices; g record; v_new uuid; n int := 0;
 begin
   if coalesce((select app_role())::text, '') <> 'admin' then raise exception 'Only admin can undo stock entries'; end if;
   if coalesce(btrim(p_reason), '') = '' then raise exception 'A reason is required'; end if;
   select * into i from supplier_invoices where id = p_invoice for update;
   if not found then raise exception 'Bill not found'; end if;
-  for r in select * from raw_material_stock where movement = 'receipt' and reversed_by is null and batch_id is null
-           and (invoice_id = p_invoice or (invoice_id is null and note = 'Bill ' || coalesce(i.invoice_no, '(no number)') and supplier is not distinct from i.supplier)) loop
-    insert into raw_material_stock(raw_material_id, movement, qty, note, reverses_id, invoice_id, supplier)
-      values (r.raw_material_id, 'adjustment', -r.qty, 'Bill ' || coalesce(i.invoice_no, '(no number)') || ' taken out of stock: ' || btrim(p_reason), r.id, p_invoice, r.supplier) returning id into v_new;
-    update raw_material_stock set reversed_by = v_new where id = r.id;
-    n := n + 1;
+  for g in
+    select s.raw_material_id, sum(s.qty) as net, min(s.supplier) as sup
+    from raw_material_stock s
+    where s.batch_id is null and (s.invoice_id = p_invoice or (s.invoice_id is null and s.movement = 'receipt' and s.note = 'Bill ' || coalesce(i.invoice_no, '(no number)') and s.supplier is not distinct from i.supplier))
+    group by s.raw_material_id
+  loop
+    if g.net <> 0 then
+      insert into raw_material_stock(raw_material_id, movement, qty, note, invoice_id, supplier)
+        values (g.raw_material_id, 'adjustment', -g.net, 'Bill ' || coalesce(i.invoice_no, '(no number)') || ' taken out of stock: ' || btrim(p_reason), p_invoice, g.sup) returning id into v_new;
+      n := n + 1;
+    end if;
   end loop;
+  update raw_material_stock set reversed_by = coalesce(reversed_by, (select id from raw_material_stock x where x.invoice_id = p_invoice and x.note like 'Bill % taken out of stock%' and x.raw_material_id = raw_material_stock.raw_material_id order by x.created_at desc limit 1))
+    where movement = 'receipt' and reversed_by is null and batch_id is null and (invoice_id = p_invoice or (invoice_id is null and note = 'Bill ' || coalesce(i.invoice_no, '(no number)') and supplier is not distinct from i.supplier));
   update supplier_invoices set stock_posted = false where id = p_invoice;
   return n;
 end $$;
@@ -96,7 +103,7 @@ begin
   v_consumed := exists (select 1 from raw_material_stock s where s.batch_id = p_batch and s.movement = 'consumption' and s.note like 'Batch %');
   if v_consumed then
     return query
-      select rm.id, rm.name, rm.unit, -sum(s.qty), coalesce(lv.on_hand, 0), least(-sum(s.qty), greatest(0, -coalesce(lv.on_hand, 0)))
+      select rm.id, rm.name, rm.unit, -sum(s.qty), coalesce(lv.on_hand, 0), greatest(0, -coalesce(lv.on_hand, 0))
       from raw_material_stock s join raw_materials rm on rm.id = s.raw_material_id left join raw_material_levels lv on lv.raw_material_id = rm.id
       where s.batch_id = p_batch and s.note like 'Batch %' and s.movement in ('consumption', 'adjustment')
       group by rm.id, rm.name, rm.unit, lv.on_hand having -sum(s.qty) > 0;

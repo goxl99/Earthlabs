@@ -8,7 +8,7 @@ const CAT = Object.fromEntries(CATS);
 const MODES = [["bank", "Bank transfer"], ["upi", "UPI"], ["cash", "Cash"], ["cheque", "Cheque"], ["other", "Other"]];
 const MODE = Object.fromEntries(MODES);
 const PAYERS = ["Company", "Gaurang", "Viraj"];
-let TAB = "overview";
+let TAB = "overview", SUB = "all";
 const today = () => new Date().toISOString().slice(0, 10);
 const mAgo = () => { const d = new Date(); d.setMonth(d.getMonth() - 3); return d.toISOString().slice(0, 10); };
 
@@ -42,21 +42,39 @@ const normMode = v => { const s = String(v || "").toLowerCase(); return /upi|gpa
 const findCol = (hdr, res) => { for (const re of res) { const i = hdr.findIndex(h => re.test(h)); if (i >= 0) return i; } return -1; };
 const download = (name, blob) => { const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = name; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500); };
 
-export const parseExpenseRows = rows => {
-  let hi = rows.findIndex(r => r.some(c => /amount|total|rs|₹/i.test(String(c))) && r.some(c => /date/i.test(String(c))));
-  if (hi < 0) hi = 0;
-  const h = (rows[hi] || []).map(x => String(x).toLowerCase().trim());
-  const c = { date: findCol(h, [/^date/, /date/]), vendor: findCol(h, [/vendor|party|payee|supplier|paid to|name/]), desc: findCol(h, [/desc|particular|narration|detail|item/]), cat: findCol(h, [/categ|type|head|label/]),
-    amt: findCol(h, [/^amount/, /amount|total|value|rs/]), gst: findCol(h, [/gst|tax/]), by: findCol(h, [/paid by|by whom|payer|paid_by|\bby\b/]), mode: findCol(h, [/mode|method/]), notes: findCol(h, [/note|remark/]) };
+export const parseExpenseRows = (rows, force = "auto") => {
+  const filled = r => r.some(x => String(x).trim() !== "");
+  const hi = rows.findIndex(r => r.some(c => /amount|total|value|\brs\b|₹|rate|price|qty|quantity/i.test(String(c))) && r.some(c => /date/i.test(String(c))));
+  const hasHdr = hi >= 0, h = hasHdr ? rows[hi].map(x => String(x).toLowerCase().trim()) : [];
+  const c = { date: findCol(h, [/^date/, /date/]), vendor: findCol(h, [/vendor|party|payee|supplier|paid to|name/]), desc: findCol(h, [/desc|particular|narration|detail|item|material/]), cat: findCol(h, [/categ|type|head|label/]),
+    amt: findCol(h, [/^amount/, /amount|total|value|\brs\b|₹/]), gst: findCol(h, [/gst|tax/]), by: findCol(h, [/paid by|by whom|payer|paid_by|\bby\b/]), mode: findCol(h, [/mode|method/]), notes: findCol(h, [/note|remark/]),
+    qty: findCol(h, [/qty|quantity/]), rate: findCol(h, [/rate|price/]), unit: findCol(h, [/^unit|uom/]) };
+  const start = hasHdr ? hi + 1 : 0;
+  // no usable headings: work out the columns from what is inside them
+  if (!hasHdr || c.date < 0 || c.amt < 0) {
+    const sample = rows.slice(start).filter(filled).slice(0, 15), nc = Math.max(0, ...sample.map(r => r.length));
+    const share = (j, f) => { const v = sample.map(r => r[j]).filter(x => String(x ?? "").trim() !== ""); return v.length ? v.filter(f).length / v.length : 0; };
+    if (c.date < 0) c.date = [...Array(nc).keys()].find(j => share(j, x => !!toISO(x)) >= 0.6) ?? -1;
+    const known = new Set([c.qty, c.rate, c.unit, c.gst, c.cat, c.by, c.mode, c.notes].filter(j => j >= 0)), qr = c.qty >= 0 && c.rate >= 0;
+    const nums = [...Array(nc).keys()].filter(j => j !== c.date && !known.has(j) && share(j, x => typeof x === "number" || /^[\s₹Rs.,\d-]+$/.test(String(x))) >= 0.6 && sample.some(r => toNum(r[j]) > 0));
+    if (c.amt < 0 && !qr && nums.length) c.amt = nums.map(j => [j, sample.reduce((t, r) => t + toNum(r[j]), 0)]).sort((x, y) => y[1] - x[1])[0][0];
+    const txt = [...Array(nc).keys()].filter(j => j !== c.date && j !== c.amt && !known.has(j) && !nums.includes(j));
+    const len = j => sample.reduce((t, r) => t + String(r[j] ?? "").length, 0);
+    if (c.desc < 0 && txt.length) c.desc = [...txt].sort((x, y) => len(y) - len(x))[0];
+    if (c.vendor < 0) { const o = txt.find(j => j !== c.desc); if (o !== undefined) c.vendor = o; }
+  }
   const out = [];
-  rows.slice(hi + 1).forEach((r, i) => {
-    if (!r.some(x => String(x).trim() !== "")) return;
+  rows.forEach((r, ri) => {
+    if (ri < start || !filled(r)) return;
     const g = k => (c[k] >= 0 ? r[c[k]] : "");
-    const date = toISO(g("date")), amount = toNum(g("amt")), by = String(g("by") || "").trim();
+    const date = toISO(g("date")), by = String(g("by") || "").trim(), gst = toNum(g("gst")), qty = toNum(g("qty")), rate = toNum(g("rate"));
+    let amount = toNum(g("amt")); if (!(amount > 0) && qty > 0 && rate > 0) amount = Math.round((qty * rate + gst) * 100) / 100;
+    const unit = String(g("unit") || "").trim(), base = String(g("desc") || "").trim();
     const err = !date ? "Date not understood" : !(amount > 0) ? "Amount missing" : "";
-    out.push({ line: hi + 2 + i, err, row: { exp_date: date, vendor: String(g("vendor") || "").trim(), description: String(g("desc") || "").trim(), category: normCat(g("cat") || g("desc")), amount, gst_amount: toNum(g("gst")), paid_by: by || "Company", payment_mode: normMode(g("mode")), notes: String(g("notes") || "").trim() } });
+    out.push({ line: ri + 1, err, row: { exp_date: date, vendor: String(g("vendor") || "").trim(), description: base + (qty > 0 ? `${base ? " " : ""}(${+qty.toFixed(3)}${unit ? " " + unit : ""})` : ""),
+      category: force && force !== "auto" ? force : normCat(g("cat") || g("desc") || g("vendor")), amount, gst_amount: gst, paid_by: by || "Company", payment_mode: normMode(g("mode")), notes: String(g("notes") || "").trim() } });
   });
-  return { out, missing: ["date", "amt"].filter(k => c[k] < 0) };
+  return { out, missing: ["date", "amt"].filter(k => c[k] < 0 && !(k === "amt" && c.qty >= 0 && c.rate >= 0)) };
 };
 
 export const parseBankRows = rows => {
@@ -90,7 +108,7 @@ const compress = async file => {
 
 export async function accountsPage(el) {
   if (!hasRole("admin")) { el.innerHTML = '<p class="muted">Accounts is for admin only.</p>'; return; }
-  const tabs = [["overview", "Overview"], ["ledger", "Party ledger"], ["expenses", "Expenses"], ["bank", "Bank statement"], ["profit", "Profitability"]];
+  const tabs = [["overview", "Overview"], ["account", "Overall account"], ["ledger", "Party ledger"], ["expenses", "Expenses"], ["bank", "Bank statement"], ["profit", "Profitability"]];
   if (!tabs.some(([k]) => k === TAB)) TAB = "overview";
   el.innerHTML = `<div class="tabs wrapt">${tabs.map(([k, t]) => `<button class="tab ${k === TAB ? "on" : ""}" data-k="${k}">${t}</button>`).join("")}</div><div id="av"><p class="muted">Loading…</p></div>`;
   $$(".tab", el).forEach(b => b.onclick = () => { TAB = b.dataset.k; accountsPage(el); });
@@ -164,29 +182,41 @@ export async function accountsPage(el) {
   });
 
   // ---------- bulk excel (expenses) ----------
-  const openBulkExpenses = () => modal("Upload expenses from Excel", `<p class="muted">Use an Excel or CSV file with a heading row: <b>Date, Vendor, Description, Category, Amount, GST, Paid by, Mode, Notes</b>. Extra columns are ignored.</p>
-    <div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn ghost" id="tpl">Download template</button><button class="btn" id="bp">Choose Excel / CSV</button></div><input id="bf" type="file" accept=".xlsx,.xls,.csv" hidden><div id="bo"></div>`, {
+  const openBulkExpenses = (preset = "auto") => modal("Upload from Excel", `<p class="muted">Upload any Excel or CSV list of bills or spends. Date, amount, vendor and description are found automatically, even if the headings differ. Optional columns: Category, GST, Paid by, Mode, Qty, Rate, Unit, Notes.</p>
+    <label>This file is<select id="kind"><option value="auto">Work it out from each row (Category column)</option>${CATS.map(([k, t]) => `<option value="${k}" ${k === preset ? "selected" : ""}>${k === "other" ? "Other expense" : t}</option>`).join("")}</select></label>
+    <div class="row" style="gap:8px;flex-wrap:wrap;margin-top:8px"><button class="btn ghost" id="tpl">Download template</button><button class="btn" id="bp">Choose Excel / CSV</button></div><input id="bf" type="file" accept=".xlsx,.xls,.csv" hidden><div id="bo"></div>`, {
     wide: true,
     onMount: (m, close) => {
+      let rows = null, fname = "";
       $("#tpl", m).onclick = async () => {
-        const X = await loadX(), ws = X.utils.aoa_to_sheet([["Date", "Vendor", "Description", "Category", "Amount", "GST", "Paid by", "Mode", "Notes"], ["2026-11-20", "Shree Transport", "Tempo to Surat", "Transport", 2500, 0, "Gaurang", "Cash", ""], ["2026-11-21", "Meta Ads", "Instagram campaign", "Marketing", 5000, 900, "Company", "UPI", ""]]);
+        const X = await loadX(), ws = X.utils.aoa_to_sheet([["Date", "Vendor", "Description", "Category", "Qty", "Unit", "Rate", "Amount", "GST", "Paid by", "Mode", "Notes"], ["2026-11-20", "Shree Transport", "Tempo to Surat", "Transport", "", "", "", 2500, 0, "Gaurang", "Cash", ""], ["2026-11-21", "ABC Chemicals", "SLES 70%", "Raw material", 100, "kg", 80, 8000, 1440, "Company", "Bank", ""], ["2026-11-22", "Meta Ads", "Instagram campaign", "Marketing", "", "", "", 5000, 900, "Company", "UPI", ""]]);
         const wb = X.utils.book_new(); X.utils.book_append_sheet(wb, ws, "Expenses");
         download("earthlabs-expenses-template.xlsx", new Blob([X.write(wb, { bookType: "xlsx", type: "array" })], { type: "application/octet-stream" }));
       };
-      $("#bp", m).onclick = () => $("#bf", m).click();
-      $("#bf", m).onchange = async e => {
-        const f = e.target.files[0]; if (!f) return;
-        let p; try { p = parseExpenseRows(await readSheet(f)); } catch (x) { return toast("Could not open that file: " + x.message, "err"); }
-        if (p.missing.length) return toast("The file needs Date and Amount columns.", "err");
-        const ok = p.out.filter(r => !r.err), bad = p.out.filter(r => r.err);
-        $("#bo", m).innerHTML = `<p><b>${ok.length}</b> rows ready${bad.length ? `, <b>${bad.length}</b> will be skipped` : ""}. Total ${R(ok.reduce((s, r) => s + r.row.amount, 0))}.</p>
-          <div style="max-height:260px;overflow:auto">${table([{ h: "Line", v: r => r.line }, { h: "Date", v: r => r.row.exp_date || "–" }, { h: "Vendor", v: r => r.row.vendor }, { h: "Label", v: r => CAT[r.row.category] }, { h: "Amount", v: r => INR(r.row.amount) }, { h: "Paid by", v: r => r.row.paid_by }, { h: "Check", v: r => r.err || "OK" }], p.out, { empty: "Nothing found" })}</div>
-          <div class="row end" style="margin-top:8px"><button class="btn" id="bgo" ${ok.length ? "" : "disabled"}>Import ${ok.length} expenses</button></div>`;
+      const show = () => {
+        const p = parseExpenseRows(rows, $("#kind", m).value);
+        if (p.missing.length) { $("#bo", m).innerHTML = '<div class="notice err">Could not find a Date column and an Amount column in this file.</div>'; return; }
+        const all = p.out.map((r, i) => ({ ...r, idx: i })), ok = all.filter(r => !r.err), bad = all.length - ok.length;
+        const sums = CATS.map(([k, t]) => [t, ok.filter(r => r.row.category === k).reduce((s2, r) => s2 + r.row.amount, 0)]).filter(x => x[1] > 0);
+        $("#bo", m).innerHTML = `<p style="margin-top:10px"><b>${ok.length}</b> rows ready${bad ? `, <b>${bad}</b> will be skipped` : ""}. Total ${R(ok.reduce((s2, r) => s2 + r.row.amount, 0))}${sums.length ? " · " + sums.map(x => `${x[0]} ${R(x[1])}`).join(" · ") : ""}.</p>
+          <p class="muted small">You can change the label of any row before importing.</p>
+          <div style="max-height:280px;overflow:auto">${table([{ h: "Line", v: r => r.line }, { h: "Date", v: r => r.row.exp_date || "–" }, { h: "Vendor", v: r => r.row.vendor }, { h: "Details", v: r => r.row.description },
+            { h: "Label", html: r => r.err ? "–" : `<select class="rc" data-i="${r.idx}">${CATS.map(([k, t]) => `<option value="${k}" ${r.row.category === k ? "selected" : ""}>${t}</option>`).join("")}</select>` },
+            { h: "Amount", v: r => INR(r.row.amount) }, { h: "Paid by", v: r => r.row.paid_by }, { h: "Check", v: r => r.err || "OK" }], all, { empty: "Nothing found" })}</div>
+          <div class="row end" style="margin-top:8px"><button class="btn" id="bgo" ${ok.length ? "" : "disabled"}>Import ${ok.length} entries</button></div>`;
+        $$(".rc", m).forEach(sl => sl.onchange = () => { all[+sl.dataset.i].row.category = sl.value; });
         $("#bgo", m).onclick = async () => {
           $("#bgo", m).disabled = true;
           const r = await run(sb.rpc("bulk_import_expenses", { p_rows: ok.map(x => x.row) }), null);
-          if (r) { toast(`${r.imported} expenses imported` + (r.failed?.length ? `, ${r.failed.length} failed` : ""), r.failed?.length ? "err" : undefined); close(); reload(); } else $("#bgo", m).disabled = false;
+          if (r) { toast(`${r.imported ?? ok.length} entries imported` + (r.failed?.length ? `, ${r.failed.length} failed` : ""), r.failed?.length ? "err" : undefined); close(); reload(); } else $("#bgo", m).disabled = false;
         };
+      };
+      $("#bp", m).onclick = () => $("#bf", m).click();
+      $("#kind", m).onchange = () => { if (rows) show(); };
+      $("#bf", m).onchange = async e => {
+        const f = e.target.files[0]; if (!f) return; fname = f.name;
+        try { rows = await readSheet(f); } catch (x) { return toast("Could not open that file: " + x.message, "err"); }
+        show();
       };
     },
   });
@@ -303,22 +333,64 @@ export async function accountsPage(el) {
 
   // =================== EXPENSES ===================
   const expenses = async () => {
-    const list = await get(sb.from("expenses").select("*").order("exp_date", { ascending: false }).limit(1000));
-    const payers = [...new Set(list.map(e => e.paid_by))];
-    av.innerHTML = `<div class="toolbar"><button class="btn" id="sc">📷 Scan bill / photo</button><button class="btn ghost" id="ad">Add expense</button><button class="btn ghost" id="bx">Upload Excel</button><span class="grow"></span>
-      <select id="fc"><option value="">All labels</option>${CATS.map(([k, t]) => `<option value="${k}">${t}</option>`).join("")}</select><select id="fp"><option value="">Paid by anyone</option>${payers.map(p => `<option>${esc(p)}</option>`).join("")}</select></div><div id="tb"></div>`;
+    const list = await get(sb.from("expenses").select("*").order("exp_date", { ascending: false }).limit(2000));
+    if (SUB !== "all" && !CAT[SUB]) SUB = "all";
+    const payers = [...new Set(list.map(e => e.paid_by))], inSub = k => list.filter(e => k === "all" || e.category === k);
+    av.innerHTML = `<div class="tabs wrapt">${[["all", "All"], ...CATS].map(([k, t]) => `<button class="tab sm ${k === SUB ? "on" : ""}" data-s="${k}">${t} (${inSub(k).length})</button>`).join("")}</div>
+      <div class="toolbar"><button class="btn" id="sc">📷 Scan bill / photo</button><button class="btn ghost" id="ad">Add ${SUB === "all" ? "expense" : esc(CAT[SUB]).toLowerCase()}</button><button class="btn ghost" id="bx">Upload Excel</button><span class="grow"></span>
+      <select id="fp"><option value="">Paid by anyone</option>${payers.map(p => `<option>${esc(p)}</option>`).join("")}</select></div><div id="ss"></div><div id="tb"></div>`;
+    $$("[data-s]", av).forEach(b => b.onclick = () => { SUB = b.dataset.s; expenses(); });
     const draw = () => {
-      const c = $("#fc", av).value, p = $("#fp", av).value, rows = list.filter(e => (!c || e.category === c) && (!p || e.paid_by === p));
-      $("#tb", av).innerHTML = `<p class="muted small">${rows.length} entries · total ${R(rows.reduce((s, e) => s + Number(e.amount), 0))}</p>` + table([{ h: "Date", v: e => dfmt(e.exp_date) }, { h: "Vendor", v: e => e.vendor || "–" }, { h: "Details", v: e => e.description || "" }, { h: "Label", v: e => CAT[e.category] },
+      const p = $("#fp", av).value, rows = inSub(SUB).filter(e => !p || e.paid_by === p), n = x => Number(x) || 0, tot = rows.reduce((s2, e) => s2 + n(e.amount), 0), mo = today().slice(0, 7);
+      const vend = {}; rows.forEach(e => { const k = e.vendor || "(no vendor)"; vend[k] = (vend[k] || 0) + n(e.amount); });
+      const top = Object.entries(vend).sort((a2, b2) => b2[1] - a2[1]).slice(0, 5);
+      const owed = rows.filter(e => e.paid_by.toLowerCase() !== "company" && !e.reimbursed).reduce((s2, e) => s2 + n(e.amount), 0);
+      $("#ss", av).innerHTML = `<div class="stats">${stat(SUB === "all" ? "All expenses" : esc(CAT[SUB]), R(tot), `${rows.length} entries`)}${stat("This month", R(rows.filter(e => String(e.exp_date).startsWith(mo)).reduce((s2, e) => s2 + n(e.amount), 0)))}${stat("GST included", R(rows.reduce((s2, e) => s2 + n(e.gst_amount), 0)))}${stat("To pay back to partners", R(owed), "", owed ? "warn" : "")}</div>
+        ${top.length ? `<div class="card"><h3>Top vendors</h3>${table([{ h: "Vendor", v: r => r[0] }, { h: "Total", v: r => R(r[1]) }], top, { empty: "" })}</div>` : ""}`;
+      $("#tb", av).innerHTML = table([{ h: "Date", v: e => dfmt(e.exp_date) }, { h: "Vendor", v: e => e.vendor || "–" }, { h: "Details", v: e => e.description || "" }, ...(SUB === "all" ? [{ h: "Label", v: e => CAT[e.category] }] : []),
         { h: "Amount", v: e => R(e.amount) }, { h: "Paid by", v: e => e.paid_by.toLowerCase() === "company" ? "Company" : e.paid_by + (e.reimbursed ? " (paid back)" : " (to pay back)") },
-        { h: "", html: e => `${e.file_path ? `<button class="btn ghost sm vf" data-id="${e.id}">Bill</button> ` : ""}${e.paid_by.toLowerCase() !== "company" ? `<button class="btn ghost sm rb" data-id="${e.id}">${e.reimbursed ? "Undo paid back" : "Mark paid back"}</button> ` : ""}<button class="btn ghost sm ed" data-id="${e.id}">Edit</button> <button class="btn ghost sm dl" data-id="${e.id}">Delete</button>` }], rows, { empty: "No expenses yet. Scan a bill or add one." });
+        { h: "", html: e => `${e.file_path ? `<button class="btn ghost sm vf" data-id="${e.id}">Bill</button> ` : ""}${e.paid_by.toLowerCase() !== "company" ? `<button class="btn ghost sm rb" data-id="${e.id}">${e.reimbursed ? "Undo paid back" : "Mark paid back"}</button> ` : ""}<button class="btn ghost sm ed" data-id="${e.id}">Edit</button> <button class="btn ghost sm dl" data-id="${e.id}">Delete</button>` }], rows, { empty: "Nothing here yet. Scan a bill, add one, or upload an Excel." });
       $$(".vf", av).forEach(b => b.onclick = async () => { const x = list.find(e => e.id === b.dataset.id), { data } = await sb.storage.from("expense-files").createSignedUrl(x.file_path, 300); data ? window.open(data.signedUrl, "_blank", "noopener") : toast("Could not open the file", "err"); });
       $$(".ed", av).forEach(b => b.onclick = () => openExpense(list.find(e => e.id === b.dataset.id)));
       $$(".rb", av).forEach(b => b.onclick = async () => { const x = list.find(e => e.id === b.dataset.id); if (await run(sb.rpc("set_reimbursed", { p_id: x.id, p_value: !x.reimbursed }), "Updated") !== null) reload(); });
-      $$(".dl", av).forEach(b => b.onclick = async () => { if (!confirm("Delete this expense?")) return; if (await run(sb.rpc("delete_expense", { p_id: b.dataset.id }), "Deleted") !== null) reload(); });
+      $$(".dl", av).forEach(b => b.onclick = async () => { if (!confirm("Delete this entry?")) return; if (await run(sb.rpc("delete_expense", { p_id: b.dataset.id }), "Deleted") !== null) reload(); });
     };
-    draw(); $("#fc", av).onchange = draw; $("#fp", av).onchange = draw;
-    $("#sc", av).onclick = openScan; $("#ad", av).onclick = () => openExpense(); $("#bx", av).onclick = openBulkExpenses;
+    draw(); $("#fp", av).onchange = draw;
+    $("#sc", av).onclick = openScan; $("#ad", av).onclick = () => openExpense(SUB === "all" ? {} : { category: SUB }); $("#bx", av).onclick = () => openBulkExpenses(SUB === "all" ? "auto" : SUB);
+  };
+
+  // =================== OVERALL ACCOUNT ===================
+  const account = async () => {
+    av.innerHTML = `<div class="toolbar"><label>From <input type="date" id="df" value="${mAgo()}"></label><label>To <input type="date" id="dt" value="${today()}"></label>
+      <select id="ty"><option value="">Money in and out</option><option value="in">Money in (received)</option><option value="out">Money out (expenses)</option></select>
+      <select id="lb"><option value="">All labels</option>${CATS.map(([k, t]) => `<option value="${k}">${t}</option>`).join("")}</select><span class="grow"></span><button class="btn ghost" id="dx">Download Excel</button></div><div id="ac"></div>`;
+    let shown = [];
+    const go = async () => {
+      const df = $("#df", av).value, dt = $("#dt", av).value, ty = $("#ty", av).value, lb = $("#lb", av).value, ac = $("#ac", av);
+      ac.innerHTML = '<p class="muted">Loading…</p>';
+      try {
+        const [pays, exps, cust] = await Promise.all([get(sb.from("customer_payments").select("*").gte("paid_on", df).lte("paid_on", dt)), get(sb.from("expenses").select("*").gte("exp_date", df).lte("exp_date", dt)), get(sb.from("v_customer_balance").select("customer_id,name"))]);
+        const nm = Object.fromEntries(cust.map(c => [c.customer_id, c.name])), n = x => Number(x) || 0;
+        let tx = [...pays.map(p => ({ d: String(p.paid_on || ""), kind: "in", label: "Customer receipt", party: nm[p.customer_id] || "", text: `${MODE[p.mode] || p.mode || ""}${p.ref ? " · " + p.ref : ""}`, inn: n(p.amount), out: 0 })),
+          ...exps.map(e => ({ d: String(e.exp_date || ""), kind: "out", label: CAT[e.category] || e.category, cat: e.category, party: e.vendor || "", text: [e.description, e.paid_by && e.paid_by.toLowerCase() !== "company" ? "paid by " + e.paid_by : ""].filter(Boolean).join(" · "), inn: 0, out: n(e.amount), by: e.paid_by }))]
+          .filter(t => (!ty || t.kind === ty) && (!lb || t.cat === lb)).sort((a2, b2) => a2.d.localeCompare(b2.d));
+        let bal = 0; tx.forEach(t => { bal += t.inn - t.out; t.bal = bal; });
+        shown = tx.slice().reverse();
+        const tin = tx.reduce((s2, t) => s2 + t.inn, 0), tout = tx.reduce((s2, t) => s2 + t.out, 0), pocket = tx.filter(t => t.kind === "out" && t.by && t.by.toLowerCase() !== "company").reduce((s2, t) => s2 + t.out, 0);
+        const mon = {}; tx.forEach(t => { const k = t.d.slice(0, 7); (mon[k] ||= { inn: 0, out: 0 }); mon[k].inn += t.inn; mon[k].out += t.out; });
+        const byLabel = CATS.map(([k, t]) => [t, tx.filter(x => x.cat === k).reduce((s2, x) => s2 + x.out, 0)]).filter(x => x[1] > 0);
+        ac.innerHTML = `<div class="stats">${stat("Money in", R(tin), "Customer payments received", "good")}${stat("Money out", R(tout), "All expenses")}${stat("Net", R(tin - tout), "In minus out for this period", tin - tout >= 0 ? "good" : "bad")}${stat("Paid from partners' pockets", R(pocket), "Included in money out")}</div>
+          <div class="card"><h3>Month by month</h3>${table([{ h: "Month", v: r => r[0] }, { h: "Received", v: r => R(r[1].inn) }, { h: "Spent", v: r => R(r[1].out) }, { h: "Net", v: r => R(r[1].inn - r[1].out) }], Object.entries(mon).sort((a2, b2) => b2[0].localeCompare(a2[0])), { empty: "No entries in this period" })}</div>
+          ${byLabel.length ? `<div class="card"><h3>Spent by label</h3>${table([{ h: "Label", v: r => r[0] }, { h: "Amount", v: r => R(r[1]) }, { h: "Share", v: r => (tout ? (r[1] / tout * 100).toFixed(1) : 0) + "%" }], byLabel, { empty: "" })}</div>` : ""}
+          <div class="card"><h3>All entries</h3>${table([{ h: "Date", v: t => dfmt(t.d) }, { h: "Type", v: t => t.kind === "in" ? "Received" : "Paid" }, { h: "Label", v: t => t.label }, { h: "Party", v: t => t.party || "–" }, { h: "Details", v: t => t.text }, { h: "In", v: t => t.inn ? INR(t.inn) : "" }, { h: "Out", v: t => t.out ? INR(t.out) : "" }, { h: "Running net", v: t => INR(t.bal) }], shown, { empty: "No entries in this period" })}</div>`;
+      } catch (e) { ac.innerHTML = `<p class="dev">Could not load: ${esc(e.message)}</p>`; }
+    };
+    $$("input,select", $(".toolbar", av)).forEach(x => x.onchange = go);
+    $("#dx", av).onclick = async () => {
+      const X = await loadX(), ws = X.utils.aoa_to_sheet([["Date", "Type", "Label", "Party", "Details", "In", "Out", "Running net"], ...shown.slice().reverse().map(t => [t.d, t.kind === "in" ? "Received" : "Paid", t.label, t.party, t.text, t.inn || "", t.out || "", t.bal])]);
+      const wb = X.utils.book_new(); X.utils.book_append_sheet(wb, ws, "Account"); download("earthlabs-account.xlsx", new Blob([X.write(wb, { bookType: "xlsx", type: "array" })], { type: "application/octet-stream" }));
+    };
+    go();
   };
 
   // =================== BANK ===================
@@ -408,5 +480,5 @@ export async function accountsPage(el) {
     $$("input,select", $(".toolbar", av)).forEach(x => x.onchange = go); go();
   };
 
-  try { await ({ overview, ledger, expenses, bank, profit }[TAB])(); } catch (e) { fail(e); }
+  try { await ({ overview, account, ledger, expenses, bank, profit }[TAB])(); } catch (e) { fail(e); }
 }

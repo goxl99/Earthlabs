@@ -16,7 +16,7 @@ export default function Home() {
     if (mode === "forgot") { const r = await callFn("forgot-password", { email: email.trim() }); setMsg(r.ok ? "If this e-mail has a login, we have sent a link to reset the password. Please check your inbox." : r.error ?? "Could not send the e-mail."); return; }
     const r = await supabase.auth.signInWithPassword({ email: email.trim(), password: pw });
     if (r.error) { const m = r.error.message.toLowerCase(); setMsg(m.includes("invalid login") ? "E-mail or password is not correct. Use the login ID and password we e-mailed when your application was approved, or choose Forgot password." : m.includes("rate limit") ? "Too many attempts. Please wait a few minutes and try again." : r.error.message); return; }
-    markPartner();
+    markPartner(); await supabase.rpc("log_login", { dev: navigator.userAgent });
     location.href = r.data.user?.user_metadata?.must_change_password ? "./change-password/" : nextUrl();
   }
   return (<div className="pub"><PublicTop />

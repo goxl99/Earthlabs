@@ -30,6 +30,7 @@ export const NAV: NavItem[] = [
   { href: "/ai/", module: "ai", label: "AI Intelligence", roles: ["super_admin", "sales", "accounts", "warehouse"], grp: "Intelligence", ic: "✦" },
   { href: "/rfq/", module: "rfq", label: "RFQs & quotes", roles: ["super_admin", "accounts", "warehouse"], grp: "Intelligence", ic: "❖" },
   { href: "/bom/", module: "bom", label: "Material planning", roles: ["super_admin", "accounts", "warehouse"], grp: "Intelligence", ic: "▥" },
+  { href: "/ladder/", label: "Growth ladder", roles: ["dealer", "distributor"], grp: "Partners", ic: "↗" },
   { href: "/network/", module: "network", label: "My network", roles: ["super_admin", "sales", "dealer", "distributor"], grp: "Partners", ic: "⌘" },
   { href: "/vendor/", label: "Vendor portal", roles: ["vendor"], grp: "Vendor", ic: "⚙" },
   { href: "/orders/", module: "orders", label: "Orders", roles: ["super_admin", "sales", "accounts", "warehouse", "dealer", "distributor"], grp: "Commercial", ic: "▤" },

@@ -3,7 +3,8 @@ import { useCallback, useEffect, useState } from "react";
 import Shell from "@/components/Shell";
 import { supabase } from "@/lib/supabase";
 import { Msg } from "@/components/ui";
-import { ROLE_LABEL, type Role } from "@/lib/roles";
+import { ROLE_LABEL, NAV, type Role } from "@/lib/roles";
+import { when } from "@/components/ui";
 
 type U = { id: string; role: Role; full_name: string; partner_id: string | null; active: boolean };
 type T = { code: string; name: string; registration_open: boolean };
@@ -34,4 +35,13 @@ function Inner() {
       <td><select value={u.role} onChange={(e) => save(u, { role: e.target.value as Role })}>{ROLES.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}</select></td><td>{u.partner_id ?? "—"}</td><td>{u.active ? "Active" : "Waiting"}</td>
       <td><button className="btn" onClick={() => save(u, { active: !u.active })}>{u.active ? "Deactivate" : "Activate"}</button> <button className="btn" onClick={() => link(u)}>Link partner</button></td></tr>))}</tbody></table></div></>);
 }
-export default function Page() { return <Shell page="users">{(p) => (p.role === "super_admin" ? <Inner /> : <Msg>Only Super Admin can manage users.</Msg>)}</Shell>; }
+function Access() {
+  const roles = ROLES; const [lg, setLg] = useState<{ at: string; device: string | null; user_id: string }[]>([]); const [names, setNames] = useState<Record<string, string>>({});
+  useEffect(() => { supabase.from("login_history").select("at,device,user_id").order("at", { ascending: false }).limit(30).then(async ({ data }) => { const rows = (data as typeof lg) ?? []; setLg(rows); const ids = [...new Set(rows.map((r) => r.user_id))]; if (ids.length) { const { data: p } = await supabase.from("profiles").select("id,full_name").in("id", ids); setNames(Object.fromEntries(((p as { id: string; full_name: string }[]) ?? []).map((x) => [x.id, x.full_name || x.id.slice(0, 8)]))); } }); }, []);
+  return (<>
+    <h2 style={{ marginTop: 24 }}>What each role can open</h2><p className="sub">Screens by role. Each screen also checks the person&apos;s role on the server, so hiding a menu is never the only protection.</p>
+    <div className="card" style={{ overflowX: "auto" }}><table><thead><tr><th>Screen</th>{roles.map((r) => <th key={r}>{ROLE_LABEL[r]}</th>)}</tr></thead><tbody>{NAV.map((n) => <tr key={n.href}><td>{n.label}</td>{roles.map((r) => <td key={r} style={{ textAlign: "center" }}>{n.roles.includes(r) ? "✓" : "—"}</td>)}</tr>)}</tbody></table></div>
+    <h2 style={{ marginTop: 24 }}>Recent sign-ins</h2>
+    <div className="card"><table><thead><tr><th>User</th><th>When</th><th>Device</th></tr></thead><tbody>{lg.map((l, i) => <tr key={i}><td>{names[l.user_id] ?? l.user_id.slice(0, 8)}</td><td>{when(l.at)}</td><td className="mini">{(l.device ?? "").slice(0, 90)}</td></tr>)}{lg.length === 0 && <tr><td colSpan={3}>Sign-ins are recorded from now on.</td></tr>}</tbody></table></div></>);
+}
+export default function Page() { return <Shell page="users">{(p) => (p.role === "super_admin" ? <><Inner /><Access /></> : <Msg>Only Super Admin can manage users.</Msg>)}</Shell>; }

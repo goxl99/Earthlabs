@@ -26,3 +26,5 @@ verify_jwt = false
 verify_jwt = true
 [functions.forgot-password]
 verify_jwt = false
+[functions.application-docs]
+verify_jwt = false

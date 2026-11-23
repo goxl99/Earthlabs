@@ -2,6 +2,7 @@
 // Secrets: LEEGALITY_PRIVATE_SALT (Dashboard > API Settings), LEEGALITY_AUTH_TOKEN, LEEGALITY_BASE_URL.
 import { createClient } from "npm:@supabase/supabase-js@2";
 import { verifyWebhook, isPdf } from "../_shared/leegality.ts";
+import { provisionPartnerLogin } from "../_shared/provision.ts";
 
 Deno.serve(async (req) => {
   if (req.method !== "POST") return new Response("POST only", { status: 405 });
@@ -26,5 +27,7 @@ Deno.serve(async (req) => {
   if (up.error) return new Response("could not store the signed copy", { status: 500 });
   const { error } = await db.rpc("esign_completed", { docid: b.documentId, path });
   if (error) return new Response(error.message, { status: 500 });
+  // Signed: the application is now Approved (database trigger). Issue the login and e-mail the Login ID and password.
+  try { const r = await provisionPartnerLogin(db, ag.partner_id); if (!r.ok) console.error("login not issued:", r.error); } catch (e) { console.error("login not issued:", (e as Error).message); }
   return new Response("ok");
 });

@@ -42,84 +42,117 @@ const TITLES = { proforma: "PROFORMA INVOICE", challan: "DELIVERY CHALLAN", invo
 export async function makePdf(kind, d, meta) {
   const [{ jsPDF }, { default: autoTable }] = await Promise.all([import("./jspdf.es.min-DDG3QBYI.js"), import("./jspdf.plugin.autotable-XRWHD7BR.js")]);
   const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
-  const W = 595, M = 36, teal = [19, 89, 90];
+  const W = 595, H = 842, M = 30, teal = [19, 89, 90], tint = [236, 244, 244], grey = [95, 95, 95], line = [200, 210, 210];
   const logo = await logoData();
-  if (logo) { try { doc.addImage(logo, "PNG", M, 24, 60, 40); } catch {} }
-  doc.setTextColor(...teal); doc.setFont("helvetica", "bold"); doc.setFontSize(15);
-  doc.text(d.seller.name || "", M + 70, 40);
-  doc.setFont("helvetica", "normal"); doc.setFontSize(8.5); doc.setTextColor(60);
-  let y = 52;
-  doc.splitTextToSize(d.seller.address || "", 330).forEach(t => { doc.text(t, M + 70, y); y += 10; });
-  doc.text(`GSTIN: ${d.seller.gstin || ""}   PAN: ${d.seller.pan || ""}`, M + 70, y); y += 10;
-  if (d.seller.email) { doc.text(d.seller.email, M + 70, y); y += 10; }
-  doc.setTextColor(...teal); doc.setFont("helvetica", "bold"); doc.setFontSize(14);
-  doc.text(TITLES[kind], W - M, 40, { align: "right" });
-  doc.setFont("helvetica", "normal"); doc.setFontSize(9); doc.setTextColor(40);
-  y = Math.max(y, 80) + 6;
-  doc.setDrawColor(...teal); doc.line(M, y, W - M, y); y += 8;
+  const inter = d.inter_state, t = d.totals || {};
+  const NO = { invoice: "Invoice no.", challan: "Challan no.", proforma: "Proforma no." }[kind];
+  const ensure = (y, need) => { if (y + need > H - 50) { doc.addPage(); return 40; } return y; };
 
-  const b = d.buyer, right = [
-    [kind === "invoice" ? "Invoice no." : kind === "challan" ? "Challan no." : "Proforma no.", meta.no],
-    ["Date", dfmt(meta.date)],
-    ...(d.po_no ? [["Customer PO / ref", d.po_no]] : []),
-    ["Order no.", d.order_no],
-    ...(kind === "invoice" && d.challan_ref ? [["Challan", `${d.challan_ref.no} (${dfmt(d.challan_ref.date)})`]] : []),
+  // ---- header ----
+  if (logo) { try { doc.addImage(logo, "PNG", M, 22, 62, 42); } catch {} }
+  doc.setTextColor(...teal); doc.setFont("helvetica", "bold"); doc.setFontSize(14.5);
+  doc.text(d.seller.name || "", M + 72, 38);
+  doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(...grey);
+  let y = 49;
+  doc.splitTextToSize(d.seller.address || "", 262).forEach(x => { doc.text(x, M + 72, y); y += 9.5; });
+  doc.text(`GSTIN ${d.seller.gstin || ""}   |   PAN ${d.seller.pan || ""}`, M + 72, y); if (d.seller.email) { y += 9.5; doc.text(d.seller.email, M + 72, y); }
+  y = Math.max(y + 10, 76);
+  doc.setFillColor(...teal); doc.rect(W - M - 190, 22, 190, 26, "F");
+  doc.setTextColor(255); doc.setFont("helvetica", "bold"); doc.setFontSize(12.5);
+  doc.text({ invoice: "TAX INVOICE", challan: "DELIVERY CHALLAN", proforma: "PROFORMA INVOICE" }[kind], W - M - 95, 39.5, { align: "center" });
+  doc.setTextColor(...grey); doc.setFont("helvetica", "normal"); doc.setFontSize(7.5);
+  doc.text(kind === "challan" ? "Goods movement document - not a tax invoice" : kind === "proforma" ? "Not a tax invoice - for payment / confirmation" : "ORIGINAL FOR RECIPIENT", W - M, 58, { align: "right" });
+  doc.setDrawColor(...teal); doc.setLineWidth(1.2); doc.line(M, y, W - M, y); y += 8;
+
+  // ---- parties and document details ----
+  const b = d.buyer, ship = b.ship_to && b.ship_to !== b.address ? b.ship_to : null;
+  const info = [
+    [NO, meta.no], ["Date", dfmt(meta.date)], ...(d.po_no ? [["Buyer's PO / ref", d.po_no]] : []), ["Order no.", d.order_no],
+    ...(kind === "invoice" && d.challan_ref ? [["Challan", `${d.challan_ref.no}, ${dfmt(d.challan_ref.date)}`]] : []),
     ...(kind === "invoice" && d.proforma_ref ? [["Proforma", d.proforma_ref.no]] : []),
-    ...(kind === "challan" && meta.vehicle ? [["Vehicle", meta.vehicle]] : []),
-    ...(kind === "challan" && meta.transporter ? [["Transporter", meta.transporter]] : []),
-    ...(kind === "challan" && meta.lr_no ? [["LR no.", meta.lr_no]] : []),
     ["Place of supply", `${d.place_of_supply.state || ""} (${d.place_of_supply.code})`],
+    ...(kind === "challan" ? [["Vehicle no.", meta.vehicle || "-"], ["Transporter", meta.transporter || "-"], ["LR / docket", meta.lr_no || "-"]] : []),
   ];
+  const partyText = x => [x.name, x.address, x.gstin ? "GSTIN: " + x.gstin : "GSTIN: Unregistered", `State: ${x.state || ""} (${x.state_code || ""})`,
+    x.contact ? "Contact: " + x.contact : "", x.phone ? "Phone: " + x.phone : ""].filter(Boolean).join("\n");
   autoTable(doc, {
-    startY: y, theme: "grid", styles: { fontSize: 8.5, cellPadding: 4, textColor: 30, lineColor: [200, 200, 200] },
-    head: [["Bill to / Ship to", "Document details"]], headStyles: { fillColor: teal, textColor: 255 },
-    body: [[
-      { content: [b.name, b.address, b.gstin ? "GSTIN: " + b.gstin : "", `State: ${b.state || ""} (${b.state_code})`,
-        b.ship_to && b.ship_to !== b.address ? "Ship to: " + b.ship_to : "",
-        b.contact ? "Contact: " + b.contact : "", b.phone ? "Phone: " + b.phone : ""].filter(Boolean).join("\n") },
-      { content: right.map(r => r[0] + ": " + r[1]).join("\n") },
-    ]],
-    columnStyles: { 0: { cellWidth: 270 } },
+    startY: y, theme: "grid", margin: { left: M, right: M },
+    styles: { fontSize: 8.2, cellPadding: 5, textColor: 30, lineColor: line, lineWidth: 0.6 },
+    head: [["BILL TO", ship ? "SHIP TO" : "DELIVER TO", "DOCUMENT DETAILS"]],
+    headStyles: { fillColor: tint, textColor: teal, fontSize: 7.5, fontStyle: "bold" },
+    body: [[{ content: partyText(b) }, { content: ship ? `${b.name}\n${ship}\nState: ${b.state || ""} (${b.state_code || ""})` : "Same as billing address" }, { content: info.map(r => r[0] + ": " + r[1]).join("\n") }]],
+    columnStyles: { 0: { cellWidth: 190 }, 1: { cellWidth: 160 } },
   });
   y = doc.lastAutoTable.finalY + 10;
 
-  const inter = d.inter_state;
+  // ---- items ----
+  const tbl = { theme: "grid", margin: { left: M, right: M }, styles: { fontSize: 8, cellPadding: 4, textColor: 30, lineColor: line, lineWidth: 0.6 },
+    headStyles: { fillColor: teal, textColor: 255, fontSize: 7.8, halign: "center" }, alternateRowStyles: { fillColor: [248, 251, 251] }, showHead: "everyPage" };
+  let totQty = 0;
   if (kind === "challan") {
-    const byLine = Object.fromEntries(d.lines.map(l => [l.order_line_id, l]));
-    const rows = (d.batches || []).map((x, i) => [i + 1, byLine[x.order_line_id]?.desc || "", byLine[x.order_line_id]?.hsn || "", x.batch_code, x.pack, Q(x.qty)]);
-    autoTable(doc, { startY: y, theme: "grid", head: [["#", "Description of goods", "HSN", "Batch", "Pack", "Qty"]], body: rows,
-      headStyles: { fillColor: teal, textColor: 255 }, styles: { fontSize: 8.5, cellPadding: 4 }, columnStyles: { 0: { cellWidth: 24 }, 5: { halign: "right" } } });
-    y = doc.lastAutoTable.finalY + 12;
-    doc.setFontSize(8.5); doc.text("Goods delivered in good condition. This challan is not a tax invoice; the tax invoice follows.", M, y); y += 14;
+    const by = Object.fromEntries(d.lines.map(l => [l.order_line_id, l]));
+    const rows = (d.batches || []).map((x, i) => { totQty += Number(x.qty); return [i + 1, by[x.order_line_id]?.desc || "", by[x.order_line_id]?.hsn || "", x.batch_code, x.pack, Q(x.qty)]; });
+    autoTable(doc, { ...tbl, startY: y, head: [["#", "Description of goods", "HSN", "Batch no.", "Pack", "Qty"]], body: rows,
+      foot: [["", "Total quantity", "", "", "", Q(totQty)]], footStyles: { fillColor: tint, textColor: teal, fontStyle: "bold" },
+      columnStyles: { 0: { cellWidth: 24, halign: "center" }, 2: { halign: "center" }, 5: { halign: "right", fontStyle: "bold" } } });
   } else {
-    const head = inter ? [["#", "Description", "HSN", "Qty", "Rate", "Taxable", "IGST %", "IGST", "Total"]]
-      : [["#", "Description", "HSN", "Qty", "Rate", "Taxable", "CGST", "SGST", "Total"]];
-    const rows = d.lines.map(l => inter
+    const head = inter ? [["#", "Description of goods", "HSN", "Qty", "Rate", "Taxable value", "IGST %", "IGST amt", "Total"]]
+      : [["#", "Description of goods", "HSN", "Qty", "Rate", "Taxable value", "CGST", "SGST", "Total"]];
+    const rows = d.lines.map(l => { totQty += Number(l.qty); return inter
       ? [l.n, l.desc, l.hsn, Q(l.qty), INR(l.rate), INR(l.taxable), l.gst_pct + "%", INR(l.igst), INR(l.total)]
-      : [l.n, l.desc, l.hsn, Q(l.qty), INR(l.rate), INR(l.taxable), `${l.gst_pct / 2}%  ${INR(l.cgst)}`, `${l.gst_pct / 2}%  ${INR(l.sgst)}`, INR(l.total)]);
-    autoTable(doc, { startY: y, theme: "grid", head, body: rows, headStyles: { fillColor: teal, textColor: 255, fontSize: 8 }, styles: { fontSize: 8, cellPadding: 3.5 },
-      columnStyles: { 0: { cellWidth: 20 }, 3: { halign: "right" }, 4: { halign: "right" }, 5: { halign: "right" }, 7: { halign: "right" }, 8: { halign: "right" } } });
-    y = doc.lastAutoTable.finalY + 8;
-    const t = d.totals;
-    const tot = [["Taxable value", INR(t.taxable)], ...(inter ? [["IGST", INR(t.igst)]] : [["CGST", INR(t.cgst)], ["SGST", INR(t.sgst)]]), ["Grand total (Rs.)", INR(t.total)]];
-    autoTable(doc, { startY: y, theme: "plain", body: tot, margin: { left: W - M - 220 }, tableWidth: 220, styles: { fontSize: 9, cellPadding: 3 },
-      columnStyles: { 1: { halign: "right", fontStyle: "bold" } } });
-    y = doc.lastAutoTable.finalY + 8;
-    doc.setFont("helvetica", "bold"); doc.setFontSize(9);
-    doc.splitTextToSize("Amount in words: " + inWords(t.total), W - 2 * M).forEach(s => { doc.text(s, M, y); y += 11; });
-    doc.setFont("helvetica", "normal"); y += 4;
-    if (d.bank && d.bank.account_no) {
-      doc.setFontSize(8.5);
-      doc.text(`Bank details: ${d.bank.account_name || ""} | ${d.bank.bank || ""} | A/c ${d.bank.account_no} | IFSC ${d.bank.ifsc || ""}`, M, y); y += 14;
-    }
-    if (kind === "proforma") { doc.setFontSize(8.5); doc.text("This is a proforma invoice, not a tax invoice. Goods are dispatched against payment as agreed.", M, y); y += 12; }
-    if (d.terms_extra) { doc.setFontSize(8); doc.splitTextToSize("Terms: " + d.terms_extra, W - 2 * M).forEach(s => { doc.text(s, M, y); y += 10; }); }
+      : [l.n, l.desc, l.hsn, Q(l.qty), INR(l.rate), INR(l.taxable), `${l.gst_pct / 2}%\n${INR(l.cgst)}`, `${l.gst_pct / 2}%\n${INR(l.sgst)}`, INR(l.total)]; });
+    autoTable(doc, { ...tbl, startY: y, head, body: rows,
+      foot: [["", "Total", "", Q(totQty), "", INR(t.taxable), inter ? "" : INR(t.cgst), inter ? INR(t.igst) : INR(t.sgst), INR(t.total)]],
+      footStyles: { fillColor: tint, textColor: teal, fontStyle: "bold", fontSize: 7.8 },
+      columnStyles: { 0: { cellWidth: 20, halign: "center" }, 2: { halign: "center" }, 3: { halign: "right" }, 4: { halign: "right" }, 5: { halign: "right" }, 6: { halign: "center" }, 7: { halign: "right" }, 8: { halign: "right", fontStyle: "bold" } } });
   }
-  y = Math.max(y + 24, 740);
-  doc.setFontSize(8.5); doc.setTextColor(60);
-  doc.text("Received by (sign & stamp)", M, y);
-  doc.text("For " + (d.seller.name || ""), W - M, y, { align: "right" });
-  doc.text("Authorised signatory", W - M, y + 40, { align: "right" });
+  y = doc.lastAutoTable.finalY + 10;
+
+  // ---- totals / words / bank ----
+  if (kind !== "challan") {
+    y = ensure(y, 150);
+    const lx = M, lw = 300, rx = W - M - 215;
+    doc.setFont("helvetica", "bold"); doc.setFontSize(8); doc.setTextColor(...teal); doc.text("AMOUNT IN WORDS", lx, y + 8);
+    doc.setTextColor(30); doc.setFontSize(9);
+    let wy = y + 21; doc.splitTextToSize(inWords(t.total), lw).forEach(x => { doc.text(x, lx, wy); wy += 11; });
+    if (d.bank && d.bank.account_no) {
+      wy += 8; doc.setFont("helvetica", "bold"); doc.setFontSize(8); doc.setTextColor(...teal); doc.text("BANK DETAILS", lx, wy); wy += 11;
+      doc.setFont("helvetica", "normal"); doc.setTextColor(30);
+      [["Account name", d.bank.account_name], ["Bank", d.bank.bank], ["Account no.", d.bank.account_no], ["IFSC", d.bank.ifsc]].forEach(([k, v]) => { doc.text(`${k}: ${v || ""}`, lx, wy); wy += 10.5; });
+    }
+    const tot = [["Taxable value", INR(t.taxable)], ...(inter ? [["IGST", INR(t.igst)]] : [["CGST", INR(t.cgst)], ["SGST", INR(t.sgst)]]), ["GRAND TOTAL (Rs.)", INR(t.total)]];
+    autoTable(doc, { startY: y, theme: "grid", margin: { left: rx }, tableWidth: 215, body: tot, styles: { fontSize: 9, cellPadding: 5, lineColor: line, lineWidth: 0.6 },
+      columnStyles: { 0: { fontStyle: "bold", textColor: grey }, 1: { halign: "right", fontStyle: "bold" } },
+      didParseCell: h => { if (h.row.index === tot.length - 1) { h.cell.styles.fillColor = teal; h.cell.styles.textColor = 255; h.cell.styles.fontSize = 10.5; } } });
+    y = Math.max(wy, doc.lastAutoTable.finalY) + 12;
+  }
+
+  // ---- terms ----
+  const terms = kind === "challan" ? ["Goods received in good condition and correct quantity unless noted below.", "This challan is issued for movement of goods; the tax invoice follows separately."]
+    : kind === "proforma" ? ["This is a proforma invoice and not a tax invoice. A tax invoice is issued at dispatch.", "Goods are dispatched against payment / confirmation as agreed.", "Prices are valid for 7 days from the date above unless agreed otherwise."]
+    : ["Goods once sold will not be taken back except for manufacturing defects reported within 7 days.", "Interest may be charged on overdue payments as agreed.", "Subject to Vadodara jurisdiction."];
+  if (d.terms_extra && kind !== "challan") terms.push(d.terms_extra);
+  y = ensure(y, 40 + terms.length * 10);
+  doc.setFont("helvetica", "bold"); doc.setFontSize(8); doc.setTextColor(...teal); doc.text("TERMS & CONDITIONS", M, y); y += 10;
+  doc.setFont("helvetica", "normal"); doc.setFontSize(7.6); doc.setTextColor(...grey);
+  terms.forEach((x, i) => doc.splitTextToSize(`${i + 1}. ${x}`, W - 2 * M).forEach(r => { doc.text(r, M, y); y += 9.5; }));
+
+  // ---- signatures ----
+  y = ensure(Math.max(y + 14, 690), 90);
+  doc.setDrawColor(...line); doc.setLineWidth(0.6);
+  doc.rect(M, y, 230, 70); doc.rect(W - M - 230, y, 230, 70);
+  doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(...grey);
+  doc.text(kind === "challan" ? "Received by (name, sign & stamp)" : "Customer acknowledgement", M + 8, y + 62);
+  doc.setFont("helvetica", "bold"); doc.setTextColor(...teal); doc.text("For " + (d.seller.name || ""), W - M - 222, y + 14);
+  doc.setFont("helvetica", "normal"); doc.setTextColor(...grey); doc.text("Authorised signatory", W - M - 222, y + 62);
+
+  // ---- footer on every page ----
+  const n = doc.getNumberOfPages();
+  for (let i = 1; i <= n; i++) {
+    doc.setPage(i); doc.setFontSize(7); doc.setTextColor(150);
+    doc.text(`${meta.no}  |  Computer generated document`, M, H - 20);
+    doc.text(`Page ${i} of ${n}`, W - M, H - 20, { align: "right" });
+  }
   doc.save(meta.no.replace(/[\\/]/g, "-") + ".pdf");
 }
 

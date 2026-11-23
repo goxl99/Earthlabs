@@ -48,14 +48,14 @@ export const parseExpenseRows = (rows, force = "auto") => {
   const hasHdr = hi >= 0, h = hasHdr ? rows[hi].map(x => String(x).toLowerCase().trim()) : [];
   const c = { date: findCol(h, [/^date/, /date/]), vendor: findCol(h, [/vendor|party|payee|supplier|paid to|name/]), desc: findCol(h, [/desc|particular|narration|detail|item|material/]), cat: findCol(h, [/categ|type|head|label/]),
     amt: findCol(h, [/^amount/, /amount|total|value|\brs\b|₹/]), gst: findCol(h, [/gst|tax/]), by: findCol(h, [/paid by|by whom|payer|paid_by|\bby\b/]), mode: findCol(h, [/mode|method/]), notes: findCol(h, [/note|remark/]),
-    qty: findCol(h, [/qty|quantity/]), rate: findCol(h, [/rate|price/]), unit: findCol(h, [/^unit|uom/]) };
+    qty: findCol(h, [/qty|quantity/]), rate: findCol(h, [/rate|price/]), unit: findCol(h, [/^unit|uom/]), bill: findCol(h, [/bill|invoice|inv\b|challan/]) };
   const start = hasHdr ? hi + 1 : 0;
   // no usable headings: work out the columns from what is inside them
   if (!hasHdr || c.date < 0 || c.amt < 0) {
     const sample = rows.slice(start).filter(filled).slice(0, 15), nc = Math.max(0, ...sample.map(r => r.length));
     const share = (j, f) => { const v = sample.map(r => r[j]).filter(x => String(x ?? "").trim() !== ""); return v.length ? v.filter(f).length / v.length : 0; };
     if (c.date < 0) c.date = [...Array(nc).keys()].find(j => share(j, x => !!toISO(x)) >= 0.6) ?? -1;
-    const known = new Set([c.qty, c.rate, c.unit, c.gst, c.cat, c.by, c.mode, c.notes].filter(j => j >= 0)), qr = c.qty >= 0 && c.rate >= 0;
+    const known = new Set([c.qty, c.rate, c.unit, c.gst, c.cat, c.by, c.mode, c.notes, c.bill].filter(j => j >= 0)), qr = c.qty >= 0 && c.rate >= 0;
     const nums = [...Array(nc).keys()].filter(j => j !== c.date && !known.has(j) && share(j, x => typeof x === "number" || /^[\s₹Rs.,\d-]+$/.test(String(x))) >= 0.6 && sample.some(r => toNum(r[j]) > 0));
     if (c.amt < 0 && !qr && nums.length) c.amt = nums.map(j => [j, sample.reduce((t, r) => t + toNum(r[j]), 0)]).sort((x, y) => y[1] - x[1])[0][0];
     const txt = [...Array(nc).keys()].filter(j => j !== c.date && j !== c.amt && !known.has(j) && !nums.includes(j));
@@ -71,7 +71,7 @@ export const parseExpenseRows = (rows, force = "auto") => {
     let amount = toNum(g("amt")); if (!(amount > 0) && qty > 0 && rate > 0) amount = Math.round((qty * rate + gst) * 100) / 100;
     const unit = String(g("unit") || "").trim(), base = String(g("desc") || "").trim();
     const err = !date ? "Date not understood" : !(amount > 0) ? "Amount missing" : "";
-    out.push({ line: ri + 1, err, row: { exp_date: date, vendor: String(g("vendor") || "").trim(), description: base + (qty > 0 ? `${base ? " " : ""}(${+qty.toFixed(3)}${unit ? " " + unit : ""})` : ""),
+    out.push({ line: ri + 1, err, row: { exp_date: date, vendor: String(g("vendor") || "").trim(), description: base, bill_no: String(g("bill") || "").trim(), qty, unit, rate,
       category: force && force !== "auto" ? force : normCat(g("cat") || g("desc") || g("vendor")), amount, gst_amount: gst, paid_by: by || "Company", payment_mode: normMode(g("mode")), notes: String(g("notes") || "").trim() } });
   });
   return { out, missing: ["date", "amt"].filter(k => c[k] < 0 && !(k === "amt" && c.qty >= 0 && c.rate >= 0)) };
@@ -181,42 +181,75 @@ export async function accountsPage(el) {
     },
   });
 
-  // ---------- bulk excel (expenses) ----------
-  const openBulkExpenses = (preset = "auto") => modal("Upload from Excel", `<p class="muted">Upload any Excel or CSV list of bills or spends. Date, amount, vendor and description are found automatically, even if the headings differ. Optional columns: Category, GST, Paid by, Mode, Qty, Rate, Unit, Notes.</p>
+  // ---------- bulk excel (expenses + stock purchases) ----------
+  const UNITS = /^(kg|kgs|kilo|kilogram|kilograms|g|gm|gms|gram|grams|l|ltr|ltrs|lt|litre|litres|liter|liters|ml|millilitre|milliliter|pcs|pc|nos|no|piece|pieces|unit|units|each)$/i;
+  const STOCK = { raw_material: "raw", packaging: "packaging" };
+  const openBulkExpenses = (preset = "auto") => modal("Upload from Excel", `<p class="muted">Upload any Excel or CSV list of bills or spends. Date, amount, vendor and item are found automatically, even if the headings differ. Optional columns: Category, Bill no, Qty, Unit, Rate, GST, Paid by, Mode, Notes.</p>
     <label>This file is<select id="kind"><option value="auto">Work it out from each row (Category column)</option>${CATS.map(([k, t]) => `<option value="${k}" ${k === preset ? "selected" : ""}>${k === "other" ? "Other expense" : t}</option>`).join("")}</select></label>
+    <p class="muted small">Raw material and packaging rows are added to your stock when you pick the stock item, and set the latest purchase rate. Other labels are recorded as expenses only.</p>
     <div class="row" style="gap:8px;flex-wrap:wrap;margin-top:8px"><button class="btn ghost" id="tpl">Download template</button><button class="btn" id="bp">Choose Excel / CSV</button></div><input id="bf" type="file" accept=".xlsx,.xls,.csv" hidden><div id="bo"></div>`, {
     wide: true,
-    onMount: (m, close) => {
-      let rows = null, fname = "";
+    onMount: async (m, close) => {
+      let rows = null, all = [], mats = [];
+      try { mats = await get(sb.from("raw_materials").select("id,name,unit,category").eq("active", true).order("name")); } catch {}
+      const norm = x => String(x || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+      const pool = cat => { const w = STOCK[cat]; const p = mats.filter(x => (x.category || "raw") === w); return p.length ? p : mats; };
+      const guess = r => {
+        if (!STOCK[r.row.category]) return "";
+        const key = norm(r.row.description) || norm(r.row.vendor); if (key.length < 2) return "";
+        const p = pool(r.row.category), ex = p.filter(x => norm(x.name) === key); if (ex.length === 1) return ex[0].id;
+        const part = p.filter(x => { const k = norm(x.name); return k.length >= 3 && (k.includes(key) || key.includes(k)); }); return part.length === 1 ? part[0].id : "";
+      };
       $("#tpl", m).onclick = async () => {
-        const X = await loadX(), ws = X.utils.aoa_to_sheet([["Date", "Vendor", "Description", "Category", "Qty", "Unit", "Rate", "Amount", "GST", "Paid by", "Mode", "Notes"], ["2026-11-20", "Shree Transport", "Tempo to Surat", "Transport", "", "", "", 2500, 0, "Gaurang", "Cash", ""], ["2026-11-21", "ABC Chemicals", "SLES 70%", "Raw material", 100, "kg", 80, 8000, 1440, "Company", "Bank", ""], ["2026-11-22", "Meta Ads", "Instagram campaign", "Marketing", "", "", "", 5000, 900, "Company", "UPI", ""]]);
+        const X = await loadX(), ws = X.utils.aoa_to_sheet([["Date", "Bill no", "Vendor", "Description", "Category", "Qty", "Unit", "Rate", "Amount", "GST", "Paid by", "Mode", "Notes"], ["2026-11-20", "", "Shree Transport", "Tempo to Surat", "Transport", "", "", "", 2500, 0, "Gaurang", "Cash", ""], ["2026-11-21", "B-101", "ABC Chemicals", "SLES 70%", "Raw material", 100, "kg", 80, 9440, 1440, "Company", "Bank", ""], ["2026-11-22", "", "Meta Ads", "Instagram campaign", "Marketing", "", "", "", 5900, 900, "Company", "UPI", ""]]);
         const wb = X.utils.book_new(); X.utils.book_append_sheet(wb, ws, "Expenses");
         download("earthlabs-expenses-template.xlsx", new Blob([X.write(wb, { bookType: "xlsx", type: "array" })], { type: "application/octet-stream" }));
       };
-      const show = () => {
-        const p = parseExpenseRows(rows, $("#kind", m).value);
-        if (p.missing.length) { $("#bo", m).innerHTML = '<div class="notice err">Could not find a Date column and an Amount column in this file.</div>'; return; }
-        const all = p.out.map((r, i) => ({ ...r, idx: i })), ok = all.filter(r => !r.err), bad = all.length - ok.length;
+      const state = r => {
+        if (r.err) return r.err;
+        if (r.item && !(Number(r.row.qty) > 0)) return "Quantity needed to add stock";
+        return "";
+      };
+      const render = () => {
+        const ok = all.filter(r => !state(r)), stk = ok.filter(r => r.item && STOCK[r.row.category]), bad = all.length - ok.length;
         const sums = CATS.map(([k, t]) => [t, ok.filter(r => r.row.category === k).reduce((s2, r) => s2 + r.row.amount, 0)]).filter(x => x[1] > 0);
-        $("#bo", m).innerHTML = `<p style="margin-top:10px"><b>${ok.length}</b> rows ready${bad ? `, <b>${bad}</b> will be skipped` : ""}. Total ${R(ok.reduce((s2, r) => s2 + r.row.amount, 0))}${sums.length ? " · " + sums.map(x => `${x[0]} ${R(x[1])}`).join(" · ") : ""}.</p>
-          <p class="muted small">You can change the label of any row before importing.</p>
-          <div style="max-height:280px;overflow:auto">${table([{ h: "Line", v: r => r.line }, { h: "Date", v: r => r.row.exp_date || "–" }, { h: "Vendor", v: r => r.row.vendor }, { h: "Details", v: r => r.row.description },
+        const noItem = ok.filter(r => STOCK[r.row.category] && !r.item).length;
+        $("#bo", m).innerHTML = `<p style="margin-top:10px"><b>${ok.length}</b> rows ready${bad ? `, <b>${bad}</b> need attention and will be skipped` : ""}. Total ${R(ok.reduce((s2, r) => s2 + r.row.amount, 0))}${sums.length ? " · " + sums.map(x => `${x[0]} ${R(x[1])}`).join(" · ") : ""}.</p>
+          <p class="small"><b>${stk.length}</b> rows will be added to stock${noItem ? `, <span style="color:#b45309">${noItem} raw material / packaging rows have no stock item chosen and will be saved as expenses only</span>` : ""}.</p>
+          <div style="max-height:300px;overflow:auto">${table([{ h: "Line", v: r => r.line }, { h: "Date", v: r => r.row.exp_date || "–" }, { h: "Vendor", v: r => r.row.vendor }, { h: "Item / details", v: r => r.row.description },
             { h: "Label", html: r => r.err ? "–" : `<select class="rc" data-i="${r.idx}">${CATS.map(([k, t]) => `<option value="${k}" ${r.row.category === k ? "selected" : ""}>${t}</option>`).join("")}</select>` },
-            { h: "Amount", v: r => INR(r.row.amount) }, { h: "Paid by", v: r => r.row.paid_by }, { h: "Check", v: r => r.err || "OK" }], all, { empty: "Nothing found" })}</div>
-          <div class="row end" style="margin-top:8px"><button class="btn" id="bgo" ${ok.length ? "" : "disabled"}>Import ${ok.length} entries</button></div>`;
-        $$(".rc", m).forEach(sl => sl.onchange = () => { all[+sl.dataset.i].row.category = sl.value; });
+            { h: "Stock item", html: r => r.err || !STOCK[r.row.category] ? "–" : `<select class="ri" data-i="${r.idx}"><option value="">Don't add to stock</option>${pool(r.row.category).map(x => `<option value="${x.id}" ${r.item === x.id ? "selected" : ""}>${esc(x.name)} (${esc(x.unit)})</option>`).join("")}</select>` },
+            { h: "Qty", v: r => r.row.qty > 0 ? `${+Number(r.row.qty).toFixed(3)} ${r.row.unit || ""}` : "–" },
+            { h: "Amount", v: r => INR(r.row.amount) }, { h: "Paid by", v: r => r.row.paid_by }, { h: "Check", v: r => state(r) || "OK" }], all, { empty: "Nothing found" })}</div>
+          <div class="row end" style="margin-top:8px"><button class="btn" id="bgo" ${ok.length ? "" : "disabled"}>Import ${ok.length} entries${stk.length ? ` (${stk.length} to stock)` : ""}</button></div>`;
+        $$(".rc", m).forEach(sl => sl.onchange = () => { const r = all[+sl.dataset.i]; r.row.category = sl.value; r.item = guess(r); render(); });
+        $$(".ri", m).forEach(sl => sl.onchange = () => { all[+sl.dataset.i].item = sl.value; render(); });
         $("#bgo", m).onclick = async () => {
           $("#bgo", m).disabled = true;
-          const r = await run(sb.rpc("bulk_import_expenses", { p_rows: ok.map(x => x.row) }), null);
-          if (r) { toast(`${r.imported ?? ok.length} entries imported` + (r.failed?.length ? `, ${r.failed.length} failed` : ""), r.failed?.length ? "err" : undefined); close(); reload(); } else $("#bgo", m).disabled = false;
+          const toStock = [], toExp = [];
+          ok.forEach(r => {
+            const mat = r.item && STOCK[r.row.category] ? mats.find(x => x.id === r.item) : null;
+            if (mat) toStock.push({ ...r.row, raw_material_id: mat.id, unit: UNITS.test(r.row.unit || "") ? r.row.unit : mat.unit, rate: r.row.rate > 0 ? r.row.rate : null });
+            else { const q = Number(r.row.qty) > 0 ? ` (${+Number(r.row.qty).toFixed(3)}${r.row.unit ? " " + r.row.unit : ""})` : ""; toExp.push({ ...r.row, description: (r.row.description + q + (r.row.bill_no ? " · Bill " + r.row.bill_no : "")).trim() }); }
+          });
+          let nb = 0, ns = 0, ne = 0; const fails = [];
+          if (toStock.length) { const r = await run(sb.rpc("bulk_import_purchases", { p_rows: toStock }), null); if (!r) { $("#bgo", m).disabled = false; return; } nb = r.bills ?? 0; ns = r.stock_lines ?? 0; (r.failed || []).forEach(f => fails.push("stock row " + f.row + ": " + f.error)); }
+          if (toExp.length) { const r = await run(sb.rpc("bulk_import_expenses", { p_rows: toExp }), null); if (!r) { $("#bgo", m).disabled = false; return; } ne = r.imported ?? toExp.length; (r.failed || []).forEach(f => fails.push("row " + f.row + ": " + f.error)); }
+          toast(`${ns ? ns + " items added to stock (" + nb + " bills)" : ""}${ns && ne ? ", " : ""}${ne ? ne + " expenses recorded" : ""}${fails.length ? ". Not imported: " + fails.join("; ") : ""}`, fails.length ? "err" : undefined);
+          close(); reload();
         };
       };
+      const build = () => {
+        const p = parseExpenseRows(rows, $("#kind", m).value);
+        if (p.missing.length) { $("#bo", m).innerHTML = '<div class="notice err">Could not find a Date column and an Amount column in this file.</div>'; return; }
+        all = p.out.map((r, i) => ({ ...r, idx: i, item: "" })); all.forEach(r => { r.item = r.err ? "" : guess(r); }); render();
+      };
       $("#bp", m).onclick = () => $("#bf", m).click();
-      $("#kind", m).onchange = () => { if (rows) show(); };
+      $("#kind", m).onchange = () => { if (rows) build(); };
       $("#bf", m).onchange = async e => {
-        const f = e.target.files[0]; if (!f) return; fname = f.name;
+        const f = e.target.files[0]; if (!f) return;
         try { rows = await readSheet(f); } catch (x) { return toast("Could not open that file: " + x.message, "err"); }
-        show();
+        build();
       };
     },
   });

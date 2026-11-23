@@ -4,6 +4,7 @@ import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 import { DISTRICTS, Field, Msg } from "@/components/ui";
 import { PATHS, PublicTop } from "@/components/Public";
+import { markPartner } from "@/lib/visitor";
 
 type PType = { code: string; name: string };
 const STEPS = ["Partner type", "Business", "Location", "Review"];
@@ -24,7 +25,7 @@ export default function Register() {
     setMsg(null); setBusy(true);
     const { data, error } = await supabase.rpc("submit_application", { t: f.t, biz: f.biz, contact: f.contact, ph: f.ph, mail: f.mail, st: "Gujarat", dist: f.dist, gst: f.gst, ans: { experience_years: f.exp, area_of_operation: f.area } });
     setBusy(false);
-    if (error) setMsg({ k: "bad", t: error.message }); else { setMsg({ k: "ok", t: `Application received. Your reference is ${data}. Keep it with your e-mail to track progress.` }); setStep(4); }
+    if (error) setMsg({ k: "bad", t: error.message }); else { markPartner(); setMsg({ k: "ok", t: `Application received. Your reference is ${data}. Keep it with your e-mail to track progress.` }); setStep(4); }
   }
   return (<div className="pub"><PublicTop base="../" /><div className="wiz">
     <div className="eyebrow dk">PARTNER REGISTRATION</div><h1>{tname ? `Become an ${tname}` : "Become an EarthLabs partner"}</h1>

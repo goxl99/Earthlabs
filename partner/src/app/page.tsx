@@ -1,24 +1,27 @@
 "use client";
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase, configured } from "@/lib/supabase";
+import { markPartner, isKnownPartner } from "@/lib/visitor";
 import { Hero, Journey, PathCards, PublicTop } from "@/components/Public";
 
 export default function Home() {
   const [email, setEmail] = useState(""); const [pw, setPw] = useState(""); const [msg, setMsg] = useState(""); const [mode, setMode] = useState<"in" | "up">("in");
+  const [known, setKnown] = useState(false);
+  useEffect(() => { setKnown(isKnownPartner()); if (configured) supabase.auth.getUser().then(({ data }) => { if (data.user) { markPartner(); location.href = "./dashboard/"; } }); }, []);
   async function go() {
     setMsg("");
     const r = mode === "in" ? await supabase.auth.signInWithPassword({ email, password: pw }) : await supabase.auth.signUp({ email, password: pw });
-    if (r.error) setMsg(r.error.message); else if (mode === "up") setMsg("Account created. EarthLabs will activate it, then you can sign in."); else location.href = "./dashboard/";
+    if (r.error) setMsg(r.error.message); else if (mode === "up") setMsg("Account created. EarthLabs will activate it, then you can sign in."); else { markPartner(); location.href = "./dashboard/"; }
   }
   return (<div className="pub"><PublicTop />
     <Hero eyebrow="EARTHLABS · PARTNER NETWORK" title="Grow with the brand that heals, not harms." stats={[["34", "Districts"], ["5", "Growth steps"], ["100", "Point score"]]}>
       <p>Orders, partner prices, agreements and payments for EarthLabs dealers and distributors, in one place.</p>
-      <div className="row" style={{ marginTop: 22 }}><Link className="btn gold-fill" href="./become/">Become a partner</Link><a className="btn ghost" href="#signin">Partner sign-in</a><Link className="btn ghost" href="./track/">Track my application</Link></div>
+      <div className="row" style={{ marginTop: 22 }}>{known ? <a className="btn gold-fill" href="#signin">Partner login</a> : <Link className="btn gold-fill" href="./become/">Become a partner</Link>}{!known && <a className="btn ghost" href="#signin">Partner sign-in</a>}<Link className="btn ghost" href="./track/">Track my application</Link></div>
     </Hero>
-    <div className="sec-h"><div className="eyebrow dk">CHOOSE YOUR PATH</div><h2>How would you like to work with us?</h2></div>
+    {!known && <><div className="sec-h"><div className="eyebrow dk">CHOOSE YOUR PATH</div><h2>How would you like to work with us?</h2></div>
     <PathCards />
-    <Journey />
+    <Journey /></>}
     <section id="signin" className="card signin" aria-label="Partner sign-in">
       <h2>{mode === "in" ? "Partner sign-in" : "Create account"}</h2>
       {!configured && <div className="note">Supabase is not configured yet (see .env.example).</div>}

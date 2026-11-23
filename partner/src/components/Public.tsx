@@ -2,6 +2,7 @@
 import Link from "next/link";
 import { useEffect, useState, type ReactNode } from "react";
 import { supabase, configured } from "@/lib/supabase";
+import { isKnownPartner } from "@/lib/visitor";
 
 export type PathType = { code: string; ic: string; title: string; blurb: string; points: string[] };
 /** Content shown for each partner type. Registration availability still comes from the database. */
@@ -21,8 +22,10 @@ export function useOpenTypes() {
 }
 
 export function PublicTop({ base = "./" }: { base?: string }) {
+  const [known, setKnown] = useState(false);
+  useEffect(() => { setKnown(isKnownPartner()); }, []);
   return (<header className="top"><Link className="brand" href={base}>EarthLabs<small>PARTNER NETWORK</small></Link>
-    <div className="row"><Link className="btn out sm" href={`${base}become/`}>Become a partner</Link><Link className="btn out sm" href={`${base}track/`}>Track application</Link><Link className="btn out sm" href={`${base}verify/`}>Verify certificate</Link></div></header>);
+    <div className="row">{known ? <Link className="btn out sm" href={`${base}#signin`}>Partner login</Link> : <Link className="btn out sm" href={`${base}become/`}>Become a partner</Link>}<Link className="btn out sm" href={`${base}track/`}>Track application</Link><Link className="btn out sm" href={`${base}verify/`}>Verify certificate</Link></div></header>);
 }
 
 export function PathCards({ base = "./" }: { base?: string }) {

@@ -12,7 +12,7 @@ export default function Home() {
   async function go() {
     setMsg("");
     const r = mode === "in" ? await supabase.auth.signInWithPassword({ email, password: pw }) : await supabase.auth.signUp({ email, password: pw });
-    if (r.error) setMsg(r.error.message); else if (mode === "up") setMsg("Account created. EarthLabs will activate it, then you can sign in."); else { markPartner(); location.href = "./dashboard/"; }
+    if (r.error) { const m = r.error.message.toLowerCase(); setMsg(m.includes("invalid login") ? "E-mail or password is not correct. If you have not created a login yet, choose \"Create an account\" below with the e-mail EarthLabs has on file." : m.includes("already registered") ? "This e-mail already has a login. Please sign in instead." : m.includes("not confirmed") ? "Please confirm your e-mail first, using the link we sent you." : m.includes("rate limit") ? "Too many attempts. Please wait a few minutes and try again." : r.error.message); } else if (mode === "up") setMsg("Account created. If EarthLabs has approved your application, you can sign in now. Otherwise we will e-mail you once it is activated."); else { markPartner(); location.href = "./dashboard/"; }
   }
   return (<div className="pub"><PublicTop />
     <Hero eyebrow="EARTHLABS · PARTNER NETWORK" title="Grow with the brand that heals, not harms." stats={[["34", "Districts"], ["5", "Growth steps"], ["100", "Point score"]]}>

@@ -26,7 +26,7 @@ export default function Register() {
     setMsg(null); setBusy(true);
     const { data, error } = await supabase.rpc("submit_application", { t: f.t, biz: f.biz, contact: f.contact, ph: f.ph, mail: f.mail, st: "Gujarat", dist: f.dist, gst: f.gst, ans: { experience_years: f.exp, area_of_operation: f.area } });
     setBusy(false);
-    if (error) setMsg({ k: "bad", t: error.message }); else { markPartner(); setMsg({ k: "ok", t: `Application received. Your reference is ${data}. Keep it with your e-mail to track progress.` }); setStep(4); }
+    if (error) setMsg({ k: "bad", t: error.message }); else { markPartner(); const t = await supabase.rpc("track_application", { ref: String(data), mail: f.mail }); const no = (t.data as { ref_no?: string }[] | null)?.[0]?.ref_no || String(data); setMsg({ k: "ok", t: `Application received. Your reference number is ${no}. We have e-mailed it to ${f.mail} with your registered mobile ${f.ph}; you will get another e-mail whenever the status changes. Use the reference number and e-mail to track progress.` }); setStep(4); }
   }
   return (<div className="pub"><PublicTop base="../" /><div className="wiz">
     <div className="eyebrow dk">PARTNER REGISTRATION</div><h1>{tname ? `Become an ${tname}` : "Become an EarthLabs partner"}</h1>

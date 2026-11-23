@@ -32,7 +32,7 @@ let TAB = "stock";
 
 export async function stockPage(el) {
   const canB = hasRole("qc_officer", "admin");
-  const [st, mv, rm, pq, cp, cf, bl, lp] = await Promise.all([
+  const [st, mv, rm, pq, cp, cf, bl, lp, vv] = await Promise.all([
     sb.from("raw_material_status").select("*").order("name"),
     sb.from("raw_material_stock").select("*, raw_materials(name,unit), batches(temp_ref,batch_code)")
       .order("created_at", { ascending: false }).limit(100),
@@ -44,6 +44,7 @@ export async function stockPage(el) {
     canB ? sb.from("supplier_invoices").select("*, supplier_invoice_lines(*, raw_materials(name,unit))")
       .order("created_at", { ascending: false }).limit(150) : Promise.resolve({ data: [] }),
     canB ? sb.from("v_last_purchase").select("*") : Promise.resolve({ data: [] }),
+    canB ? sb.from("v_rm_value").select("raw_material_id,rate,rate_unit,value,no_rate") : Promise.resolve({ data: [] }),
   ]);
   if (st.error || pq.error) {
     el.innerHTML = '<div class="notice err">Raw material stock and purchasing are not fully set up in the database yet. ' +
@@ -55,6 +56,7 @@ export async function stockPage(el) {
   const cover = Number(cfg.rm_cover_batches || 2), refL = Number(cfg.rm_ref_batch_l || 25);
   const company = cfg.company_name || "EarthLabs";
   const canOrder = hasRole("qc_officer", "admin"), isAdmin = hasRole("admin");
+  const VAL = Object.fromEntries((vv.data || []).map(r => [r.raw_material_id, r]));
   const BILLS = bl.data || [], billsOk = !bl.error, lastP = Object.fromEntries((lp.data || []).map(r => [r.raw_material_id, r]));
   const tabsList = TABS.filter(([k]) => k !== "bills" || canOrder);
   if (TAB === "bills" && !canOrder) TAB = "stock";
@@ -181,15 +183,26 @@ export async function stockPage(el) {
       <input name="rm_cover_batches" type="number" step="any" min="0" value="${cover}"></label>
       <label>…of this batch size (L)<input name="rm_ref_batch_l" type="number" step="any" min="1" value="${refL}"></label>
       <div class="row end"><button class="btn ghost">Save rule</button></div></form>` : ""}
+    <div class="stats" id="tv"></div>
     <h3>Current stock</h3><div id="lv"></div>
     <h3>Recent movements</h3><div id="mv"></div>
     <p class="muted small">An item is flagged Low when it is below its minimum level or can't cover ${cover} batches of ${refL} L.
     Stock is deducted with actual quantities when a batch is sent to QA/QC and returned if it is sent back or rejected.</p>`;
+    if (canB) {
+      const val = r => Number(VAL[r.raw_material_id]?.value) || 0, rawV = S.filter(r => r.category !== "packaging").reduce((t, r) => t + val(r), 0), pkV = S.filter(r => r.category === "packaging").reduce((t, r) => t + val(r), 0);
+      const noRate = S.filter(r => Number(r.on_hand) > 0 && (VAL[r.raw_material_id]?.no_rate ?? true)).length, neg = S.filter(r => Number(r.on_hand) < 0).length;
+      $("#tv").innerHTML = `<div class="stat good"><div class="stat-l">Raw material at site (value)</div><div class="stat-v">${INR(rawV)}</div><div class="stat-s">Quantity on hand × latest purchase rate</div></div>
+        <div class="stat"><div class="stat-l">Packaging at site (value)</div><div class="stat-v">${INR(pkV)}</div></div>
+        <div class="stat"><div class="stat-l">Total stock value</div><div class="stat-v">${INR(rawV + pkV)}</div>${noRate ? `<div class="stat-s">${noRate} item(s) in stock have no purchase rate yet</div>` : ""}</div>
+        ${neg ? `<div class="stat bad"><div class="stat-l">Items below zero</div><div class="stat-v">${neg}</div><div class="stat-s">Stock not recorded. Add the bills or correct the entries.</div></div>` : ""}`;
+    }
     const drawLevels = () => {
       const term = ($("#q").value || "").toLowerCase(), ty = $("#ty").value;
       $("#lv").innerHTML = table([
         { h: "Item", v: r => r.name }, { h: "Type", v: r => TY(r) },
         { h: "On hand", html: r => `<b class="${r.on_hand <= 0 ? "dev" : ""}">${fmt(r.on_hand, r.unit)}</b>` },
+        ...(canB ? [{ h: "Latest rate", v: r => VAL[r.raw_material_id]?.rate ? `${INR(VAL[r.raw_material_id].rate)} / ${VAL[r.raw_material_id].rate_unit}` : "No bill yet" },
+          { h: "Value", v: r => VAL[r.raw_material_id]?.no_rate ?? true ? "–" : INR(VAL[r.raw_material_id].value) }] : []),
         { h: "On order", v: r => r.on_order > 0 ? fmt(r.on_order, r.unit) : "–" },
         { h: "Minimum", v: r => r.min_level > 0 ? fmt(r.min_level, r.unit) : "–" },
         { h: "Cover", v: r => r.batches_cover == null ? "–" : num(r.batches_cover, 1) + " batches" },
@@ -221,8 +234,23 @@ export async function stockPage(el) {
       { h: "Lot", v: r => r.lot_no || "–" }, { h: "Supplier", v: r => r.supplier || "–" },
       { h: "Expiry", v: r => r.expiry_date ? dfmt(r.expiry_date) : "–" },
       { h: "Batch", html: r => r.batch_id ? `<a href="#/batch/${r.batch_id}">${esc(r.batches?.batch_code || r.batches?.temp_ref || "batch")}</a>` : "–" },
-      { h: "Note", v: r => r.note || "" },
+      { h: "Note", v: r => (r.reversed_by ? "[Corrected / undone] " : r.reverses_id ? "[Correction] " : "") + (r.note || "") },
+      ...(isAdmin ? [{ h: "", html: r => !r.batch_id && !r.reverses_id && !r.reversed_by ? `<button class="btn ghost sm fxc" data-id="${r.id}">Correct</button> <button class="btn ghost sm fxu" data-id="${r.id}">Undo</button>` : "" }] : []),
     ], moves, { empty: "No stock movements yet. Use “Add stock” to record what you have." });
+    const openFix = (r, mode) => modal(mode === "undo" ? "Undo this stock entry" : "Correct the quantity", `<form id="fx" class="form-grid">
+      <div class="notice full">${esc(r.raw_materials?.name || "")} · ${MOVE[r.movement] || r.movement} · ${num(r.qty, 3)} ${esc(r.raw_materials?.unit || "")} on ${dtfmt(r.created_at)}${r.note ? " · " + esc(r.note) : ""}</div>
+      ${mode === "undo" ? "" : `<label>Correct quantity (${esc(r.raw_materials?.unit || "")})<input name="q" type="number" step="any" required value="${r.qty}"></label>`}
+      <label class="${mode === "undo" ? "full" : ""}">Reason<input name="reason" required placeholder="e.g. typed 100 instead of 10"></label>
+      <p class="muted small full">The original entry stays in the history. A correcting entry is added so the audit trail is kept.</p>
+      <div class="full row end"><button class="btn" id="fxs">${mode === "undo" ? "Undo entry" : "Save correction"}</button></div></form>`, {
+      onMount: (m, close) => { $("#fx", m).onsubmit = async e => {
+        e.preventDefault(); const f = Object.fromEntries(new FormData(e.target)); $("#fxs", m).disabled = true;
+        const res = mode === "undo" ? await run(sb.rpc("reverse_stock_entry", { p_id: r.id, p_reason: f.reason }), "Entry undone")
+          : await run(sb.rpc("correct_stock_entry", { p_id: r.id, p_new_qty: Number(f.q), p_reason: f.reason }), "Quantity corrected");
+        $("#fxs", m).disabled = false; if (res) { close(); reload(); }
+      }; } });
+    $$(".fxc", sp).forEach(b => b.onclick = () => openFix(moves.find(x => x.id === b.dataset.id), "fix"));
+    $$(".fxu", sp).forEach(b => b.onclick = () => openFix(moves.find(x => x.id === b.dataset.id), "undo"));
     drawLevels(); $("#q").oninput = drawLevels; $("#ty").onchange = drawLevels;
     if (isAdmin) $("#rf").onsubmit = async e => {
       e.preventDefault(); const f = Object.fromEntries(new FormData(e.target));
@@ -366,6 +394,7 @@ export async function stockPage(el) {
         ${b.file_path ? '<button class="btn ghost" id="bfile">View bill file</button>' : ""}
         ${matched.length ? '<button class="btn ghost" id="bpo">Create purchase order from this bill</button>' : ""}
         ${!b.stock_posted && matched.length ? '<button class="btn" id="bstk">Add to stock</button>' : ""}
+        ${isAdmin && b.stock_posted ? '<button class="btn ghost" id="bunp">Take out of stock</button>' : ""}
         ${isAdmin ? '<button class="btn ghost" id="bdel">Delete</button>' : ""}</div>
       ${b.stock_posted ? '<p class="okc small">This bill has been added to stock.</p>' : ""}`, {
       wide: true,
@@ -386,8 +415,13 @@ export async function stockPage(el) {
           sk.disabled = true; const n = await run(sb.rpc("post_invoice_to_stock", { p_invoice: b.id }), "Added to stock");
           sk.disabled = false; if (n) { close(); reload("bills"); }
         };
+        const up = $("#bunp", m); if (up) up.onclick = async () => {
+          const why = prompt("Why is this bill being taken out of stock? (this is kept in the history)"); if (!why || !why.trim()) return;
+          up.disabled = true; const n = await run(sb.rpc("unpost_invoice_from_stock", { p_invoice: b.id, p_reason: why.trim() }), "Taken out of stock");
+          up.disabled = false; if (n !== null) { close(); reload("bills"); }
+        };
         const dl = $("#bdel", m); if (dl) dl.onclick = async () => {
-          if (!confirm("Delete this bill? Stock already added from it is NOT reversed.")) return;
+          if (!confirm("Delete this bill? Stock already added from it is NOT reversed. Use Take out of stock first if the stock should be removed.")) return;
           if (await run(sb.from("supplier_invoices").delete().eq("id", b.id), "Bill deleted")) {
             if (b.file_path) await sb.storage.from("supplier-bills").remove([b.file_path]);
             close(); reload("bills");
@@ -432,6 +466,7 @@ export async function stockPage(el) {
             <label>GST (₹)<input type="number" step="any" name="tax_amount" value="${H.tax_amount}"></label>
             <label>Total (₹)<input type="number" step="any" name="total" value="${H.total}"></label>
             <label>Notes<input name="notes"></label>
+            <label class="full row" style="gap:8px"><input type="checkbox" name="addstock" checked> Add the matched items to stock now and set their latest purchase rate (untick if these goods were already received through a purchase order)</label>
             <div class="full" id="bl2"></div>
             <div class="full row"><button type="button" class="btn ghost sm" id="bladd">＋ Add line</button></div>
             <div class="full row end"><button class="btn" id="bsave">Save bill</button></div></form>`;
@@ -458,6 +493,8 @@ export async function stockPage(el) {
                 subtotal: nn(f.subtotal), tax_amount: nn(f.tax_amount), total: nn(f.total), file_path: path || null, file_name: fname || null, notes: f.notes, extracted: ex || null },
               p_lines: ls.map(l => ({ raw_material_id: l.id || null, description: l.description || null, qty: nn(l.qty), unit: l.unit, rate: nn(l.rate), amount: nn(l.amount) })),
             }), "Bill saved");
+            if (r && f.addstock && ls.some(l => l.id && Number(l.qty) > 0)) { const n = await run(sb.rpc("post_invoice_to_stock", { p_invoice: r }), "Bill saved and added to stock"); if (!n) toast("The bill is saved but could not be added to stock. Open it and press Add to stock.", "err"); }
+            else if (r && f.addstock) toast("Bill saved. No line is matched to an item with a quantity, so nothing was added to stock.", "err");
             $("#bsave", m).disabled = false; if (r) { close(); reload("bills"); }
           };
         };

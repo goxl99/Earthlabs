@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { Field, Msg, when } from "@/components/ui";
 import { PublicTop } from "@/components/Public";
@@ -7,6 +7,7 @@ import { PublicTop } from "@/components/Public";
 type Row = { status: string; business_name: string; type_code: string; reason: string | null; partner_id: string | null; created_at: string; ref_no?: string };
 export default function Track() {
   const [ref, setRef] = useState(""); const [mail, setMail] = useState(""); const [row, setRow] = useState<Row | null | undefined>(undefined); const [err, setErr] = useState("");
+  useEffect(() => { const r = new URLSearchParams(location.search).get("ref"); if (r) setRef(r); }, []);
   async function go() { setErr(""); const { data, error } = await supabase.rpc("track_application", { ref: ref.trim(), mail }); if (error) { setErr("Check the reference and e-mail"); setRow(undefined); } else setRow((data as Row[])[0] ?? null); }
   return (<div className="pub"><PublicTop base="../" /><div className="wiz"><h1>Track your application</h1>
     <div className="card"><Field label="Reference number (e.g. APP-2026-0001)"><input value={ref} onChange={(e) => setRef(e.target.value)} /></Field><Field label="E-mail used"><input type="email" value={mail} onChange={(e) => setMail(e.target.value)} /></Field><button className="btn" onClick={go}>Check status</button>

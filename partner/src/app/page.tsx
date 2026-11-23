@@ -5,14 +5,15 @@ import { supabase, configured } from "@/lib/supabase";
 import { markPartner, isKnownPartner } from "@/lib/visitor";
 import { Hero, Journey, PathCards, PublicTop } from "@/components/Public";
 
+const nextUrl = () => { const n = new URLSearchParams(location.search).get("next") || ""; return /^\/[a-z0-9\-\/]*$/i.test(n) && !n.startsWith("//") ? "." + n : "./dashboard/"; };
 export default function Home() {
   const [email, setEmail] = useState(""); const [pw, setPw] = useState(""); const [msg, setMsg] = useState(""); const [mode, setMode] = useState<"in" | "up">("in");
   const [known, setKnown] = useState(false);
-  useEffect(() => { setKnown(isKnownPartner()); if (configured) supabase.auth.getUser().then(({ data }) => { if (data.user) { markPartner(); location.href = "./dashboard/"; } }); }, []);
+  useEffect(() => { setKnown(isKnownPartner()); if (configured) supabase.auth.getUser().then(({ data }) => { if (data.user) { markPartner(); location.href = nextUrl(); } }); }, []);
   async function go() {
     setMsg("");
     const r = mode === "in" ? await supabase.auth.signInWithPassword({ email, password: pw }) : await supabase.auth.signUp({ email, password: pw });
-    if (r.error) { const m = r.error.message.toLowerCase(); setMsg(m.includes("invalid login") ? "E-mail or password is not correct. If you have not created a login yet, choose \"Create an account\" below with the e-mail EarthLabs has on file." : m.includes("already registered") ? "This e-mail already has a login. Please sign in instead." : m.includes("not confirmed") ? "Please confirm your e-mail first, using the link we sent you." : m.includes("rate limit") ? "Too many attempts. Please wait a few minutes and try again." : r.error.message); } else if (mode === "up") setMsg("Account created. If EarthLabs has approved your application, you can sign in now. Otherwise we will e-mail you once it is activated."); else { markPartner(); location.href = "./dashboard/"; }
+    if (r.error) { const m = r.error.message.toLowerCase(); setMsg(m.includes("invalid login") ? "E-mail or password is not correct. If you have not created a login yet, choose \"Create an account\" below with the e-mail EarthLabs has on file." : m.includes("already registered") ? "This e-mail already has a login. Please sign in instead." : m.includes("not confirmed") ? "Please confirm your e-mail first, using the link we sent you." : m.includes("rate limit") ? "Too many attempts. Please wait a few minutes and try again." : r.error.message); } else if (mode === "up") setMsg("Account created. If EarthLabs has approved your application, you can sign in now. Otherwise we will e-mail you once it is activated."); else { markPartner(); location.href = nextUrl(); }
   }
   return (<div className="pub"><PublicTop />
     <Hero eyebrow="EARTHLABS · PARTNER NETWORK" title="Grow with the brand that heals, not harms." stats={[["34", "Districts"], ["5", "Growth steps"], ["100", "Point score"]]}>

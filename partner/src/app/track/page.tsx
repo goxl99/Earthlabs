@@ -6,7 +6,7 @@ import { Field, Msg, when } from "@/components/ui";
 import { PublicTop } from "@/components/Public";
 
 type Row = { status: string; business_name: string; type_code: string; reason: string | null; partner_id: string | null; created_at: string; ref_no?: string };
-type Doc = { kind: string; file_name: string; status: "Uploaded" | "Accepted" | "Rejected"; note: string | null; uploaded_at: string };
+type Doc = { kind: string; file_name: string; status: "Uploaded" | "Accepted" | "Rejected"; note: string | null; uploaded_at: string; not_applicable?: boolean };
 type DocState = { status: string; can_upload: boolean; required: string[]; docs: Doc[] };
 const NEXT: Record<string, string> = {
   "Submitted": "We are reviewing your basic details. When they are cleared, we e-mail you the list of documents to upload here.",
@@ -15,7 +15,8 @@ const NEXT: Record<string, string> = {
   "More info needed": "We need something corrected. See the note below and use the Documents tab.",
   "Field verification": "Your documents are cleared. We will contact you for a meeting or field visit.",
   "Agreement pending": "You are approved. Watch your e-mail and phone for the MOU (agreement) from Leegality and sign it. Your login ID and password follow once it is signed.",
-  "Approved": "Your MOU is signed. Your login ID and password were e-mailed to you. Sign in from the sign-in page.",
+  "MOU signed": "Both sides have signed your MOU. EarthLabs is approving the signed copy. Your certificate, login ID and password will be e-mailed next.",
+  "Approved": "Your MOU is signed and approved. Your login ID and password were e-mailed to you. Sign in from the sign-in page.",
   "Rejected": "This application was not approved.",
 };
 export default function Track() {
@@ -39,6 +40,11 @@ export default function Track() {
     const c = await callFn("application-docs", { action: "confirm", ref: ref.trim(), email: mail, kind, path: s.data?.path, file_name: f.name, size: f.size });
     setBusy(""); setNote(c.ok ? { ok: true, t: `${kind}: uploaded` } : { ok: false, t: c.error ?? "Upload failed" }); await loadDocs();
   }
+  async function na(kind: string) {
+    const reason = prompt(`Why does "${kind}" not apply to you? (for example: new business, no separate premises)`) ?? ""; if (reason.trim().length < 3) return;
+    setBusy(kind); const r = await callFn("application-docs", { action: "na", ref: ref.trim(), email: mail, kind, reason: reason.trim() }); setBusy("");
+    setNote({ ok: r.ok, t: r.ok ? `${kind}: marked not applicable. Our team will review your reason.` : (r.error ?? "Failed") }); loadDocs();
+  }
   async function submit() {
     setBusy("submit"); setNote(null);
     const r = await callFn("application-docs", { action: "submit", ref: ref.trim(), email: mail });
@@ -53,13 +59,13 @@ export default function Track() {
       {row === null && <div style={{ marginTop: 12 }}><Msg>No application found for these details.</Msg></div>}
       {row && <div style={{ marginTop: 12 }}>
         {showDocs && <p><button className="btn" style={{ opacity: tab === "status" ? 1 : 0.55 }} onClick={() => setTab("status")}>Status</button>{" "}<button className="btn" style={{ opacity: tab === "docs" ? 1 : 0.55 }} onClick={() => setTab("docs")}>Documents{ds?.can_upload ? " (action needed)" : ""}</button></p>}
-        {tab === "status" && <Msg kind={["Approved", "Agreement pending"].includes(row.status) ? "ok" : "note"}><b>{row.business_name}</b>{row.ref_no ? ` (${row.ref_no})` : ""}: <b>{row.status}</b>. Received {when(row.created_at)}.{row.reason ? ` Note from EarthLabs: ${row.reason}.` : ""}{row.partner_id ? ` Your Partner ID is ${row.partner_id}.` : ""}<br />{NEXT[row.status] ?? ""}</Msg>}
+        {tab === "status" && <Msg kind={["Approved", "Agreement pending", "MOU signed"].includes(row.status) ? "ok" : "note"}><b>{row.business_name}</b>{row.ref_no ? ` (${row.ref_no})` : ""}: <b>{row.status}</b>. Received {when(row.created_at)}.{row.reason ? ` Note from EarthLabs: ${row.reason}.` : ""}{row.partner_id ? ` Your Partner ID is ${row.partner_id}.` : ""}<br />{NEXT[row.status] ?? ""}</Msg>}
         {tab === "docs" && ds && <div>
           {ds.can_upload ? <p>Upload each document (PDF, JPG or PNG, up to 8 MB). You can replace a file before you submit. When all are uploaded, press <b>Submit documents</b>.</p> : <p>Your documents are with our team for review.</p>}
           {row.reason && ds.can_upload && <Msg kind="bad">What we need: {row.reason}</Msg>}
-          <table><tbody>{ds.required.map((k) => { const d = docOf(k); return (<tr key={k}><td><b>{k}</b>{d && <div style={{ fontSize: 12 }}>{d.file_name}</div>}{d?.status === "Rejected" && d.note && <div style={{ fontSize: 12, color: "#9b3b2c" }}>Please replace: {d.note}</div>}</td>
-            <td>{d ? (d.status === "Accepted" ? "Accepted" : d.status === "Rejected" ? "Needs replacing" : "Uploaded") : "Not uploaded"}</td>
-            <td>{ds.can_upload && d?.status !== "Accepted" && <label className="btn out" style={{ cursor: "pointer" }}>{busy === k ? "Uploading…" : d ? "Replace" : "Upload"}<input type="file" accept=".pdf,.jpg,.jpeg,.png" hidden disabled={!!busy} onChange={(e) => { upload(k, e.target.files?.[0]); e.target.value = ""; }} /></label>}</td></tr>); })}</tbody></table>
+          <table><tbody>{ds.required.map((k) => { const d = docOf(k); return (<tr key={k}><td><b>{k}</b>{d && <div style={{ fontSize: 12 }}>{d.not_applicable ? `Not applicable: ${d.note ?? ""}` : d.file_name}</div>}{d?.status === "Rejected" && d.note && <div style={{ fontSize: 12, color: "#9b3b2c" }}>Please replace: {d.note}</div>}</td>
+            <td>{d ? (d.status === "Accepted" ? "Accepted" : d.status === "Rejected" ? "Needs replacing" : d.not_applicable ? "Marked not applicable" : "Uploaded") : "Not uploaded"}</td>
+            <td>{ds.can_upload && d?.status !== "Accepted" && <label className="btn out" style={{ cursor: "pointer" }}>{busy === k ? "Uploading…" : d ? "Replace" : "Upload"}<input type="file" accept=".pdf,.jpg,.jpeg,.png" hidden disabled={!!busy} onChange={(e) => { upload(k, e.target.files?.[0]); e.target.value = ""; }} /></label>}{ds.can_upload && d?.status !== "Accepted" && <> <button className="btn out" disabled={!!busy} onClick={() => na(k)}>Not applicable</button></>}</td></tr>); })}</tbody></table>
           {ds.can_upload && <p><button className="btn" disabled={!!busy || ds.required.some((k) => !docOf(k) || docOf(k)?.status === "Rejected")} onClick={submit}>{busy === "submit" ? "Submitting…" : "Submit documents"}</button></p>}
           {note && <Msg kind={note.ok ? "ok" : "bad"}>{note.t}</Msg>}
         </div>}

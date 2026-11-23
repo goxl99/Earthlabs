@@ -21,12 +21,16 @@ export async function verifyWebhook(documentId: unknown, mac: unknown, salt: str
 
 export type Invitee = { name: string; email?: string; phone?: string };
 /** Body for POST /v3.0/sign/request. `irn` is our agreement id so the webhook can be matched back. */
-export function buildSignRequest(profileId: string, fileName: string, fileBase64: string, invitee: Invitee, irn: string) {
-  const phone = (invitee.phone ?? "").replace(/\D/g, "").slice(-10);
-  const inv: Invitee = { name: invitee.name.slice(0, 255) };
-  if (invitee.email) inv.email = invitee.email;
-  if (phone.length === 10) inv.phone = phone;
-  if (!inv.email && !inv.phone) throw new Error("The partner needs an e-mail or a 10-digit phone number for e-sign");
-  return { profileId, file: { name: fileName.slice(0, 255), file: fileBase64 }, invitees: [inv], irn: irn.slice(0, 255) };
+export function buildSignRequest(profileId: string, fileName: string, fileBase64: string, invitee: Invitee | Invitee[], irn: string) {
+  const list = Array.isArray(invitee) ? invitee : [invitee];
+  const invitees = list.map((i, n) => {
+    const phone = (i.phone ?? "").replace(/\D/g, "").slice(-10);
+    const inv: Invitee = { name: i.name.slice(0, 255) };
+    if (i.email) inv.email = i.email;
+    if (phone.length === 10) inv.phone = phone;
+    if (!inv.email && !inv.phone) throw new Error(n === 0 ? "The partner needs an e-mail or a 10-digit phone number for e-sign" : "The EarthLabs signatory needs an e-mail or a 10-digit phone number (Agreements > Company details)");
+    return inv;
+  });
+  return { profileId, file: { name: fileName.slice(0, 255), file: fileBase64 }, invitees, irn: irn.slice(0, 255) };
 }
 export const isPdf = (bytes: Uint8Array) => bytes.length > 4 && String.fromCharCode(...bytes.slice(0, 4)) === "%PDF";

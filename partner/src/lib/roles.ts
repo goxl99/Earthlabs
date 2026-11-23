@@ -17,6 +17,7 @@ export const NAV: NavItem[] = [
   { href: "/partners/", module: "partners", label: "Partners", roles: ["super_admin", "sales", "accounts"], grp: "Partners", ic: "☷" },
   { href: "/territory/", module: "territory", label: "Territory", roles: ["super_admin", "sales"], grp: "Partners", ic: "◉" },
   { href: "/agreements/", module: "agreements", label: "Agreements", roles: ["super_admin", "sales", "accounts", "dealer", "distributor"], grp: "Partners", ic: "✍" },
+  { href: "/wallet/", label: "Document wallet", roles: ["super_admin", "sales", "accounts", "dealer", "distributor"], grp: "Partners", ic: "▤" },
   { href: "/notifications/", label: "Notifications", roles: ["super_admin", "sales", "accounts", "warehouse", "dealer", "distributor", "vendor"], grp: "Admin", ic: "✉" },
   { href: "/catalogue/", module: "catalogue", label: "Products & pricing", roles: ["super_admin", "sales", "accounts"], grp: "Commercial", ic: "◆" },
   { href: "/schemes/", module: "schemes", label: "Schemes", roles: ["super_admin", "sales"], grp: "Commercial", ic: "✱" },

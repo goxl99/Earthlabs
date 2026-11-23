@@ -148,10 +148,8 @@ export async function stockPage(el) {
     doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(...grey);
     [p.notes, "Please confirm price, availability and delivery date on receipt of this order.", "Quote this PO number on your delivery challan and invoice.", "Deliver to the address above unless told otherwise."].filter(Boolean)
       .forEach((x, i) => doc.splitTextToSize(`${i + 1}. ${x}`, W - 2 * M).forEach(t => { doc.text(t, M, y); y += 10; }));
-    y = Math.max(y + 20, 690);
-    doc.setDrawColor(...ln); doc.setLineWidth(0.6); doc.rect(W - M - 230, y, 230, 70);
-    doc.setFont("helvetica", "bold"); doc.setTextColor(...teal); doc.text("For " + nm, W - M - 222, y + 14);
-    doc.setFont("helvetica", "normal"); doc.setTextColor(...grey); doc.text("Authorised signatory", W - M - 222, y + 62);
+    y += 14; doc.setFont("helvetica", "italic"); doc.setFontSize(8); doc.setTextColor(...grey);
+    doc.text("This is a computer-generated document and does not require a signature.", M, y);
     doc.setFontSize(7); doc.setTextColor(150); doc.text(`${p.po_no}  |  Computer generated document`, M, 822);
     doc.save(p.po_no.replace(/[\\/]/g, "-") + ".pdf");
   };

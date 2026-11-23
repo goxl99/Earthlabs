@@ -75,6 +75,7 @@ export async function makePdf(kind, d, meta) {
     head: [["Bill to / Ship to", "Document details"]], headStyles: { fillColor: teal, textColor: 255 },
     body: [[
       { content: [b.name, b.address, b.gstin ? "GSTIN: " + b.gstin : "", `State: ${b.state || ""} (${b.state_code})`,
+        b.ship_to && b.ship_to !== b.address ? "Ship to: " + b.ship_to : "",
         b.contact ? "Contact: " + b.contact : "", b.phone ? "Phone: " + b.phone : ""].filter(Boolean).join("\n") },
       { content: right.map(r => r[0] + ": " + r[1]).join("\n") },
     ]],
@@ -129,7 +130,7 @@ export async function salesPage(el) {
   el.innerHTML = '<p class="muted">Loading…</p>';
   const [c1, c2, c3, c4, c5, c6] = await Promise.all([
     sb.from("customers").select("*").order("name"),
-    sb.from("sales_orders").select("*, customers(name)").order("created_at", { ascending: false }),
+    sb.from("sales_orders").select("*, customers(name, customer_type)").order("created_at", { ascending: false }),
     sb.from("v_sales_order_lines").select("*").order("line_no"),
     sb.from("proformas").select("id,pi_no,order_id,pi_date,data").order("created_at", { ascending: false }),
     sb.from("challans").select("id,dc_no,order_id,dc_date,vehicle,transporter,lr_no,status,data").order("created_at", { ascending: false }),
@@ -148,12 +149,14 @@ export async function salesPage(el) {
   const sv = $("#sv", el);
 
   // ----- customer form -----
-  const openCustomer = (c = {}) => modal(c.id ? "Edit customer" : "Add customer", `<form id="cf" class="form-grid">
+  const openCustomer = (c = {}, after = null, note = "") => modal(c.id ? "Edit customer" : "Add customer", `<form id="cf" class="form-grid">
     <label>Name<input name="name" required value="${esc(c.name || "")}"></label>
     <label>Type<select name="customer_type">${[["distributor", "Distributor"], ["dealer", "Dealer"], ["direct", "Direct customer"]].map(([v, t]) => `<option value="${v}" ${(c.customer_type || "direct") === v ? "selected" : ""}>${t}</option>`).join("")}</select></label>
     <label>GSTIN<input name="gstin" maxlength="15" value="${esc(c.gstin || "")}" placeholder="Optional for unregistered"></label>
     <label>State<select name="state"><option value="">Select…</option>${STATES.map(s => `<option ${c.state === s ? "selected" : ""}>${s}</option>`).join("")}</select></label>
-    <label class="full">Address<textarea name="address" rows="2">${esc(c.address || "")}</textarea></label>
+    ${note ? `<div class="notice full">${note}</div>` : ""}
+    <label class="full">Billing address<textarea name="address" rows="2">${esc(c.address || "")}</textarea></label>
+    <label class="full">Ship-to address (if different)<textarea name="ship_to_address" rows="2">${esc(c.ship_to_address || "")}</textarea></label>
     <label>Contact person<input name="contact_name" value="${esc(c.contact_name || "")}"></label>
     <label>Phone<input name="phone" value="${esc(c.phone || "")}"></label>
     <label class="full">Email<input name="email" type="email" value="${esc(c.email || "")}"></label>
@@ -166,18 +169,22 @@ export async function salesPage(el) {
         $("#cs", m).disabled = true;
         const r = await run(sb.rpc("save_customer", { p: { ...f, id: c.id || null } }), "Customer saved");
         $("#cs", m).disabled = false;
-        if (r) { close(); reload("customers"); }
+        if (r) {
+          close();
+          if (after) { customers.push({ id: r, name: f.name, customer_type: f.customer_type, gstin: f.gstin, state: f.state }); after(r); } else reload("customers");
+        }
       };
     },
   });
 
   // ----- new order -----
-  const openOrder = () => {
-    const lines = [{ description: "", qty: "", rate: "", gst_pct: 18 }];
+  const openOrder = (pre = {}) => {
+    const lines = pre.lines?.length ? pre.lines.map(l => ({ description: l.description || "", qty: l.qty ?? "", rate: l.rate ?? "", gst_pct: l.gst_pct ?? 18, hsn: l.hsn || "" })) : [{ description: "", qty: "", rate: "", gst_pct: 18 }];
     modal("New order", `<form id="of" class="form-grid">
-      <label>Customer<select name="customer_id" required><option value="">Select…</option>${customers.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join("")}</select></label>
-      <label>Customer PO / reference<input name="customer_po_no"></label>
-      <label>Order date<input type="date" name="order_date" value="${new Date().toISOString().slice(0, 10)}"></label>
+      ${pre.note ? `<div class="notice full">${pre.note}</div>` : ""}
+      <label>Customer<select name="customer_id" required><option value="">Select…</option>${customers.map(c => `<option value="${c.id}" ${c.id === pre.customer_id ? "selected" : ""}>${esc(c.name)}</option>`).join("")}</select></label>
+      <label>Customer PO / reference<input name="customer_po_no" value="${esc(pre.po || "")}"></label>
+      <label>Order date<input type="date" name="order_date" value="${esc(pre.date || new Date().toISOString().slice(0, 10))}"></label>
       <label class="row"><input type="checkbox" name="needs_proforma" checked> Proforma invoice needed first</label>
       <label class="full">Notes<input name="notes"></label>
       <div class="full" id="ol"></div>
@@ -203,8 +210,8 @@ export async function salesPage(el) {
           if (!ok.length || ok.length !== lines.length) return toast("Every item needs a description, quantity and rate", "err");
           $("#os", m).disabled = true;
           const r = await run(sb.rpc("create_sales_order", {
-            p_header: { customer_id: f.customer_id, customer_po_no: f.customer_po_no, order_date: f.order_date, notes: f.notes, needs_proforma: fd.has("needs_proforma") },
-            p_lines: ok.map(l => ({ description: l.description, qty: Number(l.qty), rate: Number(l.rate), gst_pct: Number(l.gst_pct) })),
+            p_header: { customer_id: f.customer_id, customer_po_no: f.customer_po_no, order_date: f.order_date, notes: f.notes, needs_proforma: fd.has("needs_proforma"), po_file_path: pre.file || null },
+            p_lines: ok.map(l => ({ description: l.description, hsn: l.hsn || null, qty: Number(l.qty), rate: Number(l.rate), gst_pct: Number(l.gst_pct) })),
           }), "Order saved");
           $("#os", m).disabled = false;
           if (r) { close(); reload("orders"); }
@@ -212,6 +219,53 @@ export async function salesPage(el) {
       },
     });
   };
+
+  // ----- new order from customer's purchase order -----
+  const compress = async file => {
+    if (!file.type.startsWith("image/")) return file;
+    try {
+      const bmp = await createImageBitmap(file), sc = Math.min(1, 2000 / Math.max(bmp.width, bmp.height));
+      const c = document.createElement("canvas"); c.width = Math.round(bmp.width * sc); c.height = Math.round(bmp.height * sc);
+      c.getContext("2d").drawImage(bmp, 0, 0, c.width, c.height);
+      const blob = await new Promise(r => c.toBlob(r, "image/jpeg", 0.85));
+      return blob ? new File([blob], file.name.replace(/\.\w+$/, "") + ".jpg", { type: "image/jpeg" }) : file;
+    } catch { return file; }
+  };
+  const openFromPO = () => modal("New order from purchase order", `<p class="muted">Upload the customer's purchase order (PDF or photo). The customer, PO number and items are read automatically for you to check.</p>
+    <div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn" id="ppick">Choose PDF / photo</button><button class="btn ghost" id="pcam">Take photo</button></div>
+    <input id="pf" type="file" accept="application/pdf,image/*" hidden><input id="pc" type="file" accept="image/*" capture="environment" hidden><p id="pst" class="muted small"></p>`, {
+    onMount: (m, close) => {
+      const status = t => { $("#pst", m).textContent = t; };
+      const onFile = async file => {
+        if (!file) return;
+        if (file.size > 25 * 1024 * 1024) return toast("File is too large (max 25 MB)", "err");
+        ["ppick", "pcam"].forEach(i => $("#" + i, m).disabled = true);
+        status("Uploading…");
+        const up = await compress(file), ext = (up.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "");
+        const path = `${new Date().getFullYear()}/${crypto.randomUUID()}.${ext}`;
+        const { error: ue } = await sb.storage.from("customer-pos").upload(path, up, { contentType: up.type || undefined });
+        const enable = () => ["ppick", "pcam"].forEach(i => $("#" + i, m).disabled = false);
+        if (ue) { status(""); enable(); return toast("Upload failed: " + ue.message, "err"); }
+        status("Reading the purchase order… about 10–20 seconds.");
+        const { data } = await sb.functions.invoke("read-po", { body: { path } });
+        const ex = data?.extracted;
+        if (!ex) {
+          status(""); enable();
+          return toast(data?.error === "not_configured" ? "Automatic reading isn't switched on yet. Use New order and type it in." : "Could not read it" + (data?.message ? ": " + data.message : ""), "err");
+        }
+        const g = (ex.gstin || "").toUpperCase().trim(), nm = (ex.buyer_name || "").toLowerCase().trim();
+        const hit = customers.find(c => g && (c.gstin || "").toUpperCase() === g) || customers.find(c => nm && c.name.toLowerCase().trim() === nm);
+        const pre = { po: ex.po_no || "", date: ex.po_date || "", file: path, lines: ex.lines || [], note: "Read from the purchase order. Please check every item, quantity and rate before saving." };
+        close();
+        if (hit) openOrder({ ...pre, customer_id: hit.id });
+        else openCustomer({ name: ex.buyer_name || "", gstin: ex.gstin || "", address: ex.address || "", ship_to_address: ex.ship_to_address || "", state: STATES.find(s => s.toLowerCase() === String(ex.state || "").toLowerCase()) || "",
+          contact_name: ex.contact_name || "", phone: ex.phone || "", email: ex.email || "", customer_type: "direct" },
+          id => openOrder({ ...pre, customer_id: id }), "This customer is new. Check the details, save, and the order opens next.");
+      };
+      $("#ppick", m).onclick = () => $("#pf", m).click(); $("#pcam", m).onclick = () => $("#pc", m).click();
+      $("#pf", m).onchange = e => onFile(e.target.files[0]); $("#pc", m).onchange = e => onFile(e.target.files[0]);
+    },
+  });
 
   // ----- challan -----
   const openChallan = async (o) => {
@@ -311,35 +365,36 @@ export async function salesPage(el) {
 
   // ----- tabs -----
   if (TAB === "orders") {
-    sv.innerHTML = `<div class="toolbar"><input id="q" type="search" placeholder="Search order, customer or reference…"><select id="st"><option value="">All status</option>${Object.entries(STATUS).map(([k, v]) => `<option value="${k}">${v}</option>`).join("")}</select>
-      <button class="btn" id="no">＋ New order</button><button class="btn ghost" id="fe">Fetch from EPDMS</button></div><div id="tb"></div>`;
+    sv.innerHTML = `<div class="toolbar"><input id="q" type="search" placeholder="Search order, customer or reference…"><select id="ch"><option value="">All customers</option><option value="channel">Distributors & dealers</option><option value="direct">Direct sales</option></select><select id="st"><option value="">All status</option>${Object.entries(STATUS).map(([k, v]) => `<option value="${k}">${v}</option>`).join("")}</select>
+      <button class="btn" id="no">＋ New order</button><button class="btn" id="npo">＋ From purchase order</button><button class="btn ghost" id="fe">Fetch from EPDMS</button></div><div id="tb"></div>`;
     const draw = () => {
-      const t = ($("#q").value || "").toLowerCase(), s = $("#st").value;
+      const t = ($("#q").value || "").toLowerCase(), s = $("#st").value, ch = $("#ch").value;
       $("#tb").innerHTML = table([
         { h: "Order", v: o => o.order_no }, { h: "Date", v: o => dfmt(o.order_date) }, { h: "Customer", v: o => o.customers?.name || "" },
         { h: "Source", v: o => o.source === "epdms" ? "EPDMS" : "Manual" }, { h: "Ref", v: o => o.customer_po_no || "–" },
         { h: "Value (incl. GST)", v: o => "₹" + INR(valueOf(o.id)) }, { h: "Status", v: o => STATUS[o.status] },
         { h: "Docs", v: o => [pis.some(p => p.order_id === o.id) ? "PI" : "", dcs.some(c => c.order_id === o.id) ? "DC" : "", invs.some(i => i.order_id === o.id) ? "INV" : ""].filter(Boolean).join(" · ") || "–" },
         { h: "", html: o => `<button class="btn ghost sm op" data-id="${o.id}">Open</button>` },
-      ], orders.filter(o => (!s || o.status === s) && (!t || (o.order_no + (o.customers?.name || "") + (o.customer_po_no || "")).toLowerCase().includes(t))), { empty: "No orders yet. Add one, or fetch from EPDMS." });
+      ], orders.filter(o => (!s || o.status === s) && (!ch || (ch === "direct") === (o.customers?.customer_type === "direct")) && (!t || (o.order_no + (o.customers?.name || "") + (o.customer_po_no || "")).toLowerCase().includes(t))), { empty: "No orders yet. Add one, or fetch from EPDMS." });
       $$(".op", sv).forEach(b => b.onclick = () => openDetail(orders.find(x => x.id === b.dataset.id)));
     };
-    draw(); $("#q").oninput = draw; $("#st").onchange = draw;
+    draw(); $("#q").oninput = draw; $("#st").onchange = draw; $("#ch").onchange = draw;
     $("#no").onclick = () => customers.length ? openOrder() : (toast("Add a customer first", "err"), openCustomer());
+    $("#npo").onclick = openFromPO;
     $("#fe").onclick = e => fetchEpdms(e.target);
   } else if (TAB === "customers") {
-    sv.innerHTML = `<div class="toolbar"><input id="q" type="search" placeholder="Search customer…"><button class="btn" id="nc">＋ Add customer</button></div><div id="tb"></div>`;
+    sv.innerHTML = `<div class="toolbar"><input id="q" type="search" placeholder="Search customer…"><select id="ch"><option value="">All customers</option><option value="channel">Distributors & dealers</option><option value="direct">Direct customers</option></select><button class="btn" id="nc">＋ Add customer</button></div><div id="tb"></div>`;
     const draw = () => {
-      const t = ($("#q").value || "").toLowerCase();
+      const t = ($("#q").value || "").toLowerCase(), ch = $("#ch").value;
       $("#tb").innerHTML = table([
         { h: "Name", v: c => c.name }, { h: "Type", v: c => ({ distributor: "Distributor", dealer: "Dealer", direct: "Direct" })[c.customer_type] || "" },
         { h: "GSTIN", v: c => c.gstin || "–" }, { h: "State", v: c => c.state || c.location || "–" }, { h: "Phone", v: c => c.phone || "–" },
         { h: "EPDMS", v: c => c.epdms_partner_id ? "✔ " + c.epdms_partner_id : "–" },
         { h: "", html: c => `<button class="btn ghost sm ec" data-id="${c.id}">Edit</button>` },
-      ], customers.filter(c => !t || c.name.toLowerCase().includes(t)), { empty: "No customers yet." });
+      ], customers.filter(c => (!t || c.name.toLowerCase().includes(t)) && (!ch || (ch === "direct") === (c.customer_type === "direct"))), { empty: "No customers yet." });
       $$(".ec", sv).forEach(b => b.onclick = () => openCustomer(customers.find(x => x.id === b.dataset.id)));
     };
-    draw(); $("#q").oninput = draw; $("#nc").onclick = () => openCustomer();
+    draw(); $("#q").oninput = draw; $("#ch").onchange = draw; $("#nc").onclick = () => openCustomer();
   } else if (TAB === "docs") {
     const rows = [
       ...invs.map(i => ({ t: "Tax invoice", no: i.invoice_no, date: i.invoice_date, o: i.order_id, amt: i.total, pdf: () => makePdf("invoice", i.data, { no: i.invoice_no, date: i.invoice_date }) })),

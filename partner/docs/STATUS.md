@@ -1,14 +1,14 @@
 # EPDMS progress status
 Updated at the end of every build session. Overall = modules done / 33.
 
-**Overall: 29 of 33 modules done (88%)** · last update: 21 Nov 2026, build 7 (Performance Matrix, promotion rules, growth ladder, credit score minimum, reports and exports). Earlier: build 6 (vendors, procurement, release orders, credit ladder, AI recommendations, approvals centre). Earlier: build 5 (invoices, credit notes, ledger, payment proof, audit viewer). Earlier: build 3 (public landing, MOU filling, certificate QR, catalogue and prices, schemes, orders with payment gate, inventory and dispatch). "Done" = built and database rules tested locally; screens are not yet click-tested against a live Supabase project (blocked, see below).
+**Overall: 32 of 33 modules done (97%)** · last update: 23 Nov 2026, build 9 (RFQs and quotes, purchase orders, vendor scorecard, My network, module switches, BOM planning, scoring inputs, WhatsApp hook, native Excel, accessibility pass). Earlier: build 7 (Performance Matrix, promotion rules, growth ladder, credit score minimum, reports and exports). Earlier: build 6 (vendors, procurement, release orders, credit ladder, AI recommendations, approvals centre). Earlier: build 5 (invoices, credit notes, ledger, payment proof, audit viewer). Earlier: build 3 (public landing, MOU filling, certificate QR, catalogue and prices, schemes, orders with payment gate, inventory and dispatch). "Done" = built and database rules tested locally; screens are not yet click-tested against a live Supabase project (blocked, see below).
 
 | # | Module | Day | Status |
 |---|---|---|---|
 | 1 | Database foundation, roles, audit trail, security tests | 1 | Done |
 | 2 | App shell, role navigation, CI | 1 | Done |
 | 3 | Partner IDs, territory rule, SKU access, hidden schemes (database rules) | 1 | Done |
-| 4 | Users & Access, registration-type switches | 2 | Done |
+| 4 | Users & Access, registration-type switches, module switches | 2 | Done (build 9: module switches) |
 | 5 | Public website: landing, registration wizard, tracking | 2 | Done |
 | 6 | Certificate verification (QR) | 2 | Done: public /verify page, database function, printable certificate with QR image |
 | 7 | Applications review and approval | 2 | Done |
@@ -24,17 +24,17 @@ Updated at the end of every build session. Overall = modules done / 33.
 | 17 | Inventory, dispatch, batch-system link | 3 | Done except live link: stock, reservations, logged adjustments, dispatch notes. `batch-qc` Edge Function written, needs BATCH_* secrets and a read-only view in the batch project |
 | 18 | Invoices, credit notes, ledger | 4 | Done: CGST/SGST inside Gujarat, IGST outside, amounts copied from the database-priced order, append-only ledger, credit notes capped at the invoice, manual payment entry |
 | 19 | Payment proof (UTR / advice) and Accounts confirmation | 4 | Done: partner reports UTR and uploads advice to own folder, duplicate UTR blocked everywhere, only Accounts confirms, order moves on only through the payment gate |
-| 20 | Vendor portal | 4 | Done: vendors master (Super Admin adds and approves), vendor sees own record and items, stock reports (Super Admin approves), release orders, payment gate. Left: quotes, purchase orders, vendor performance scoring |
-| 21 | Procurement, raw materials, release orders, lead times | 4 | Done: raw-material inventory with logged moves, lead time and reorder level (Super Admin only), release orders priced by the database, auto-approve limit and advance % set by Super Admin, e-mail to vendor queued, receive adds stock. Left: planning from a production plan (BOM) |
+| 20 | Vendor portal | 4 | Done: vendors master (Super Admin adds and approves), vendor sees own record and items, stock reports (Super Admin approves), release orders, payment gate. Build 9: RFQs and quotes (vendors see only their own), award by Super Admin creates the purchase order (a release order, same payment gate), vendor scorecard |
+| 21 | Procurement, raw materials, release orders, lead times | 4 | Done: raw-material inventory with logged moves, lead time and reorder level (Super Admin only), release orders priced by the database, auto-approve limit and advance % set by Super Admin, e-mail to vendor queued, receive adds stock. Build 9: bill of materials and production plan gives needed, shortfall, order-by date |
 | 22 | Credit ladder (pay-and-carry first) | 4 | Done: levels change only through Super Admin approval, one step at a time, nothing opens while pay-and-carry is on, vendor on credit ships without an advance |
 | 23 | Performance Matrix, growth ladder | 4 | Done: monthly score from 8 weighted parameters (Super Admin edits weights, must total 100), unverified kept out not zero, bands, direction, quarterly promotion assessments with gates and consecutive-quarter rule, Super Admin decides, Partner ID unchanged, territory conflict blocks, partner My performance and growth ladder |
 | 24 | AI Intelligence (Edge Function) | 4 | Done except live key: `ai-recommend` Edge Function (ANTHROPIC_API_KEY secret), facts are ids and numbers only, output validated against the facts, stored Pending, only Super Admin decides |
 | 25 | Approvals centre | 4 | Done: one queue (release orders, vendor stock reports, credit, AI, payments, orders, change requests) |
-| 26 | Reports and exports | 4 | Done: 19 reports, each limited to the roles that may see that module, date filters, 5,000-row cap, CSV (formula-safe) and print to PDF, every run audited. Left: native Excel/PDF files (CSV and browser print used) |
+| 26 | Reports and exports | 4 | Done: 19 reports, each limited to the roles that may see that module, date filters, 5,000-row cap, CSV (formula-safe) and print to PDF, every run audited. Build 9: native .xlsx export added; PDF is browser print |
 | 27 | Audit trail viewer | 4 | Done: Super Admin screen, filter by table and record, before/after view |
 | 28 | Security review and attack tests | 5 | Done in build 8: every table and role attacked in `build8_test.sql`; 3 real leaks fixed (migration 014) |
 | 29 | Load test (1,000 partners, 50,000 orders) | 5 | Done in build 8: all screens' queries under 40 ms after migration 015 |
-| 30 | Accessibility, mobile, browser journeys | 5 | Not started |
+| 30 | Accessibility, mobile, browser journeys | 5 | Partly done: accessibility and phone-layout fixes in build 9, public pages checked at 390 px in headless Chrome. Per-role browser journeys on the live project still need test users |
 | 31 | User guide, hand-over, backup drill | 5 | Guide, hand-over checklist and exact deploy steps written; backup restore drill needs Viraj (Pro plan) |
 | 33 | Architecture review and hardening (bootstrap, audit immutability, flood guard, storage rules, security headers, health probe) | 1 | Done |
 | 32 | Go-live: Supabase project, deploy, /partner redirect | 5 | Blocked: needs Supabase upgrade and Viraj's approval |
@@ -134,9 +134,15 @@ Updated at the end of every build session. Overall = modules done / 33.
 - Migrations through live name epdms_016 are applied. Repo migrations 014 (security hardening) and 015 (speed and policy split) are STILL NOT applied: the apply_migration call again waited for a confirmation nobody could give in an unattended run and timed out. Nothing changed live.
 - Advisors re-run (unchanged from build 8): security: 10 definer functions executable by the logged-out role (migration 014 fixes), RLS-no-policy on email_outbox and id_counters (intended), leaked-password protection off (dashboard setting), signed-in executable definer functions (by design). Performance: 6 unindexed foreign keys and 60 multiple-permissive-policy notes (migration 015 fixes), unused indexes (empty project).
 
+## Build 9 notes (23 Nov 2026)
+- Migration 016 (repo) applied to the live project as epdms_019 (live also has 017 = repo 014, 018 = repo 015). Migrations 014 and 015 applied live on 23 Nov; live advisors re-run: logged-out role runs only the 3 public functions; only "unused index" notes remain on performance.
+- Added: module switches (menus hide; RFQ, planning and network refuse in the database; older modules are hidden from menus only), My network (partners.parent_id, limited view, no GSTIN or terms), RFQs and quotes (vendors see only own quote), award to purchase order (release order, same payment gate), vendor scorecard (on-time 60, received 25, quote response 15, missing data left out), BOM and production plan, "Fill what the system can verify" for scoring (payment discipline from the ledger, repeat orders, network activity; targets, secondary sales, new customers, inventory and compliance stay unverified because no data source exists), WhatsApp outbox and `send-whatsapp` Edge Function (off by default), native .xlsx export, accessibility and phone layout.
+- Tests: `supabase/tests/build9_test.sql` (wired into run_local_tests.sh) and `partner/tests/build9.test.ts`. All database tests, typecheck, 63 unit tests and the static build pass.
+- Left: drawn Territory map (district list only), automatic scoring of targets and secondary sales, enforcing module switches inside the older modules' database functions, browser journeys per role (need test users), restore drill, secrets, deploy.
+
 ## What Viraj must do next
-1. Apply migrations 014 and 015 to the live project (run apply_migration in an interactive session and approve the prompt, or paste the two SQL files in the Supabase SQL editor, 014 first), then re-run the advisors. They are tested locally.
-2. Supabase dashboard: turn on leaked-password protection; set auth rate limits and CAPTCHA (HANDOVER.md).
+1. DONE 23 Nov: migrations 014, 015 and 016 are applied live and the advisors re-run.
+2. Leaked-password protection and password rules (10 characters, upper, lower, digit) are ON as of 23 Nov. Still to set in the Supabase dashboard: auth rate limits and CAPTCHA (HANDOVER.md).
 3. Set secrets: ANTHROPIC_API_KEY, RESEND_API_KEY, MAIL_FROM, CRON_SECRET, LEEGALITY_* (4), BATCH_* (see SECRETS_SETUP.md); deploy the Edge Functions.
 4. Create real test users per role and click-test each journey on the live project; tell me what looks wrong against the prototype.
 5. Decide whether vendor quotes, purchase orders and My network are needed on day one; they are the largest remaining feature gaps.

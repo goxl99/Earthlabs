@@ -27,6 +27,7 @@ Where: dashboard, **Edge Functions, Secrets** (or CLI: `supabase secrets set NAM
 | `ANTHROPIC_API_KEY` | console.anthropic.com, API keys, Create key (name it `epdms`; set a monthly spend limit) | `ai-recommend` |
 | `AI_MODEL` (optional) | model name from Anthropic docs | `ai-recommend` |
 | `RESEND_API_KEY` | resend.com, verify your sending domain, API Keys, Create (sending access only) | `send-emails` |
+| `WA_PHONE_ID`, `WA_TOKEN` (optional `WA_TEMPLATE`, `WA_TEMPLATE_LANG`) | Meta Business, WhatsApp Cloud API: phone number ID and a permanent token; outside the 24-hour window Meta only delivers an approved template with one body variable | `send-whatsapp` (only after Super Admin sets the `whatsapp` setting to enabled; schedule it like `send-emails`, with `CRON_SECRET`) |
 | `MAIL_FROM` | an address on the verified domain, e.g. `Name <partners@yourdomain>` | `send-emails` |
 | `CRON_SECRET` | make up a random 32+ character string (password manager generator) | `send-emails` |
 | `LEEGALITY_AUTH_TOKEN`, `LEEGALITY_PROFILE_ID`, `LEEGALITY_PRIVATE_SALT` | Leegality account, API / workflow settings | `esign-send`, `esign-webhook` |

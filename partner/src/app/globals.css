@@ -10,3 +10,25 @@ table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:10px;bor
 @media(max-width:900px){.shell{grid-template-columns:1fr}.side{display:flex;overflow:auto}}
 
 @media print { .side, .no-print, nav { display: none !important; } .main { margin: 0 !important; padding: 0 !important; } }
+
+/* accessibility and small screens (build 9) */
+.mini{font-size:12px;color:#566574}
+input[type=checkbox],input[type=radio]{width:auto;margin:0 6px 0 0;accent-color:var(--teal)}
+select,textarea{width:100%;padding:10px 12px;border:1.5px solid var(--line);border-radius:10px;font:inherit;margin:4px 0 12px;background:#fff;color:var(--slate)}
+td select,td input{margin:0}
+:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+.btn:focus-visible{outline-color:var(--slate)}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.btn{min-height:40px}
+.skip{position:absolute;left:-999px;top:0;background:var(--teal);color:#fff;padding:10px 16px;z-index:10;border-radius:0 0 10px 0}.skip:focus{left:0}
+.card{margin-bottom:16px}
+.tablewrap{overflow-x:auto}
+@media(max-width:900px){
+  .main{padding:16px 14px}
+  .side a{white-space:nowrap;flex:none}.brand{display:none}
+  .card{padding:12px;overflow-x:auto}
+  table{min-width:560px}
+  h1{font-size:26px}h2{font-size:20px}
+  .btn{padding:10px 14px}
+}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}

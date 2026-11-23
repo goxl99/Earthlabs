@@ -8,13 +8,14 @@ export type Profile = { id: string; role: Role; full_name: string; partner_id: s
 
 /** Signs the user in, loads their profile, and shows only the screens their role may open. */
 export default function Shell({ page, children }: { page: string; children: (p: Profile) => ReactNode }) {
-  const [p, setP] = useState<Profile | null | undefined>(undefined);
+  const [p, setP] = useState<Profile | null | undefined>(undefined); const [mods, setMods] = useState<Record<string, boolean>>({});
   useEffect(() => {
     if (!configured) { setP(null); return; }
     supabase.auth.getUser().then(async ({ data }) => {
       if (!data.user) { location.href = "./../"; return; }
       const { data: prof } = await supabase.from("profiles").select("id,role,full_name,partner_id,active").eq("id", data.user.id).single();
       setP((prof as Profile) ?? null);
+      const { data: m } = await supabase.rpc("my_modules"); if (m) setMods(m as Record<string, boolean>);
     });
   }, []);
   if (p === undefined) return <main className="main">Loading…</main>;
@@ -23,12 +24,13 @@ export default function Shell({ page, children }: { page: string; children: (p: 
   if (!p.active) return <main className="main"><h1>Waiting for approval</h1><div className="note">Your account is created. EarthLabs will activate it soon.</div></main>;
   return (
     <div className="shell">
+      <a className="skip" href="#content">Skip to content</a>
       <nav className="side" aria-label="Main">
         <div className="brand">EarthLabs</div>
-        {navFor(p.role).map((n) => <Link key={n.href} href={n.href} aria-current={n.href.includes(page) ? "page" : undefined}>{n.label}</Link>)}
+        {navFor(p.role, mods).map((n) => <Link key={n.href} href={n.href} aria-current={n.href.includes(page) ? "page" : undefined}>{n.label}</Link>)}
         <a href="#" onClick={async (e) => { e.preventDefault(); await supabase.auth.signOut(); location.href = "./../"; }}>Sign out</a>
       </nav>
-      <main className="main"><div style={{ marginBottom: 18, color: "#6b7a86" }}>{p.full_name || "Signed in"} · {ROLE_LABEL[p.role]}</div>{children(p)}</main>
+      <main className="main" id="content" tabIndex={-1}><div style={{ marginBottom: 18, color: "#566574" }}>{p.full_name || "Signed in"} · {ROLE_LABEL[p.role]}</div>{children(p)}</main>
     </div>
   );
 }

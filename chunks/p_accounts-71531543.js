@@ -9,6 +9,7 @@ const MODES = [["bank", "Bank transfer"], ["upi", "UPI"], ["cash", "Cash"], ["ch
 const MODE = Object.fromEntries(MODES);
 const PAYERS = ["Company", "Gaurang", "Viraj"];
 let TAB = "overview", SUB = "all";
+const UNITS = /^(kg|kgs|kilo|kilogram|kilograms|g|gm|gms|gram|grams|l|ltr|ltrs|lt|litre|litres|liter|liters|ml|millilitre|milliliter|pcs|pc|nos|no|piece|pieces|unit|units|each)$/i;
 const ASSET_TYPES = [["machinery", "Machinery", 10], ["drums_containers", "Drums & containers", 10], ["vehicle", "Vehicle", 15], ["furniture", "Furniture & fittings", 10], ["computer", "Computers & electronics", 30], ["tools", "Tools & equipment", 15], ["building", "Building / civil", 5], ["other", "Other", 0]];
 const ATYPE = Object.fromEntries(ASSET_TYPES.map(a => [a[0], a[1]])), ADEP = Object.fromEntries(ASSET_TYPES.map(a => [a[0], a[2]]));
 export const guessAsset = t => { const s = String(t || "").toLowerCase();
@@ -162,6 +163,51 @@ export async function accountsPage(el) {
     });
   };
 
+  // ---------- scanned purchase bill: add to stock + record the expense ----------
+  const openPurchaseBill = async (ex, path) => {
+    let mats = []; try { mats = await get(sb.from("raw_materials").select("id,name,unit,category").eq("active", true).order("name")); } catch {}
+    const norm = x => String(x || "").toLowerCase().replace(/[^a-z0-9]/g, ""), cat0 = ex.suggested_category === "packaging" ? "packaging" : "raw_material";
+    const poolOf = c => { const p = mats.filter(x => (x.category || "raw") === (c === "packaging" ? "packaging" : "raw")); return p.length ? p : mats; };
+    const find = (text, c) => { const k = norm(text); if (k.length < 2) return ""; const p = poolOf(c), e = p.filter(x => norm(x.name) === k); if (e.length === 1) return e[0].id;
+      const part = p.filter(x => { const n2 = norm(x.name); return n2.length >= 3 && (n2.includes(k) || k.includes(n2)); }); return part.length === 1 ? part[0].id : ""; };
+    const gst = Number(ex.gst_amount) || 0, raw = (ex.lines || []).map(l => ({ desc: l.description || "", qty: Number(l.qty) || "", unit: l.unit || "", amt: Number(l.amount) || 0 }));
+    const sumL = raw.reduce((t, l) => t + l.amt, 0), incl = ex.total > 0 && sumL > 0 && Math.abs(sumL - ex.total) / ex.total < 0.02;
+    const L = raw.map(l => ({ ...l, amount: Math.round((incl || !sumL ? l.amt : l.amt + gst * l.amt / sumL) * 100) / 100, item: find(l.desc, cat0) }));
+    modal("Purchase bill: add to stock", `<form id="pbf" class="form-grid"><div class="notice full">Read from the bill. Choose the stock item for each line. Saving adds the quantities to stock, sets the latest purchase rate, and records the expense.</div>
+      <label>Vendor<input name="vendor" value="${esc(ex.vendor || "")}"></label><label>Bill no.<input name="bill_no" value="${esc(ex.bill_no || "")}"></label>
+      <label>Bill date<input type="date" name="exp_date" value="${esc(ex.bill_date || today())}" required></label>
+      <label>Label<select name="category" id="pcat"><option value="raw_material" ${cat0 === "raw_material" ? "selected" : ""}>Raw material</option><option value="packaging" ${cat0 === "packaging" ? "selected" : ""}>Packaging</option></select></label>
+      <label>GST in this bill (₹)<input type="number" step="0.01" min="0" name="gst" value="${gst}"></label>
+      <label>Paid by<input name="paid_by" value="Company"></label>
+      <label>Payment mode<select name="payment_mode">${MODES.map(([v, t]) => `<option value="${v}" ${v === (ex.payment_mode || "bank") ? "selected" : ""}>${t}</option>`).join("")}</select></label>
+      <div class="full" id="pbl"></div><div class="full row end" style="gap:8px"><button type="button" class="btn ghost" id="pbx">Record as expense only</button><button class="btn" id="pbs">Add to stock and record</button></div></form>`, {
+      wide: true,
+      onMount: (m, close) => {
+        const draw = () => {
+          $("#pbl", m).innerHTML = `<table class="tbl edit"><thead><tr><th>On the bill</th><th>Stock item</th><th>Qty</th><th>Unit</th><th>Amount incl. GST (₹)</th><th></th></tr></thead><tbody>${L.map((l, i) => `<tr data-i="${i}"><td>${esc(l.desc)}</td>
+            <td><select data-f="item"><option value="">Choose…</option>${poolOf($("#pcat", m).value).map(x => `<option value="${x.id}" ${l.item === x.id ? "selected" : ""}>${esc(x.name)} (${esc(x.unit)})</option>`).join("")}</select></td>
+            <td><input data-f="qty" type="number" step="any" value="${l.qty}" style="width:90px"></td><td><input data-f="unit" value="${esc(l.unit)}" style="width:60px" placeholder="unit"></td>
+            <td><input data-f="amount" type="number" step="0.01" value="${l.amount}" style="width:110px"></td><td><button type="button" class="btn ghost sm del">✕</button></td></tr>`).join("")}</tbody></table>`;
+          const ok = L.length && L.every(l => l.item && Number(l.qty) > 0 && Number(l.amount) > 0); $("#pbs", m).disabled = !ok;
+        };
+        draw();
+        $("#pcat", m).onchange = () => { L.forEach(l => { l.item = find(l.desc, $("#pcat", m).value); }); draw(); };
+        $("#pbl", m).addEventListener("change", e => { const tr = e.target.closest("tr[data-i]"); if (!tr) return; const l = L[tr.dataset.i]; l[e.target.dataset.f] = e.target.value; draw(); });
+        $("#pbl", m).addEventListener("click", e => { const d = e.target.closest(".del"); if (!d) return; L.splice(d.closest("tr").dataset.i, 1); draw(); });
+        $("#pbx", m).onclick = () => { close(); openExpense({ exp_date: ex.bill_date || today(), vendor: ex.vendor || "", description: ex.description || "", category: $("#pcat", m).value, amount: ex.total ?? "", gst_amount: gst, payment_mode: ex.payment_mode || "bank", file_path: path, source: "scan" }); };
+        $("#pbf", m).onsubmit = async e => {
+          e.preventDefault(); const f = Object.fromEntries(new FormData(e.target)), tot = L.reduce((t, l) => t + Number(l.amount), 0), g = Number(f.gst) || 0;
+          const rows = L.map(l => { const mt = mats.find(x => x.id === l.item), share = tot ? g * Number(l.amount) / tot : 0;
+            return { exp_date: f.exp_date, vendor: f.vendor, bill_no: f.bill_no, description: l.desc, category: f.category, raw_material_id: l.item, qty: Number(l.qty), unit: UNITS.test(l.unit || "") ? l.unit : mt.unit, amount: Number(l.amount), gst_amount: Math.round(share * 100) / 100, paid_by: f.paid_by || "Company", payment_mode: f.payment_mode, file_path: path, source: "scan" }; });
+          $("#pbs", m).disabled = true;
+          const r = await run(sb.rpc("bulk_import_purchases", { p_rows: rows }), null);
+          if (r && !(r.failed || []).length) { toast(`Added ${r.stock_lines ?? rows.length} items to stock and recorded the expense`); close(); reload(); }
+          else if (r) { toast("Not saved: " + r.failed.map(x => x.error).join("; "), "err"); $("#pbs", m).disabled = false; } else $("#pbs", m).disabled = false;
+        };
+      },
+    });
+  };
+
   // ---------- scan a bill ----------
   const openScan = () => modal("Scan a bill or receipt", `<p class="muted">Take a photo or upload a PDF of any expense bill or purchase invoice. The details are read automatically. You then choose the label (raw material, packaging, marketing, transport…) and save.</p>
     <div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn" id="spick">Choose photo / PDF</button><button class="btn ghost" id="scam">Take photo</button></div>
@@ -185,6 +231,7 @@ export async function accountsPage(el) {
           return openExpense({ file_path: path, source: "scan" }, { note: "The photo is attached. Type the details." });
         }
         close();
+        if (["raw_material", "packaging"].includes(ex.suggested_category) && (ex.lines || []).length) return openPurchaseBill(ex, path);
         openExpense({ exp_date: ex.bill_date || today(), vendor: ex.vendor || "", description: [ex.description, ex.bill_no ? "Bill " + ex.bill_no : ""].filter(Boolean).join(" · "), category: ex.suggested_category || "other",
           amount: ex.total ?? "", gst_amount: ex.gst_amount ?? 0, payment_mode: ex.payment_mode || "bank", file_path: path, source: "scan" },
           { note: "Read from the bill. Check the amount, then choose the correct label and who paid before saving." });
@@ -195,7 +242,8 @@ export async function accountsPage(el) {
   });
 
   // ---------- bulk excel (expenses + stock purchases) ----------
-  const UNITS = /^(kg|kgs|kilo|kilogram|kilograms|g|gm|gms|gram|grams|l|ltr|ltrs|lt|litre|litres|liter|liters|ml|millilitre|milliliter|pcs|pc|nos|no|piece|pieces|unit|units|each)$/i;
+  // (units pattern is declared at module level)
+  const UNITS_ = /^(kg|kgs|kilo|kilogram|kilograms|g|gm|gms|gram|grams|l|ltr|ltrs|lt|litre|litres|liter|liters|ml|millilitre|milliliter|pcs|pc|nos|no|piece|pieces|unit|units|each)$/i;
   const STOCK = { raw_material: "raw", packaging: "packaging" };
   const openBulkExpenses = (preset = "auto") => modal("Upload from Excel", `<p class="muted">Upload any Excel or CSV list of bills or spends. Date, amount, vendor and item are found automatically, even if the headings differ. Optional columns: Category, Bill no, Qty, Unit, Rate, GST, Paid by, Mode, Notes.</p>
     <label>This file is<select id="kind"><option value="auto">Work it out from each row (Category column)</option>${CATS.map(([k, t]) => `<option value="${k}" ${k === preset ? "selected" : ""}>${k === "other" ? "Other expense" : t}</option>`).join("")}</select></label>

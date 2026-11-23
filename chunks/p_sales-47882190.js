@@ -137,20 +137,16 @@ export async function makePdf(kind, d, meta) {
   doc.setFont("helvetica", "normal"); doc.setFontSize(7.6); doc.setTextColor(...grey);
   terms.forEach((x, i) => doc.splitTextToSize(`${i + 1}. ${x}`, W - 2 * M).forEach(r => { doc.text(r, M, y); y += 9.5; }));
 
-  // ---- signatures ----
-  y = ensure(Math.max(y + 14, 690), 90);
-  doc.setDrawColor(...line); doc.setLineWidth(0.6);
-  doc.rect(M, y, 230, 70); doc.rect(W - M - 230, y, 230, 70);
-  doc.setFont("helvetica", "normal"); doc.setFontSize(8); doc.setTextColor(...grey);
-  doc.text(kind === "challan" ? "Received by (name, sign & stamp)" : "Customer acknowledgement", M + 8, y + 62);
-  doc.setFont("helvetica", "bold"); doc.setTextColor(...teal); doc.text("For " + (d.seller.name || ""), W - M - 222, y + 14);
-  doc.setFont("helvetica", "normal"); doc.setTextColor(...grey); doc.text("Authorised signatory", W - M - 222, y + 62);
+  // ---- computer-generated note (no signature needed) ----
+  y = ensure(y + 14, 30);
+  doc.setFont("helvetica", "italic"); doc.setFontSize(8); doc.setTextColor(...grey);
+  doc.text("This is a computer-generated document and does not require a signature.", M, y);
 
   // ---- footer on every page ----
   const n = doc.getNumberOfPages();
   for (let i = 1; i <= n; i++) {
     doc.setPage(i); doc.setFontSize(7); doc.setTextColor(150);
-    doc.text(`${meta.no}  |  Computer generated document`, M, H - 20);
+    doc.text(`${meta.no}  |  Computer generated document, no signature required`, M, H - 20);
     doc.text(`Page ${i} of ${n}`, W - M, H - 20, { align: "right" });
   }
   doc.save(meta.no.replace(/[\\/]/g, "-") + ".pdf");

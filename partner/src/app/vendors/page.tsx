@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import Shell from "@/components/Shell";
+import { callFn } from "@/lib/fn";
 import { supabase } from "@/lib/supabase";
 import { Msg, when } from "@/components/ui";
 import type { Role } from "@/lib/roles";
@@ -17,7 +18,11 @@ function Inner({ role }: { role: Role }) {
     setReps(((await supabase.from("vendor_stock_reports").select("id,vendor_id,status,created_at").order("created_at", { ascending: false }).limit(20)).data as Rep[]) ?? []);
   }, []);
   useEffect(() => { load(); }, [load]);
-  async function call(fn: string, args: Record<string, unknown>) { const { error } = await supabase.rpc(fn, args); setMsg({ ok: !error, t: error ? error.message : "Done" }); load(); }
+  async function call(fn: string, args: Record<string, unknown>) {
+    const { error } = await supabase.rpc(fn, args); let t = error ? error.message : "Done";
+    if (!error && fn === "set_vendor_status" && args.st === "Active") { const r = await callFn("provision-login", { vendor_id: args.vid }); t = r.ok ? (r.data?.created === false ? String(r.data?.note ?? "Vendor activated.") : "Vendor activated. Login ID and password e-mailed.") : "Activated, but the login could not be created: " + r.error; }
+    setMsg({ ok: !error, t }); load();
+  }
   return (<><h1>Vendors</h1><p>Suppliers have their own identity and portal, kept apart from sales-channel partners. Only Super Admin adds or approves a vendor.</p>
     {msg && <Msg kind={msg.ok ? "ok" : "bad"}>{msg.t}</Msg>}
     <div className="card"><table><thead><tr><th>ID</th><th>Name</th><th>Supplies</th><th>District</th><th>Status</th><th>Credit level</th><th></th></tr></thead><tbody>

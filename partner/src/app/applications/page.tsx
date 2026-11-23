@@ -1,6 +1,7 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import Shell from "@/components/Shell";
+import { callFn } from "@/lib/fn";
 import { supabase } from "@/lib/supabase";
 import { Msg, when } from "@/components/ui";
 
@@ -19,7 +20,10 @@ function Inner({ canApprove }: { canApprove: boolean }) {
   }
   async function approve(a: App) {
     const { data, error } = await supabase.rpc("approve_application", { app: a.id });
-    setMsg(error ? error.message : `${a.business_name} approved. Partner ID ${data} issued for life.`); load();
+    if (error) { setMsg(error.message); load(); return; }
+    const r = await callFn("provision-login", { partner_id: data });
+    setMsg(`${a.business_name} approved. Partner ID ${data} issued for life. ` + (r.ok ? (r.data?.created === false ? String(r.data?.note ?? "") : r.data?.emailed ? "Login ID and password e-mailed to the partner." : "Login created, but the e-mail could not be sent. Ask the partner to use Forgot password.") : "Approved, but the login could not be created: " + r.error));
+    load();
   }
   return (<>
     <h1>Applications</h1>

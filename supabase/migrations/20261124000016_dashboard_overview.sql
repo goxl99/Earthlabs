@@ -50,7 +50,7 @@ begin
     'active_ins', (select count(*) from act where type_code = 'INS'),
     'vendors_active', (select count(*) from public.vendors where status = 'Active'),
     'vendors_pending', (select count(*) from public.vendors where status <> 'Active'),
-    'pending_apps', (select count(*) from public.applications where status in ('Submitted','Field verification') and (p_cat is null or type_code = p_cat)),
+    'pending_apps', (select count(*) from public.applications where status in ('Submitted','Documents submitted','Field verification') and (p_cat is null or type_code = p_cat)),
     'pending_orders_approval', (select count(*) from public.orders o where o.status = 'Pending Approval' and exists (select 1 from ps where ps.id = o.partner_id)),
     'pending_agreements', (select count(*) from public.agreements a where a.status in ('Draft','Sent') and exists (select 1 from ps where ps.id = a.partner_id)),
     'proofs_to_verify', (select count(*) from public.payment_proofs x where x.status = 'Submitted' and exists (select 1 from ps where ps.id = x.partner_id)),
@@ -112,7 +112,7 @@ declare r public.app_role := public.my_role();
 begin
   if not public.is_staff() then return '{}'::jsonb; end if;
   return jsonb_strip_nulls(jsonb_build_object(
-    'apps',   case when r in ('super_admin','sales') then (select count(*) from public.applications where status in ('Submitted','Field verification')) end,
+    'apps',   case when r in ('super_admin','sales') then (select count(*) from public.applications where status in ('Submitted','Documents submitted','Field verification')) end,
     'agree',  case when r in ('super_admin','sales','accounts') then (select count(*) from public.agreements where status in ('Draft','Sent')) end,
     'orders', (select count(*) from public.orders where status = case when r = 'warehouse' then 'Payment Confirmed' when r = 'accounts' then 'Approved' else 'Pending Approval' end),
     'fin',    case when r in ('super_admin','accounts') then (select count(*) from public.payment_proofs where status = 'Submitted') end,

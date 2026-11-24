@@ -4,6 +4,7 @@ import { supabase } from "@/lib/supabase";
 import { callFn } from "@/lib/fn";
 import { Field, Msg, when } from "@/components/ui";
 import PublicShell from "@/components/PublicShell";
+import { askForm, askConfirm, askReason } from "@/lib/dialog";
 
 type Row = { status: string; business_name: string; type_code: string; reason: string | null; partner_id: string | null; created_at: string; ref_no?: string };
 type Doc = { kind: string; file_name: string; status: "Uploaded" | "Accepted" | "Rejected"; note: string | null; uploaded_at: string; not_applicable?: boolean };
@@ -41,7 +42,7 @@ export default function Track() {
     setBusy(""); setNote(c.ok ? { ok: true, t: `${kind}: uploaded` } : { ok: false, t: c.error ?? "Upload failed" }); await loadDocs();
   }
   async function na(kind: string) {
-    const reason = prompt(`Why does "${kind}" not apply to you? (for example: new business, no separate premises)`) ?? ""; if (reason.trim().length < 3) return;
+    const reason = (await askReason(`"${kind}" does not apply to me`, "Why does it not apply to you? (for example: new business, no separate premises)", "Submit")) ?? ""; if (reason.trim().length < 3) return;
     setBusy(kind); const r = await callFn("application-docs", { action: "na", ref: ref.trim(), email: mail, kind, reason: reason.trim() }); setBusy("");
     setNote({ ok: r.ok, t: r.ok ? `${kind}: marked not applicable. Our team will review your reason.` : (r.error ?? "Failed") }); loadDocs();
   }

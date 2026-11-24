@@ -4,6 +4,7 @@ import { supabase } from "@/lib/supabase";
 import { callFn } from "@/lib/fn";
 import { Msg, when } from "@/components/ui";
 import { safeName } from "@/lib/mou";
+import { askForm, askConfirm, askReason } from "@/lib/dialog";
 
 type D = { id: string; kind: string; file_path: string | null; file_name: string | null; status: "Uploaded" | "Accepted" | "Rejected"; note: string | null; uploaded_at: string; not_applicable: boolean; is_current: boolean };
 type WD = { id: string; application_id: string; email: string; kind: string; file_name: string; file_path: string | null; status: string; not_applicable: boolean; uploaded_at: string; is_current: boolean };
@@ -14,7 +15,7 @@ export function DocsReview({ appId, canAct, email }: { appId: string; canAct: bo
   useEffect(() => { load(); }, [load]);
   async function view(d: { file_path: string | null }) { if (!d.file_path) return; const { data, error } = await supabase.storage.from("application-docs").createSignedUrl(d.file_path, 120); if (error || !data) return setMsg(error?.message ?? "Could not open"); window.open(data.signedUrl, "_blank"); }
   async function review(d: D, st: "Accepted" | "Rejected") {
-    const note = st === "Rejected" ? prompt("What is wrong with this document? (the applicant will see this)") ?? "" : "";
+    const note = st === "Rejected" ? (await askReason("Reject document", "What is wrong with this document? (the applicant will see this)", "Reject", true)) ?? "" : "";
     if (st === "Rejected" && !note.trim()) return;
     const { error } = await supabase.rpc("review_document", { doc: d.id, st, note }); setMsg(error ? error.message : `${d.kind}: ${st}`); load();
   }

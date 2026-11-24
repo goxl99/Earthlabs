@@ -9,7 +9,7 @@ type N = { id: number; title: string; body: string | null; link: string | null; 
 type Rule = { key: string; label: string; audience: string; email: boolean; in_app: boolean; whatsapp: boolean; enabled: boolean };
 type Log = { at: string; to_email: string; subject: string; status: string };
 function Rules({ canEdit }: { canEdit: boolean }) {
-  const [rules, setRules] = useState<Rule[]>([]); const [log, setLog] = useState<Log[]>([]); const [msg, setMsg] = useState("");
+  const [rules, setRules] = useState<Rule[]>([]); const [log, setLog] = useState<Log[]>([]); const [msg, setMsg] = useState(""); const [tab, setTab] = useState("triggers");
   const load = () => { supabase.from("notification_rules").select("*").order("label").then(({ data }) => setRules((data as Rule[]) ?? [])); supabase.rpc("recent_mail_log").then(({ data }) => setLog((data as Log[]) ?? [])); };
   useEffect(load, []);
   async function flip(r: Rule, f: "email" | "in_app" | "whatsapp" | "enabled") {
@@ -18,11 +18,13 @@ function Rules({ canEdit }: { canEdit: boolean }) {
   }
   const box = (r: Rule, f: "email" | "in_app" | "whatsapp" | "enabled") => <input type="checkbox" checked={r[f]} disabled={!canEdit} onChange={() => flip(r, f)} aria-label={r.label + " " + f} />;
   return (<>
-    <h2 style={{ marginTop: 24 }}>Automation rules</h2><p className="sub">Each event below is sent to the partner automatically. Switch a channel on or off, or turn the whole event off.{!canEdit && " Only Super Admin can change these."} WhatsApp only goes out once WhatsApp is connected.</p>
+    <div className="tabs" role="tablist">{[["triggers", "Triggers & templates"], ["sent", `Sent log (${log.length})`]].map(([k, n]) => <button key={k} role="tab" aria-selected={tab === k} className="tabbtn" onClick={() => setTab(k)}>{n}</button>)}</div>
+    {tab === "triggers" && <><h2 style={{ marginTop: 24 }}>Automation rules</h2><p className="sub">Each event below is sent to the partner automatically. Switch a channel on or off, or turn the whole event off.{!canEdit && " Only Super Admin can change these."} WhatsApp only goes out once WhatsApp is connected.</p>
     {msg && <Msg kind="bad">{msg}</Msg>}
     <div className="card"><table><thead><tr><th>Event</th><th>To</th><th>E-mail</th><th>In-app</th><th>WhatsApp</th><th>On</th></tr></thead><tbody>{rules.map((r) => <tr key={r.key}><td>{r.label}</td><td>{r.audience}</td><td>{box(r, "email")}</td><td>{box(r, "in_app")}</td><td>{box(r, "whatsapp")}</td><td>{box(r, "enabled")}</td></tr>)}</tbody></table></div>
-    <h2 style={{ marginTop: 24 }}>Recent e-mails</h2>
-    <div className="card"><table><thead><tr><th>When</th><th>To</th><th>Subject</th><th>Status</th></tr></thead><tbody>{log.map((l, i) => <tr key={i}><td>{when(l.at)}</td><td>{l.to_email}</td><td>{l.subject}</td><td>{l.status}</td></tr>)}{log.length === 0 && <tr><td colSpan={4}>Nothing sent yet.</td></tr>}</tbody></table></div></>);
+    </>}
+    {tab === "sent" && <><h2 style={{ marginTop: 24 }}>Sent log</h2>
+    <div className="card"><table><thead><tr><th>When</th><th>To</th><th>Subject</th><th>Status</th></tr></thead><tbody>{log.map((l, i) => <tr key={i}><td>{when(l.at)}</td><td>{l.to_email}</td><td>{l.subject}</td><td>{l.status}</td></tr>)}{log.length === 0 && <tr><td colSpan={4}>Nothing sent yet.</td></tr>}</tbody></table></div></>}</>);
 }
 function Inner({ role }: { role: Role }) {
   const [rows, setRows] = useState<N[]>([]); const [err, setErr] = useState("");

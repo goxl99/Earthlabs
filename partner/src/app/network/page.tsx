@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { Msg } from "@/components/ui";
 import { inr } from "@/lib/orders";
 import type { Role } from "@/lib/roles";
+import { askForm, askConfirm, askReason } from "@/lib/dialog";
 
 type N = { id: string; name: string; type_code: string; district: string; status: string; orders_90d: number; billed_90d: number; last_score: number | null };
 type P = { id: string; name: string; type_code: string; district: string; parent_id: string | null };
@@ -31,7 +32,7 @@ function Staff() {
     <div className="card"><label>Search<input value={q} onChange={(e) => setQ(e.target.value)} placeholder="name, ID or district" /></label>
       <table><thead><tr><th>Partner</th><th>Type</th><th>District</th><th>Linked to</th><th></th></tr></thead><tbody>
         {shown.map((p) => <tr key={p.id}><td><b>{p.name}</b><div className="mini">{p.id}</div></td><td>{p.type_code}</td><td>{p.district}</td><td>{name(p.parent_id)}</td>
-          <td><button className="btn" onClick={() => { const v = prompt("Partner ID of the distributor / stockist to link to (leave blank to remove the link)", p.parent_id ?? ""); if (v !== null) link(p.id, v.trim() || null); }}>Change link</button></td></tr>)}
+          <td><button className="btn" onClick={async () => { const f = await askForm("Change link", [{ name: "pid", label: "Partner ID of the distributor / stockist to link to", value: p.parent_id ?? "", hint: "Leave blank to remove the link" }], { ok: "Save link" }); if (f) link(p.id, f.pid.trim() || null); }}>Change link</button></td></tr>)}
         {shown.length === 0 && <tr><td colSpan={5}>No active partners.</td></tr>}</tbody></table></div></>);
 }
 export default function Page() { return <Shell page="network">{(p) => ((["super_admin", "sales"] as Role[]).includes(p.role) ? <Staff /> : <Own />)}</Shell>; }

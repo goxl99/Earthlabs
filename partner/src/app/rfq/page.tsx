@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { Msg, when } from "@/components/ui";
 import { inr } from "@/lib/orders";
 import type { Role } from "@/lib/roles";
+import { askForm, askConfirm, askReason } from "@/lib/dialog";
 
 type Rfq = { id: string; rm_id: string; qty: number; needed_by: string | null; note: string | null; status: string; created_at: string };
 type Quote = { id: number; rfq_id: string; vendor_id: string; rate: number; lead_days: number; valid_until: string | null; status: string };
@@ -40,7 +41,7 @@ function Inner({ role }: { role: Role }) {
       <p style={{ marginTop: 0 }}><b>{r.id}</b> · {r.rm_id} · {r.qty} {r.needed_by ? `· needed by ${when(r.needed_by)}` : ""} · <b>{r.status}</b> {wh && r.status === "Open" && <button className="btn" style={{ marginLeft: 8 }} onClick={() => call("close_rfq", { rid: r.id })}>Close without awarding</button>}</p>
       <table><thead><tr><th>Vendor</th><th>Rate</th><th>Value</th><th>Lead</th><th>Valid until</th><th>Status</th><th></th></tr></thead><tbody>
         {rq.map((q) => <tr key={q.id}><td>{q.vendor_id}</td><td>{inr(q.rate)}{Number(q.rate) === lowest(r.id) && rq.length > 1 ? " ✓ lowest" : ""}</td><td>{inr(Number(q.rate) * Number(r.qty))}</td><td>{q.lead_days} d</td><td>{when(q.valid_until)}</td><td>{q.status}</td>
-          <td>{boss && r.status === "Open" && <button className="btn" onClick={() => { if (confirm(`Award ${r.qty} of ${r.rm_id} to ${q.vendor_id} at ${inr(q.rate)}?`)) call("award_quote", { qid: q.id }); }}>Award</button>}</td></tr>)}
+          <td>{boss && r.status === "Open" && <button className="btn" onClick={async () => { if (await askConfirm("Award this quote?", `Award ${r.qty} of ${r.rm_id} to ${q.vendor_id} at ${inr(q.rate)}?`, "Award")) call("award_quote", { qid: q.id }); }}>Award</button>}</td></tr>)}
         {rq.length === 0 && <tr><td colSpan={7}>No quotes yet.</td></tr>}</tbody></table>
       {!boss && r.status === "Open" && rq.length > 0 && <p className="mini">Only Super Admin awards a quote.</p>}</div>); })}
     {rfqs.length === 0 && <div className="card">No RFQs yet.</div>}

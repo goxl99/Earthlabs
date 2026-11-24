@@ -6,6 +6,7 @@ import { Msg, when } from "@/components/ui";
 import { safeName } from "@/lib/mou";
 import { MOU_FIELDS, buildMou, defaultValues, missingLabels, type Values } from "@/lib/mouDealer";
 import { loadLogo, mouToPdf } from "@/lib/mouPdf";
+import { askForm, askConfirm, askReason } from "@/lib/dialog";
 
 type Ag = { id: string; status: string; signed_at: string | null; mou_body: string | null; mou_fields: Values | null; mou_pdf_path: string | null; approved_at: string | null };
 type P = { id: string; name: string; contact_name: string; district: string; gstin: string | null; address: string | null; status: string; type_code: string };
@@ -48,7 +49,7 @@ export function MouBuilder({ partnerId, canAct, onActivated }: { partnerId: stri
     say("PDF ready. Print it for manual signing, or send it through Leegality."); load();
   }
   async function send() {
-    if (!ag) return; if (built.missing.length && !confirm(`These fields are still blank: ${missingLabels(built.missing).join(", ")}. Send anyway?`)) return;
+    if (!ag) return; if (built.missing.length && !(await askConfirm("Send with blank fields?", `These fields are still blank: ${missingLabels(built.missing).join(", ")}. Send anyway?`, "Send anyway"))) return;
     const path = await makePdf(); if (!path) return;
     say("Sending to Leegality…"); setBusy(true);
     const r = await callFn("esign-send", { agreement_id: ag.id, pdf_path: path }); setBusy(false);
@@ -60,7 +61,7 @@ export function MouBuilder({ partnerId, canAct, onActivated }: { partnerId: stri
     const { error } = await supabase.rpc("record_signed_agreement", { aid: ag.id, path }); say(error ? error.message : "Signed copy stored. Now approve it below.", !!error); load();
   }
   async function activate() {
-    if (!confirm("Approve the signed MOU? The partner becomes Active, the certificate is issued, and the login ID and password are e-mailed.")) return;
+    if (!(await askConfirm("Approve the signed MOU?", "The partner becomes Active, the certificate is issued, and the login ID and password are e-mailed.", "Approve"))) return;
     const { error } = await supabase.rpc("activate_partner", { pid: partnerId }); if (error) return say(error.message, true);
     const r = await callFn("provision-login", { partner_id: partnerId });
     say(r.ok ? "Approved. Certificate issued; login ID and password e-mailed to the partner." : "Approved and certificate issued, but the login could not be created: " + r.error, !r.ok); load(); onActivated();

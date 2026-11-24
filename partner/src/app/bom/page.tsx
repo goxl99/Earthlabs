@@ -4,6 +4,7 @@ import Shell from "@/components/Shell";
 import { supabase } from "@/lib/supabase";
 import { Msg } from "@/components/ui";
 import type { Role } from "@/lib/roles";
+import { askForm, askConfirm, askReason } from "@/lib/dialog";
 
 type B = { sku: string; rm_id: string; qty_per_unit: number };
 type S = { sku: string; name: string };
@@ -38,8 +39,8 @@ function Inner({ role }: { role: Role }) {
         {plan.length === 0 && <tr><td colSpan={7}>Nothing needed.</td></tr>}</tbody></table>}</div>
     <h2>Bill of materials</h2>
     <div className="card"><table><thead><tr><th>Product</th><th>Material</th><th>Per unit</th><th></th></tr></thead><tbody>
-      {bom.map((b) => <tr key={b.sku + b.rm_id}><td>{b.sku}</td><td>{b.rm_id}</td><td>{b.qty_per_unit}</td><td>{wh && <button className="btn" onClick={() => { const v = prompt("Quantity per unit (0 removes the line)", String(b.qty_per_unit)); if (v != null) edit(b.sku, b.rm_id, Number(v)); }}>Change</button>}</td></tr>)}
+      {bom.map((b) => <tr key={b.sku + b.rm_id}><td>{b.sku}</td><td>{b.rm_id}</td><td>{b.qty_per_unit}</td><td>{wh && <button className="btn" onClick={async () => { const f = await askForm(`${b.sku} · ${b.rm_id}`, [{ name: "q", label: "Quantity per unit (0 removes the line)", type: "number", required: true, min: 0, value: b.qty_per_unit }], { ok: "Save" }); if (f) edit(b.sku, b.rm_id, Number(f.q)); }}>Change</button>}</td></tr>)}
       {bom.length === 0 && <tr><td colSpan={4}>Empty.</td></tr>}</tbody></table>
-      {wh && <button className="btn" style={{ marginTop: 8 }} onClick={() => { const s = prompt("Product SKU"); const rm = s && prompt("Raw material code"); const q = rm && prompt("Quantity of the material per unit sold"); if (s && rm && q) edit(s, rm, Number(q)); }}>Add a line</button>}</div></>);
+      {wh && <button className="btn" style={{ marginTop: 8 }} onClick={async () => { const f = await askForm("Add a BOM line", [{ name: "s", label: "Product SKU", required: true }, { name: "rm", label: "Raw material code", required: true }, { name: "q", label: "Quantity of the material per unit sold", type: "number", required: true, min: 0 }], { ok: "Add line" }); if (f) edit(f.s.trim(), f.rm.trim(), Number(f.q)); }}>Add a line</button>}</div></>);
 }
 export default function Page() { return <Shell page="bom">{(p) => <Inner role={p.role} />}</Shell>; }

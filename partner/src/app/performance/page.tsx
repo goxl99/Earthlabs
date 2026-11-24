@@ -6,6 +6,7 @@ import { Msg, when } from "@/components/ui";
 import { bandOf, computeScore, assess, quarterOf, type Weight, type Rule } from "@/lib/performance";
 import type { Role } from "@/lib/roles";
 import { askForm, askConfirm, askReason, notify } from "@/lib/dialog";
+import { saveCsv } from "@/lib/download";
 
 type Row = { partner_id: string; name: string; type_code: string; status: string; month: string | null; score: number | null; band: string | null; prev_score: number | null; direction: string; unverified: number };
 type Hist = { month: string; score: number | null; band: string | null; params: (number | null)[]; weights: Weight[] };
@@ -29,6 +30,7 @@ function Partner({ pf }: { pf: Perf }) {
     <div className="card"><h2>{cur?.score == null ? "No verified score yet" : `${cur.score} / 100 · ${cur.band}`}</h2>
       <p>{cur ? `Month of ${when(cur.month)}` : "Your score appears once EarthLabs has verified your first month."}</p>
       {cur && <Matrix h={cur} />}
+      {cur && <p><button className="btn sm" onClick={() => saveCsv(`my-scorecard-${cur.month}.csv`, cur.weights.map((w, i) => ({ Parameter: w.n, Weight: w.w, Score: cur.params[i] == null ? "unverified" : `${Math.round((cur.params[i] as number) * 100)}%`, Points: cur.params[i] == null ? "" : (w.w * (cur.params[i] as number)).toFixed(1) })))}>Download my scorecard</button></p>}
       <p className="mini">Score = points earned ÷ verified weight × 100. Bands: 90–100 Outstanding · 80–89 Excellent · 70–79 Good · 60–69 Needs Improvement · below 60 Underperforming.</p></div>
     {pf.history.length > 1 && <div className="card"><h3>Last months</h3><table><thead><tr><th>Month</th><th>Score</th><th>Band</th></tr></thead><tbody>{pf.history.map((h) => <tr key={h.month}><td>{when(h.month)}</td><td>{h.score ?? "unverified"}</td><td>{h.band ?? ""}</td></tr>)}</tbody></table></div>}
     <h2>Growth ladder</h2>
@@ -65,6 +67,7 @@ function Staff({ role }: { role: Role }) {
   return (<>
     <p>Every partner has a measurable profile. Missing data is shown as <b>unverified</b> and is never counted as zero. Scores and promotion decisions are recorded in the audit trail.</p>
     {msg && <Msg kind={msg.ok ? "ok" : "bad"}>{msg.t}</Msg>}
+    <p><button className="btn" disabled={rows.length === 0} onClick={() => saveCsv(`scorecards-${new Date().toISOString().slice(0, 10)}.csv`, rows.map((r) => ({ "Partner ID": r.partner_id, Name: r.name, Category: r.type_code, Status: r.status, Month: r.month ?? "", Score: r.score ?? "unverified", Band: r.band ?? "", "Previous score": r.prev_score ?? "", Direction: r.direction, "Unverified parameters": r.unverified })))}>Export scorecards (CSV)</button></p>
     <div className="card"><table><thead><tr><th>Partner</th><th>Category</th><th>Score</th><th>Band</th><th>Direction</th><th>Unverified</th><th></th></tr></thead><tbody>
       {rows.map((r) => <tr key={r.partner_id}><td><b>{r.name}</b><br /><span className="mini">{r.partner_id}</span></td><td>{r.type_code}</td><td>{r.score ?? "—"}</td><td>{r.band ?? ""}</td><td>{r.direction}</td><td>{r.unverified}</td><td><button className="btn" onClick={() => setSel(r.partner_id)}>Open</button></td></tr>)}
       {rows.length === 0 && <tr><td colSpan={7}>No active partners yet.</td></tr>}</tbody></table>

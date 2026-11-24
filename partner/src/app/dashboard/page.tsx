@@ -80,8 +80,22 @@ function StaffDashboard({ role }: { role: Role }) {
       {money && <Card title="Promotion eligibility">{(o.promotion_list ?? []).length ? (o.promotion_list as any[]).map((x) => <div className="check" key={x.id}><div style={{ flex: 1 }}><b>{x.name}</b><div className="mini">{x.from} to {x.to}</div></div><Link className="btn sm" href={`/partners/view/?id=${x.id}`}>Review</Link></div>) : <p className="mini">No partner is eligible right now.</p>}</Card>}
       <Card title="Operations watch">{lowStock.length ? lowStock.map((s) => <div className="check" key={s.sku}><Badge kind="warn">Low stock</Badge><div>{s.name}<div className="mini">{s.left} cartons-equivalent left, reorder at {s.reorder}</div></div></div>) : <p className="mini">Stock healthy.</p>}</Card>
     </div>
+    <TerritoryOverdue role={role} />
     <div className="note ai" style={{ marginTop: 14 }}><b>This month’s AI recommendations:</b> {o.ai_pending} waiting for a decision. <Link className="lk" href="/ai/">Open AI Intelligence</Link></div>
   </>);
+}
+function TerritoryOverdue({ role }: { role: Role }) {
+  const [terr, setTerr] = useState<any[] | null>(null); const [od, setOd] = useState<any[] | null>(null); const money = role === "super_admin" || role === "accounts";
+  useEffect(() => {
+    supabase.rpc("dashboard_territory").then(({ data }) => setTerr((data as any[]) ?? []));
+    if (money) supabase.rpc("dashboard_overdue").then(({ data }) => setOd((data as any[]) ?? []));
+  }, [money]);
+  return (<div className="grid g2" style={{ marginTop: 14 }}>
+    <Card title="Territory performance (by district, this month)">{terr == null ? <p className="mini">Loading…</p> : <div className="tw"><table className="t"><thead><tr><th>District</th><th className="n">Active partners</th>{money && <th className="n">Primary sales</th>}<th className="n">Avg score</th></tr></thead><tbody>
+      {terr.map((t) => <tr key={t.district}><td>{t.district}</td><td className="n">{t.partners}</td>{money && <td className="n">{lakh(Number(t.sales))}</td>}<td className="n">{t.avg_score ?? "—"}</td></tr>)}{terr.length === 0 && <tr><td colSpan={4}>No partners yet.</td></tr>}</tbody></table></div>}</Card>
+    {money && <Card title="Overdue invoices">{od == null ? <p className="mini">Loading…</p> : od.length === 0 ? <p className="mini">Nothing is overdue.</p> : <div className="tw"><table className="t"><thead><tr><th>Partner</th><th>Invoice</th><th className="n">Overdue</th><th className="n">Days late</th></tr></thead><tbody>
+      {od.map((o) => <tr key={o.invoice_id}><td>{o.name}<div className="mini">{o.partner_id}</div></td><td>{o.invoice_id}</td><td className="n">{inr(Number(o.amount))}</td><td className="n">{o.days_late}</td></tr>)}</tbody></table></div>}</Card>}
+  </div>);
 }
 function VendorDashboard({ name }: { name: string }) {
   const [d, setD] = useState<Record<string, any> | null>(null); const [err, setErr] = useState("");

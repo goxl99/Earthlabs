@@ -129,3 +129,37 @@ do $$ begin assert (select status from ai_recommendations where title='Lead time
 reset role;
 delete from ai_recommendations where title='Lead time test';
 \echo BUILD 11 AI DEFER TESTS PASSED
+
+-- ===================== D. DASHBOARD TERRITORY AND OVERDUE =====================
+reset role;
+insert into partners(id,type_code,name,district,status) values ('ELP-DLR-9001','DLR','Overdue Test','Anand','Active');
+-- partner ELP-DLR-9001 is on credit level 1 (7 days). Two invoices: 20 days old (1000) and 3 days old (500); it has paid 700.
+select set_config('epdms.credit_apply','on',false);
+update partners set credit_level = 1 where id = 'ELP-DLR-9001';
+select set_config('epdms.credit_apply','',false);
+insert into orders(id,partner_id,status,taxable,net,gst,total) values ('ORD-T-1','ELP-DLR-9001','Delivered',847.46,847.46,152.54,1000),('ORD-T-2','ELP-DLR-9001','Delivered',423.73,423.73,76.27,500);
+insert into invoices(id,order_id,partner_id,issued_on,supply_state,taxable,cgst,sgst,igst,total) values
+  ('INV-T-1','ORD-T-1','ELP-DLR-9001', current_date - 20,'Gujarat',847.46,76.27,76.27,0,1000), ('INV-T-2','ORD-T-2','ELP-DLR-9001', current_date - 3,'Gujarat',423.73,38.14,38.13,0,500);
+insert into ledger_entries(partner_id,kind,ref,debit,credit) values ('ELP-DLR-9001','invoice','INV-T-1',1000,0),('ELP-DLR-9001','invoice','INV-T-2',500,0),('ELP-DLR-9001','payment','PAY-T',0,700);
+select pg_temp.as_user('00000000-0000-0000-0000-000000000005'); set role authenticated;
+do $$ declare d jsonb; begin d := dashboard_overdue();
+  -- balance 800: newest invoice (500, 3 days old, within 7 days) is current; the remaining 300 sits on the 20-day-old invoice
+  assert jsonb_array_length(d) = 1, 'one overdue invoice';
+  assert d -> 0 ->> 'invoice_id' = 'INV-T-1' and (d -> 0 ->> 'amount')::numeric = 300 and (d -> 0 ->> 'days_late')::int = 13, 'overdue portion and lateness';
+end $$;
+do $$ declare d jsonb; begin d := dashboard_territory(); assert jsonb_typeof(d) = 'array' and jsonb_array_length(d) >= 1, 'territory rows';
+  assert (select count(*) from jsonb_array_elements(d) e where (e ->> 'sales')::numeric >= 1271.19) >= 1, 'month sales counted'; end $$;
+reset role;
+select pg_temp.as_user('00000000-0000-0000-0000-000000000002'); set role authenticated;
+do $$ begin perform dashboard_territory(); end $$;
+select pg_temp.fails($q$select dashboard_overdue()$q$, 'Not allowed');
+reset role;
+select pg_temp.as_user('00000000-0000-0000-0000-000000000004'); set role authenticated;
+select pg_temp.fails($q$select dashboard_territory()$q$, 'Not allowed');
+select pg_temp.fails($q$select dashboard_overdue()$q$, 'Not allowed');
+reset role;
+select pg_temp.as_user(null); set role anon;
+select pg_temp.fails($q$select dashboard_territory()$q$, 'permission denied');
+reset role;
+-- the ledger is append-only, so the isolated test partner and its rows stay; the test database is rebuilt on every run
+\echo BUILD 11 DASHBOARD TESTS PASSED

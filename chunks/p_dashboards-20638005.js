@@ -94,7 +94,7 @@ export async function accountingDashboardPage(el) {
   try {
     const [inv, pay, exp, ib, cb, sl, rv, as, bt, es] = await Promise.all([
       get(sb.from("tax_invoices").select("id,invoice_no,invoice_date,taxable,tax,total,status").eq("status", "issued")),
-      get(sb.from("customer_payments").select("paid_on,amount,customer_id")), get(sb.from("expenses").select("exp_date,amount,gst_amount,category,paid_by,reimbursed")),
+      get(sb.from("customer_payments").select("paid_on,amount,customer_id")), get(sb.from("expenses").select("exp_date,amount,gst_amount,category,subcategory,paid_by,reimbursed")),
       get(sb.from("v_invoice_balance").select("invoice_no,invoice_date,customer,total,paid,balance")), get(sb.from("v_customer_balance").select("customer_id,name,billed,received")),
       get(sb.from("v_sale_lines").select("dc_date,revenue,cogs,customer,order_no")), soft(sb.from("v_rm_value").select("name,value,no_rate,on_hand")), soft(sb.from("v_assets").select("cost,book_value,status")),
       soft(sb.from("bank_txns").select("id,status")), soft(sb.from("earlier_sales").select("sale_date,amount,total,received,cogs")),
@@ -111,14 +111,16 @@ export async function accountingDashboardPage(el) {
     const spent = sum(cur(exp, e => e.exp_date), e => e.amount), spentP = prv(exp, e => e.exp_date) && sum(prv(exp, e => e.exp_date), e => e.amount);
     const opex = sum(cur(exp, e => e.exp_date).filter(e => !["raw_material", "packaging", "asset"].includes(e.category)), e => n0(e.amount) - n0(e.gst_amount));
     const gp = sum(cur(sl, l => l.dc_date), l => l.revenue) - sum(cur(sl, l => l.dc_date), l => l.cogs) + sum(cur(es, e => e.sale_date), e => n0(e.amount) - n0(e.cogs)), net = gp - opex - depn;
-    const bizd = sum(cur(exp, e => e.exp_date).filter(e => ["marketing", "meals", "gifts", "travel", "samples"].includes(e.category)), e => e.amount), outstanding = sum(cb, c => n0(c.billed) - n0(c.received)), earlierDue = Math.max(0, outstanding - sum(ib, i => i.balance)), today = iso(new Date()), days = d => Math.floor((new Date(today) - new Date(String(d).slice(0, 10))) / 864e5);
+    const bizd = sum(cur(exp, e => e.exp_date).filter(e => e.category === "business_dev"), e => e.amount), mkt = sum(cur(exp, e => e.exp_date).filter(e => e.category === "marketing"), e => e.amount), outstanding = sum(cb, c => n0(c.billed) - n0(c.received)), earlierDue = Math.max(0, outstanding - sum(ib, i => i.balance)), today = iso(new Date()), days = d => Math.floor((new Date(today) - new Date(String(d).slice(0, 10))) / 864e5);
     const open = ib.filter(i => n0(i.balance) > 0.005), age = [["0–30 days", 0, 30], ["31–60 days", 31, 60], ["61–90 days", 61, 90], ["Over 90 days", 91, 1e9]].map(([l, a, b]) => ({ label: l, value: sum(open.filter(i => days(i.invoice_date) >= a && days(i.invoice_date) <= b), i => i.balance), n: open.filter(i => days(i.invoice_date) >= a && days(i.invoice_date) <= b).length })).concat(earlierDue > 0.005 ? [{ label: "Earlier sales (before system)", value: earlierDue, n: es.filter(e => n0(e.total) - n0(e.received) > 0.005).length }] : []);
     const overdue = open.filter(i => days(i.invoice_date) > 30), ms = monthsBack(6);
     const mi = ms.map(k => sum(pay.filter(p => mKey(p.paid_on) === k), p => p.amount)), mo = ms.map(k => sum(exp.filter(e => mKey(e.exp_date) === k), e => e.amount));
     const mr = ms.map(k => sum(sl.filter(l => mKey(l.dc_date) === k), l => l.revenue) + sum(es.filter(e => mKey(e.sale_date) === k), e => e.amount)), mc = ms.map(k => sum(sl.filter(l => mKey(l.dc_date) === k), l => l.cogs) + sum(es.filter(e => mKey(e.sale_date) === k), e => e.cogs));
     const byCat = {}; cur(exp, e => e.exp_date).forEach(e => { byCat[e.category] = (byCat[e.category] || 0) + n0(e.amount); });
-    const CATN = { raw_material: "Raw material", packaging: "Packaging", marketing: "Marketing", meals: "Client meals & hospitality", gifts: "Gifts", travel: "Travel for visits", samples: "Free samples & demos", transport: "Transport", utilities: "Utilities", salary: "Salary", rent: "Rent", asset: "Assets", other: "Other" };
+    const CATN = { raw_material: "Raw material", packaging: "Packaging", marketing: "Marketing", business_dev: "Business development", transport: "Transport", utilities: "Utilities", salary: "Salary", rent: "Rent", asset: "Assets", other: "Other" };
     const catItems = Object.entries(byCat).sort((a, b) => b[1] - a[1]).map(([k, v]) => ({ label: CATN[k] || k, value: v, tip: `${CATN[k] || k} · ${inr(v)}` }));
+    const bySub = {}; cur(exp, e => e.exp_date).filter(e => e.category === "business_dev" || e.category === "marketing").forEach(e => { const k = `${CATN[e.category]} · ${e.subcategory || "Not specified"}`; bySub[k] = (bySub[k] || 0) + n0(e.amount); });
+    const subItems = Object.entries(bySub).sort((a, b) => b[1] - a[1]).map(([k, v]) => ({ label: k, value: v, tip: `${k} · ${inr(v)}`, color: k.startsWith("Marketing") ? C2 : C1 }));
     const topDue = cb.map(c => ({ label: c.name, value: n0(c.billed) - n0(c.received) })).filter(c => c.value > 0.005).sort((a, b) => b.value - a.value).slice(0, 6);
     const owe = {}; exp.filter(e => String(e.paid_by).toLowerCase() !== "company" && !e.reimbursed).forEach(e => { owe[e.paid_by] = (owe[e.paid_by] || 0) + n0(e.amount); });
     const stock = sum(rv, r => r.value), noRate = rv.filter(r => r.no_rate && n0(r.on_hand) > 0).length, negStock = rv.filter(r => n0(r.on_hand) < 0).length;
@@ -131,7 +133,7 @@ export async function accountingDashboardPage(el) {
       noRate ? `<div>⚠ <b>${noRate} item${noRate > 1 ? "s" : ""} in stock have no purchase rate</b>, so cost and margin are understated. Add the purchase bills.</div>` : "",
     ].join("");
     const body = `<div class="dv-bar">${rangeSel(ARANGE)}<span class="muted small">${R.label}${R.pf ? " compared with the period before" : ""}</span></div>
-      <div class="stats">${stat("Sales (before GST)", short(sales), delta(sales, salesP))}${stat("Collected", short(coll), delta(coll, collP), "good")}${stat("Spent (all expenses)", short(spent), delta(spent, spentP, "down"))}${stat("Business development", short(bizd), "Marketing, meals, gifts, travel, samples")}
+      <div class="stats">${stat("Sales (before GST)", short(sales), delta(sales, salesP))}${stat("Collected", short(coll), delta(coll, collP), "good")}${stat("Spent (all expenses)", short(spent), delta(spent, spentP, "down"))}${stat("Business development", short(bizd), "Travel, meals, gifts, samples")}${stat("Marketing", short(mkt), "Social media, ads, design")}
         ${stat("Gross profit", short(gp), "Sales minus material and packing cost", gp >= 0 ? "good" : "bad")}${stat("Net profit (estimate)", short(net), "After expenses and depreciation", net >= 0 ? "good" : "bad")}
         ${stat("To collect", short(outstanding), `${open.length} open invoice${open.length === 1 ? "" : "s"}`, outstanding > 0 ? "warn" : "")}${stat("Raw material at site", short(stock), "At latest purchase rates")}${stat("Assets (book value)", short(assetBV), `Cost ${short(assetCost)}`)}</div>
       <div class="dv-grid">
@@ -140,6 +142,7 @@ export async function accountingDashboardPage(el) {
         ${card("Sales and material cost", "Last 6 months, by delivery date. Sales before GST; cost = materials and packing at latest rates.", cols(ms.map(mLabel), [{ name: "Sales", color: C1, vals: mr }, { name: "Material cost", color: C2, vals: mc }]) + tview(["Month", "Sales", "Cost", "Margin"], ms.map((k, i) => [mLabel(k), inr(mr[i]), inr(mc[i]), mr[i] ? ((mr[i] - mc[i]) / mr[i] * 100).toFixed(1) + "%" : "–"])))}
         ${card("Who owes us, by age", "Unpaid invoice balances by days since the invoice date.", hbars(age.map(a => ({ ...a, tip: `${a.label} · ${inr(a.value)} · ${a.n} invoice${a.n === 1 ? "" : "s"}` }))) + tview(["Age", "Invoices", "Amount"], age.map(a => [a.label, a.n, inr(a.value)])))}
         ${card("Biggest balances due", "Customers with the most unpaid.", hbars(topDue) + tview(["Customer", "Due"], topDue.map(c => [c.label, inr(c.value)])))}
+        ${card("Business development and marketing", `${R.label}. Blue = business development, orange = marketing.`, hbars(subItems) + tview(["Main · sub-category", "Amount"], subItems.map(c => [c.label, inr(c.value)])))}
         ${card("Where the money went", `${R.label}. Includes raw material, packaging and assets.`, hbars(catItems) + tview(["Label", "Amount"], catItems.map(c => [c.label, inr(c.value)])))}
       </div>`;
     el.innerHTML = body; tipInit(el);

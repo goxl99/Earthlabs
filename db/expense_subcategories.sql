@@ -1,0 +1,1 @@
+-- Applied as migration expense_main_and_sub_categories: expenses.subcategory; main categories business_dev (travel, meals & hospitality, gifts, free samples & demos, events) and marketing (social media, paid promotion, influencers, content & design, printing & branding, events, website); save_expense stores subcategory and prospect.

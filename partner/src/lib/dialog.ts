@@ -5,7 +5,7 @@ export type FieldDef = {
   required?: boolean; value?: string | number; hint?: string; options?: string[]; min?: number; max?: number;
 };
 export type DialogReq =
-  | { kind: "form"; title: string; intro?: string; fields: FieldDef[]; ok: string; danger?: boolean; resolve: (v: Record<string, string> | null) => void }
+  | { kind: "form"; title: string; intro?: string; fields: FieldDef[]; ok: string; danger?: boolean; cols?: 1 | 2; resolve: (v: Record<string, string> | null) => void }
   | { kind: "notice"; title: string; text: string; resolve: () => void };
 
 type Listener = (r: DialogReq) => void;
@@ -29,8 +29,8 @@ export function checkFields(fields: FieldDef[], values: Record<string, string>):
   return null;
 }
 /** A form in a modal. Resolves to the values (all strings) or null when cancelled. */
-export const askForm = (title: string, fields: FieldDef[], opts: { ok?: string; intro?: string; danger?: boolean } = {}) =>
-  new Promise<Record<string, string> | null>((resolve) => push({ kind: "form", title, intro: opts.intro, fields, ok: opts.ok ?? "Save", danger: opts.danger, resolve }));
+export const askForm = (title: string, fields: FieldDef[], opts: { ok?: string; intro?: string; danger?: boolean; cols?: 1 | 2 } = {}) =>
+  new Promise<Record<string, string> | null>((resolve) => push({ kind: "form", title, intro: opts.intro, fields, ok: opts.ok ?? "Save", danger: opts.danger, cols: opts.cols, resolve }));
 /** Yes / no question. */
 export const askConfirm = async (title: string, text: string, ok = "Confirm", danger = false) =>
   (await askForm(title, [], { ok, intro: text, danger })) !== null;

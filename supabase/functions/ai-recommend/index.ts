@@ -20,13 +20,13 @@ Deno.serve(async (req) => {
   const { data: facts, error: fe } = await me.rpc("ai_facts");         // runs as the caller: staff only, no names or prices
   if (fe || !facts) return json({ error: fe?.message ?? "No facts" }, 500, origin);
 
-  const model = Deno.env.get("AI_MODEL") ?? "claude-sonnet-4-5";
+  const model = Deno.env.get("AI_MODEL") ?? "claude-sonnet-5-5";
   const r = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: { "x-api-key": key, "anthropic-version": "2023-06-01", "content-type": "application/json" },
     body: JSON.stringify({ model, max_tokens: 2000, system: SYSTEM_PROMPT, messages: [{ role: "user", content: buildUserPrompt(facts as Facts) }] }),
   });
-  if (!r.ok) return json({ error: "The AI service did not answer", status: r.status }, 502, origin);
+  if (!r.ok) { const d = await r.json().catch(() => null); return json({ error: `The AI service did not answer (${r.status}${d?.error?.message ? ": " + String(d.error.message).slice(0, 160) : ""})`, status: r.status }, 502, origin); }
   const out = await r.json();
   const text = (out.content ?? []).map((c: { text?: string }) => c.text ?? "").join("");
   const { recs, dropped } = parseRecommendations(text, facts as Facts);

@@ -19,7 +19,8 @@ function Inner({ role }: { role: Role }) {
   useEffect(() => { load(); supabase.rpc("ai_insights").then(({ data }) => setIns((data as Insights) ?? null)); }, [load]);
   async function run() {
     setBusy(true); const { data, error } = await supabase.functions.invoke("ai-recommend", { body: {} }); setBusy(false);
-    setMsg({ ok: !error && !data?.error, t: error || data?.error ? (data?.error ?? error?.message ?? "Failed") : `Done: ${data.stored} recommendations, ${data.credit_proposals} credit proposals${data.dropped ? `, ${data.dropped} dropped as invalid` : ""}` }); load();
+    let detail = ""; try { const ctx = (error as { context?: Response } | null)?.context; if (ctx) detail = ((await ctx.json()) as { error?: string }).error ?? ""; } catch { /* keep the generic message */ }
+    setMsg({ ok: !error && !data?.error, t: error || data?.error ? (data?.error ?? (detail || error?.message) ?? "Failed") : `Done: ${data.stored} recommendations, ${data.credit_proposals} credit proposals${data.dropped ? `, ${data.dropped} dropped as invalid` : ""}` }); load();
   }
   async function decide(id: number, approve: boolean) {
     let why: string | null = null; if (!approve) { why = (await askReason("Reject recommendation", "Reason", "Reject", true)) ?? ""; if (!why) return; }

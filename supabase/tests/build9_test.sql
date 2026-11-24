@@ -200,11 +200,12 @@ reset role;
 reset role;
 insert into ledger_entries(partner_id, kind, ref, debit, narration) values ('ELP-DLR-0001','invoice','B9-INV-1',1000,'build 9 fixture');
 insert into ledger_entries(partner_id, kind, ref, utr, credit, narration) values ('ELP-DLR-0001','payment','B9-PAY-1','B9UTR0001',600,'build 9 fixture');
+select set_config('t.pd', (select round(least(coalesce(sum(credit) filter (where kind = 'payment'),0) / nullif(sum(debit),0), 1), 3) from ledger_entries where partner_id = 'ELP-DLR-0001')::text, false);
 select pg_temp.as_user('00000000-0000-0000-0000-000000000002'); set role authenticated;
 do $$ declare a jsonb; begin
   a := suggest_score_inputs('ELP-DLR-0001');
   assert jsonb_array_length(a) = 8, 'eight values';
-  assert (a ->> 2)::numeric = (select round(least(coalesce(sum(credit) filter (where kind = 'payment'),0) / nullif(sum(debit),0), 1), 3) from ledger_entries where partner_id = 'ELP-DLR-0001'), 'payment discipline = payments over billing, capped at 1, got ' || (a ->> 2);
+  assert (a ->> 2)::numeric = current_setting('t.pd')::numeric, 'payment discipline = payments over billing, capped at 1, got ' || (a ->> 2);
   assert (a ->> 2)::numeric between 0 and 1, 'between 0 and 1';
   assert jsonb_typeof(a -> 0) = 'null' and jsonb_typeof(a -> 3) = 'null' and jsonb_typeof(a -> 4) = 'null', 'targets, secondary sales and new customers are left unverified (no data source)';
   assert jsonb_typeof(a -> 1) in ('null','number'), 'network development is computed only for linked partners';

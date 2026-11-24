@@ -13,15 +13,17 @@ type Inv = { id: string; order_id: string; partner_id: string; issued_on: string
 type Cn = { id: string; invoice_id: string; partner_id: string; amount: number; reason: string; issued_on: string };
 type Led = { id: number; at: string; kind: string; ref: string; debit: number; credit: number; narration: string | null; partner_id: string };
 type Proof = { id: number; partner_id: string; order_id: string; utr: string; amount: number; file_path: string | null; note: string | null; mode?: string | null; bank?: string | null; paid_on?: string | null; status: string; reason: string | null; submitted_at: string };
+type Bal = { id: string; paid: number; credited: number; balance: number };
 type Line = { sku: string; name: string; units: number; unit_price: number; amount: number };
 
 function Inner({ role }: { role: Role }) {
   const money = role === "super_admin" || role === "accounts";
   const [inv, setInv] = useState<Inv[]>([]); const [cn, setCn] = useState<Cn[]>([]); const [led, setLed] = useState<Led[]>([]); const [proofs, setProofs] = useState<Proof[]>([]);
   const [open, setOpen] = useState<string | null>(null); const [lines, setLines] = useState<Line[]>([]); const [toInvoice, setToInvoice] = useState<{ id: string; partner_id: string; total: number }[]>([]);
-  const [tab, setTab] = useState("invoices"); const [pid, setPid] = useState(""); const [bal, setBal] = useState<number | null>(null); const [msg, setMsg] = useState<{ ok: boolean; t: string } | null>(null);
+  const [bals, setBals] = useState<Record<string, Bal>>({}); const [tab, setTab] = useState("invoices"); const [pid, setPid] = useState(""); const [bal, setBal] = useState<number | null>(null); const [msg, setMsg] = useState<{ ok: boolean; t: string } | null>(null);
   const load = useCallback(async () => {
     setInv(((await supabase.from("invoices").select("*").order("issued_on", { ascending: false }).limit(50)).data as Inv[]) ?? []);
+    { const { data } = await supabase.rpc("invoice_balances"); setBals(Object.fromEntries(((data as Bal[]) ?? []).map((b) => [b.id, b]))); }
     setCn(((await supabase.from("credit_notes").select("id,invoice_id,partner_id,amount,reason,issued_on").order("issued_on", { ascending: false }).limit(50)).data as Cn[]) ?? []);
     let l = supabase.from("ledger_entries").select("id,at,kind,ref,debit,credit,narration,partner_id").order("id", { ascending: false }).limit(50); if (pid) l = l.eq("partner_id", pid);
     setLed(((await l).data as Led[]) ?? []);
@@ -38,6 +40,18 @@ function Inner({ role }: { role: Role }) {
   useEffect(() => { const h = window.location.hash.replace("#", ""); if (["payments", "ledgers", "credit", "invoices"].includes(h)) setTab(h); }, []);
   async function call(fn: string, args: Record<string, unknown>) { const { error } = await supabase.rpc(fn, args); setMsg({ ok: !error, t: error ? error.message : "Done" }); load(); }
   async function show(id: string) { if (open === id) { setOpen(null); return; } setOpen(id); setLines(((await supabase.from("invoice_lines").select("sku,name,units,unit_price,amount").eq("invoice_id", id)).data as Line[]) ?? []); }
+  async function addPayment(i: Inv) {
+    const b = bals[i.id]; const today = new Date().toISOString().slice(0, 10);
+    const f = await askForm(`Add payment details · ${i.id}`, [
+      { name: "amt", label: "Amount received (₹)", type: "number", required: true, min: 1, max: b?.balance, value: String(b?.balance ?? ""), hint: `Balance due ${inr(b?.balance ?? 0)}` },
+      { name: "how", label: "How was it paid?", type: "select", required: true, options: ["Bank transfer (NEFT / RTGS / IMPS)", "UPI", "Cheque / demand draft", "Gateway"], value: "Bank transfer (NEFT / RTGS / IMPS)" },
+      { name: "utr", label: "UTR / reference number", required: true, hint: "At least 6 characters. Each UTR can be recorded once." },
+      { name: "paid", label: "Payment date", type: "date", required: true, value: today },
+      { name: "bank", label: "Bank (optional)" }, { name: "note", label: "Note (optional)" }], { ok: "Record payment" });
+    if (!f) return;
+    const { data, error } = await supabase.rpc("record_invoice_payment", { iid: i.id, utr: f.utr.trim(), amt: Number(f.amt), how: f.how, paid: f.paid || null, pay_bank: f.bank?.trim() || null, note: f.note?.trim() || null });
+    setMsg({ ok: !error, t: error ? error.message : String(data) }); load();
+  }
   async function proofFile(p: Proof) { if (!p.file_path) return; const { data } = await supabase.storage.from("payment-proofs").createSignedUrl(p.file_path, 300); if (data?.signedUrl) window.open(data.signedUrl, "_blank", "noopener"); }
   return (<><h1>{money ? "Invoices, payments & ledger" : "My invoices & ledger"}</h1><p className="sub">GST invoices, payment verification and partner ledgers. Entries are never edited; corrections use credit and debit notes.</p><div className="tabs" role="tablist">{(money ? [["invoices", "Invoices"], ["payments", "Payments"], ["ledgers", "Partner ledgers"], ["credit", "Credit & reminders"]] : [["invoices", "My invoices"], ["ledgers", "My ledger"]]).map(([k, n]) => <button key={k} role="tab" aria-selected={tab === k} className="tabbtn" onClick={() => setTab(k)}>{n}</button>)}</div>{msg && <Msg kind={msg.ok ? "ok" : "bad"}>{msg.t}</Msg>}
     {tab === "payments" && money && <>
@@ -47,20 +61,21 @@ function Inner({ role }: { role: Role }) {
           <td style={{ whiteSpace: "nowrap" }}><button className="btn sm" style={{ marginRight: 6 }} disabled={!canReviewProof(role)} onClick={async () => (await askConfirm("Review payment", `Confirm ${inr(p.amount)} with UTR ${p.utr}? Check the bank statement first.`, "Confirm received")) && call("confirm_payment_proof", { proof_id: p.id })}>Confirm received</button>
             <button className="btn sm red" onClick={async () => { const why = await askReason("Reject payment proof", "Reason (the partner sees this)", "Reject", true); if (why) call("reject_payment_proof", { proof_id: p.id, why }); }}>Reject</button></td></tr>))}
         {proofs.length === 0 && <tr><td colSpan={6}>No payment proofs waiting.</td></tr>}</tbody></table></div>
-      <h2>Paid orders without an invoice ({toInvoice.length})</h2>
-      <div className="card"><table><tbody>{toInvoice.map((o) => <tr key={o.id}><td>{o.id}</td><td>{o.partner_id}</td><td>{inr(o.total)}</td><td><button className="btn" onClick={() => call("issue_invoice", { oid: o.id })}>Issue invoice</button></td></tr>)}
-        {toInvoice.length === 0 && <tr><td>Every paid order has an invoice.</td></tr>}</tbody></table></div>
+      <h2>Paid orders awaiting dispatch ({toInvoice.length})</h2><p className="mini">The final invoice is issued automatically with the challan when Warehouse dispatches. Use the button only for an order that was dispatched without one.</p>
+      <div className="card"><table><tbody>{toInvoice.map((o) => <tr key={o.id}><td>{o.id}</td><td>{o.partner_id}</td><td>{inr(o.total)}</td><td><span className="mini">Proforma: <Link href={`/doc/?k=proforma&id=${encodeURIComponent(o.id)}`} target="_blank" rel="noopener">view</Link></span> <button className="btn sm" onClick={() => call("issue_invoice", { oid: o.id })}>Issue invoice now</button></td></tr>)}
+        {toInvoice.length === 0 && <tr><td>No paid order is waiting for an invoice.</td></tr>}</tbody></table></div>
+      <BatchSync />
       <h2>Record a payment received</h2>
       <div className="card"><p style={{ margin: 0 }}>For money received outside an order (for example an advance). A UTR can be recorded once only.</p>
         <button className="btn" style={{ marginTop: 8 }} onClick={async () => { const f = await askForm("Record a payment received", [{ name: "pid", label: "Partner ID", required: true, hint: "For example ELP-DLR-0001" }, { name: "utr", label: "UTR / reference number", required: true }, { name: "amt", label: "Amount received (₹)", type: "number", required: true, min: 1 }, { name: "note", label: "Note (optional)" }], { ok: "Record payment" }); if (!f) return; call("record_payment", { pid: f.pid.trim(), utr: f.utr.trim(), amt: Number(f.amt), mode: "Bank transfer", note: f.note.trim() }); }}>Record payment</button></div>
     </>}
     {tab === "invoices" && <><h2>Invoices</h2>
-    <div className="card"><table><thead><tr><th>Invoice</th>{money && <th>Partner</th>}<th>Order</th><th>Date</th><th>Taxable</th><th>CGST</th><th>SGST</th><th>IGST</th><th>Total</th><th></th></tr></thead><tbody>
-      {inv.map((i) => (<><tr key={i.id}><td><a href="#" onClick={(e) => { e.preventDefault(); show(i.id); }}>{i.id}</a></td>{money && <td>{i.partner_id}</td>}<td>{i.order_id}</td><td>{when(i.issued_on)}</td><td>{inr(i.taxable)}</td><td>{inr(i.cgst)}</td><td>{inr(i.sgst)}</td><td>{inr(i.igst)}</td><td>{inr(i.total)}</td>
-        <td style={{ whiteSpace: "nowrap" }}><Link className="btn sm" style={{ marginRight: 6 }} href={`/doc/?k=invoice&id=${encodeURIComponent(i.id)}`} target="_blank" rel="noopener">View / print</Link>{money && <button className="btn" onClick={async () => { const f = await askForm(`Credit note against ${i.id}`, [{ name: "a", label: "Amount incl. GST (₹)", type: "number", required: true, min: 1, max: Number(i.total), hint: `Maximum ${inr(i.total)}` }, { name: "why", label: "Reason", type: "textarea", required: true }], { ok: "Issue credit note" }); if (f) call("issue_credit_note", { inv_id: i.id, amt: Number(f.a), why: f.why.trim() }); }}>Credit note</button>}</td></tr>
-        {open === i.id && <tr key={i.id + "d"}><td colSpan={10}><table><tbody>{lines.map((l) => <tr key={l.sku}><td>{l.name}</td><td>{l.units} units</td><td>{inr(l.unit_price)} / unit</td><td>{inr(l.amount)}</td></tr>)}</tbody></table>
+    <div className="card"><table><thead><tr><th>Invoice</th>{money && <th>Partner</th>}<th>Order</th><th>Date</th><th>Taxable</th><th>CGST</th><th>SGST</th><th>IGST</th><th>Total</th><th>Paid</th><th>Balance</th><th></th></tr></thead><tbody>
+      {inv.map((i) => (<><tr key={i.id}><td><a href="#" onClick={(e) => { e.preventDefault(); show(i.id); }}>{i.id}</a></td>{money && <td>{i.partner_id}</td>}<td>{i.order_id}</td><td>{when(i.issued_on)}</td><td>{inr(i.taxable)}</td><td>{inr(i.cgst)}</td><td>{inr(i.sgst)}</td><td>{inr(i.igst)}</td><td>{inr(i.total)}</td><td>{inr((bals[i.id]?.paid ?? 0) + (bals[i.id]?.credited ?? 0))}</td><td><b>{bals[i.id] ? inr(bals[i.id].balance) : ""}</b></td>
+        <td style={{ whiteSpace: "nowrap" }}><Link className="btn sm" style={{ marginRight: 6 }} href={`/doc/?k=invoice&id=${encodeURIComponent(i.id)}`} target="_blank" rel="noopener">View / print</Link>{money && (bals[i.id]?.balance ?? 0) > 0.005 && <button className="btn sm" style={{ marginRight: 6 }} onClick={() => addPayment(i)}>Add payment details</button>}{money && <button className="btn" onClick={async () => { const f = await askForm(`Credit note against ${i.id}`, [{ name: "a", label: "Amount incl. GST (₹)", type: "number", required: true, min: 1, max: Number(i.total), hint: `Maximum ${inr(i.total)}` }, { name: "why", label: "Reason", type: "textarea", required: true }], { ok: "Issue credit note" }); if (f) call("issue_credit_note", { inv_id: i.id, amt: Number(f.a), why: f.why.trim() }); }}>Credit note</button>}</td></tr>
+        {open === i.id && <tr key={i.id + "d"}><td colSpan={12}><table><tbody>{lines.map((l) => <tr key={l.sku}><td>{l.name}</td><td>{l.units} units</td><td>{inr(l.unit_price)} / unit</td><td>{inr(l.amount)}</td></tr>)}</tbody></table>
           <p style={{ margin: "8px 0 0" }}>Place of supply: {i.supply_state}</p></td></tr>}</>))}
-      {inv.length === 0 && <tr><td colSpan={10}>No invoices yet.</td></tr>}</tbody></table></div>
+      {inv.length === 0 && <tr><td colSpan={12}>No invoices yet.</td></tr>}</tbody></table></div>
     <h2>Credit notes</h2>
     <div className="card"><table><tbody>{cn.map((c) => <tr key={c.id}><td>{c.id}</td>{money && <td>{c.partner_id}</td>}<td>against {c.invoice_id}</td><td>{when(c.issued_on)}</td><td>{inr(c.amount)}</td><td>{c.reason}</td></tr>)}{cn.length === 0 && <tr><td>No credit notes.</td></tr>}</tbody></table></div>
     </>}
@@ -71,6 +86,18 @@ function Inner({ role }: { role: Role }) {
       {led.length === 0 && <tr><td colSpan={7}>No entries yet.</td></tr>}</tbody></table>
       <p style={{ fontSize: 12 }}>Debit = the partner owes EarthLabs (invoice). Credit = money received or credit note. Entries are never edited; mistakes are corrected by a credit note.</p></div></>}
     {tab === "credit" && money && <CreditReminders />}</>);
+}
+type Sync = { linked: boolean; queued: number; sent: number; failed: number; last_sent: string | null; errors: { id: number; kind: string; ref: string; error: string }[] };
+/** Orders, invoices and payments flow to the Batch Management accounting. This shows whether the link is healthy. */
+function BatchSync() {
+  const [st, setSt] = useState<Sync | null>(null); const [m, setM] = useState("");
+  const load = useCallback(async () => { const { data, error } = await supabase.rpc("batch_sync_status"); if (error) setM(error.message); else setSt(data as Sync); }, []);
+  useEffect(() => { load(); }, [load]);
+  return (<><h2>Batch Management sync</h2><div className="card">{m && <Msg kind="bad">{m}</Msg>}
+    {st && <><p style={{ margin: 0 }}>{st.linked ? "Linked." : "Not linked yet."} Sent {st.sent} · waiting {st.queued} · failed {st.failed}{st.last_sent ? ` · last sent ${when(st.last_sent)}` : ""}</p>
+      {st.errors.map((e) => <p key={e.id} className="mini">{e.kind} {e.ref}: {e.error}</p>)}
+      {st.failed > 0 && <button className="btn sm" onClick={async () => { const { error } = await supabase.rpc("batch_sync_retry"); setM(error?.message ?? ""); load(); }}>Retry failed</button>}</>}
+    <p className="mini">Paid orders, final invoices with their challan, and every recorded payment reach Batch accounting automatically every minute.</p></div></>);
 }
 function CreditReminders() {
   const [rows, setRows] = useState<{ partner_id: string; name: string; invoice_id: string; amount: number; days_late: number }[] | null>(null); const [msg, setMsg] = useState<{ ok: boolean; t: string } | null>(null);

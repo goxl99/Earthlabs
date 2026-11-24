@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import Shell from "@/components/Shell";
 import SubTabs from "@/components/SubTabs";
@@ -58,7 +59,7 @@ export function OrdersView() {
   return (<>{msg && <Msg kind={msg.ok ? "ok" : "bad"}>{msg.t}</Msg>}
     <div className="card"><table><thead><tr><th>Order</th><th>Item</th><th>Qty</th><th>Value</th><th>Deliver by</th><th>Status</th><th>Payment</th><th></th></tr></thead><tbody>
       {ros.map((r) => { const open = ["Approved", "Acknowledged"].includes(r.status); return <tr key={r.id}><td>{r.id}</td><td>{r.rm_id}</td><td>{r.qty}</td><td>{inr(r.total)}</td><td>{r.eta}</td><td>{r.status}</td><td>{r.pay_status}</td>
-        <td style={{ whiteSpace: "nowrap" }}>{roActions("vendor", r).map((a) => a === "acknowledge" ? <button key={a} className="btn sm" style={{ marginRight: 6 }} onClick={() => call("vendor_acknowledge_ro", { rid: r.id }, "Acknowledged")}>Acknowledge</button> : a === "dispatch" ? <button key={a} className="btn sm" style={{ marginRight: 6 }} onClick={() => call("vendor_dispatch_ro", { rid: r.id }, "Marked dispatched")}>Dispatched</button> : null)}
+        <td style={{ whiteSpace: "nowrap" }}><Link className="btn sm" style={{ marginRight: 6 }} href={`/doc/?k=rpo&id=${encodeURIComponent(r.id)}`} target="_blank" rel="noopener">Purchase order</Link>{["Dispatched", "Received"].includes(r.status) && <Link className="btn sm" style={{ marginRight: 6 }} href={`/doc/?k=vdn&id=${encodeURIComponent(r.id)}`} target="_blank" rel="noopener">Dispatch note</Link>}{roActions("vendor", r).map((a) => a === "acknowledge" ? <button key={a} className="btn sm" style={{ marginRight: 6 }} onClick={() => call("vendor_acknowledge_ro", { rid: r.id }, "Acknowledged")}>Acknowledge</button> : a === "dispatch" ? <button key={a} className="btn sm" style={{ marginRight: 6 }} onClick={() => call("vendor_dispatch_ro", { rid: r.id }, "Marked dispatched")}>Dispatched</button> : null)}
           {open && <button className="btn sm" style={{ marginRight: 6 }} onClick={() => progress(r)}>Delivery update</button>}
           {open && r.pay_status === "Unpaid" && <button className="btn sm" onClick={() => reject(r)}>Reject</button>}
           {open && r.pay_status === "Unpaid" && <span style={{ fontSize: 12, marginLeft: 6 }}>Waiting for payment before you dispatch</span>}</td></tr>; })}

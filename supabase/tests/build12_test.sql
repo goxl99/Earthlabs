@@ -58,7 +58,7 @@ select 'BUILD 12 OK';
 -- trade_doc: staff open any, a partner only their own, the signed-out nobody
 reset role;
 do $$ declare oid text; iid text; begin
-  select id into oid from orders where partner_id = 'ELP-DLR-0001' order by created_at limit 1;
+  select id into oid from orders where partner_id = 'ELP-DLR-0001' and not exists (select 1 from invoices i where i.order_id = orders.id) order by created_at limit 1;
   if oid is null then
     insert into orders(id, partner_id, status, taxable, discount, net, gst, total, placed_by) values ('ORD-DOC-1', 'ELP-DLR-0001', 'Approved', 1000, 0, 1000, 180, 1180, '00000000-0000-0000-0000-000000000003') returning id into oid;
     insert into order_lines(order_id, sku, cartons, units, unit_price, amount) select 'ORD-DOC-1', sku, 1, pack_size, 10, pack_size * 10 from skus where status = 'active' limit 1;

@@ -40,11 +40,11 @@ select pg_temp.fails(format($q$select issue_invoice(%L)$q$, current_setting('t.o
 select pg_temp.fails($q$insert into invoices(order_id,partner_id,supply_state,taxable,total) values ('x','ELP-DLR-0001','Gujarat',1,1)$q$, 'permission denied');
 reset role;
 select pg_temp.as_user('00000000-0000-0000-0000-000000000005'); set role authenticated;
-select pg_temp.fails(format($q$select issue_invoice(%L)$q$, current_setting('t.o_new')), 'after payment is confirmed');
-select ledger_balance('ELP-DLR-0001') as b0 \gset
-select set_config('t.b0', :'b0', false);
-select issue_invoice(current_setting('t.o_paid')) as inv1 \gset
+select pg_temp.fails(format($q$select issue_invoice(%L)$q$, current_setting('t.o_new')), 'issued automatically when the order is dispatched');
+-- the dispatch in build 3 already issued the final invoice, numbered from the ELI series
+select id as inv1 from invoices where order_id = current_setting('t.o_paid') \gset
 select set_config('t.inv1', :'inv1', false);
+do $$ begin assert current_setting('t.inv1') ~ '^ELI/[0-9]{2}-[0-9]{2}/[0-9]{4}$', 'invoice number follows the ELI financial-year series'; end $$;
 do $$ declare i invoices; o orders; begin
   select * into i from invoices where id=current_setting('t.inv1'); select * into o from orders where id=current_setting('t.o_paid');
   assert i.total = o.total and i.taxable = o.net, 'invoice amounts are copied from the database-priced order';
@@ -53,14 +53,14 @@ do $$ declare i invoices; o orders; begin
   assert (select sum(amount) from invoice_lines where invoice_id = i.id) = o.taxable, 'invoice lines add up to the order goods value';
 end $$;
 select pg_temp.fails(format($q$select issue_invoice(%L)$q$, current_setting('t.o_paid')), 'already has an invoice');
-do $$ begin assert (select ledger_balance('ELP-DLR-0001')) = current_setting('t.b0')::numeric + (select total from invoices where id=current_setting('t.inv1')), 'the invoice is debited to the partner ledger'; end $$;
+do $$ begin assert (select coalesce(sum(debit),0) from ledger_entries where ref=current_setting('t.inv1') and kind='invoice') = (select total from invoices where id=current_setting('t.inv1')), 'the invoice is debited to the partner ledger'; end $$;
 reset role;
 select pg_temp.fails($q$update invoices set total=1$q$, 'cannot be changed');
 select pg_temp.fails($q$delete from invoice_lines$q$, 'cannot be changed');
 
 -- ===== Partner sees only own money =====
 select pg_temp.as_user('00000000-0000-0000-0000-000000000003'); set role authenticated;
-do $$ begin assert (select count(*) from invoices)=1 and (select count(*) from ledger_entries where partner_id <> 'ELP-DLR-0001')=0, 'dealer 1 sees only own invoices and ledger'; end $$;
+do $$ begin assert (select count(*) from invoices) >= 1 and (select count(*) from invoices where partner_id <> 'ELP-DLR-0001')=0 and (select count(*) from ledger_entries where partner_id <> 'ELP-DLR-0001')=0, 'dealer 1 sees only own invoices and ledger'; end $$;
 do $$ begin assert (dashboard_stats()->>'ledger_balance')::numeric = (select ledger_balance('ELP-DLR-0001')), 'partner dashboard shows own ledger balance'; end $$;
 select pg_temp.fails($q$select ledger_balance('ELP-DLR-0002')$q$, 'Not allowed');
 reset role;
@@ -79,11 +79,13 @@ select pg_temp.as_user('00000000-0000-0000-0000-000000000005'); set role authent
 select pg_temp.fails(format($q$select issue_credit_note(%L,100,'no')$q$, current_setting('t.inv1')), 'reason is required');
 select pg_temp.fails(format($q$select issue_credit_note(%L,0,'Damaged goods returned')$q$, current_setting('t.inv1')), 'above zero');
 select pg_temp.fails(format($q$select issue_credit_note(%L,(select total + 1 from invoices where id=%L),'Damaged goods returned')$q$, current_setting('t.inv1'), current_setting('t.inv1')), 'cannot exceed');
+select ledger_balance('ELP-DLR-0001') as b0 \gset
+select set_config('t.b0', :'b0', false);
 select issue_credit_note(current_setting('t.inv1'), 118, 'Damaged goods returned') as cn1 \gset
 do $$ declare c credit_notes; begin
   select * into c from credit_notes where invoice_id = current_setting('t.inv1');
   assert c.amount = 118 and c.taxable + c.cgst + c.sgst + c.igst = 118 and c.igst = 0, 'credit note GST split follows the invoice';
-  assert (select ledger_balance('ELP-DLR-0001')) = current_setting('t.b0')::numeric + (select total from invoices where id=current_setting('t.inv1')) - 118, 'credit note reduces what the partner owes';
+  assert (select ledger_balance('ELP-DLR-0001')) = current_setting('t.b0')::numeric - 118, 'credit note reduces what the partner owes';
 end $$;
 select pg_temp.fails(format($q$select issue_credit_note(%L,(select total from invoices where id=%L),'Second credit too large')$q$, current_setting('t.inv1'), current_setting('t.inv1')), 'cannot exceed');
 reset role;
@@ -141,8 +143,13 @@ do $$ begin assert (select status from orders where id=current_setting('t.o_new'
 select pg_temp.fails(format($q$select confirm_payment_proof(%s)$q$, :pf1), 'already confirmed');
 select pg_temp.fails(format($q$select reject_payment_proof(%s,'Not matching the bank')$q$, :pf1), 'already confirmed');
 -- invoice the second order too, then partner balance
+reset role;
+select set_config('epdms.dispatching','on',false);
+update orders set status='Dispatched' where id=current_setting('t.o_new');
+select set_config('epdms.dispatching','off',false);
+select pg_temp.as_user('00000000-0000-0000-0000-000000000005'); set role authenticated;
 select issue_invoice(current_setting('t.o_new'));
-do $$ begin assert (select ledger_balance('ELP-DLR-0001')) = current_setting('t.b0')::numeric + (select total from invoices where id=current_setting('t.inv1')) - 118, 'a paid and invoiced order leaves the balance unchanged'; end $$;
+do $$ begin assert (select ledger_balance('ELP-DLR-0001')) = current_setting('t.b0')::numeric - 118, 'a paid and invoiced order leaves the balance unchanged'; end $$;
 reset role;
 
 -- rejection path: a rejected proof frees the UTR and the partner may resubmit
@@ -174,8 +181,11 @@ reset role;
 select pg_temp.as_user('00000000-0000-0000-0000-000000000005'); set role authenticated;
 select (select total from orders where id=:'o_mh') as tot_mh \gset
 select confirm_order_payment(:'o_mh', 'UTR900003', :tot_mh);
-select issue_invoice(:'o_mh') as inv_mh \gset
-do $$ declare i invoices; begin select * into i from invoices where order_id = (select id from orders where partner_id='ELP-DLR-0002' and status='Payment Confirmed' limit 1);
+reset role;
+select _issue_invoice(:'o_mh') as inv_mh \gset
+select set_config('t.o_mh', :'o_mh', false);
+select pg_temp.as_user('00000000-0000-0000-0000-000000000005'); set role authenticated;
+do $$ declare i invoices; begin select * into i from invoices where order_id = current_setting('t.o_mh');
   assert i.igst > 0 and i.cgst = 0 and i.sgst = 0, 'outside Gujarat the GST is IGST'; end $$;
 select issue_credit_note(:'inv_mh', 59, 'Short supply adjustment') as cn_mh \gset
 do $$ declare c credit_notes; begin select * into c from credit_notes where partner_id='ELP-DLR-0002'; assert c.igst > 0 and c.cgst = 0, 'credit note on an IGST invoice is IGST'; end $$;
@@ -194,7 +204,7 @@ do $$ begin assert (select status from orders where partner_id='ELP-DLR-0002' an
 
 -- ===== Audit =====
 do $$ begin
-  assert (select count(*) from audit_log where table_name='invoices')=3, 'invoices audited';
+  assert (select count(*) from audit_log where table_name='invoices')=(select count(*) from invoices), 'every invoice audited';
   assert (select count(*) from audit_log where table_name='credit_notes')=3, 'credit notes audited';
   assert (select count(*) from audit_log where table_name='payment_proofs')>=5, 'payment proofs audited';
   assert (select count(*) from audit_log where table_name='ledger_entries')>=8, 'ledger postings audited';

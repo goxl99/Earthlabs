@@ -162,10 +162,10 @@ select pg_temp.blocked($q$select run_report('orders',null,null)$q$, 'anon report
 select pg_temp.blocked($q$select * from price_list()$q$, 'anon price list');
 select pg_temp.blocked($q$select record_partner_score('ELP-DLR-0001', date '2026-10-01', '{}'::jsonb, 'x')$q$, 'anon scores');
 reset role;
--- anon may execute only the three public functions
+-- anon may execute only the four public functions
 do $$ declare bad text; begin
   select string_agg(p.proname, ', ') into bad from pg_proc p join pg_namespace n on n.oid=p.pronamespace
-   where n.nspname='public' and p.prokind='f' and has_function_privilege('anon', p.oid, 'execute') and p.proname not in ('submit_application','track_application','verify_certificate');
+   where n.nspname='public' and p.prokind='f' and has_function_privilege('anon', p.oid, 'execute') and p.proname not in ('submit_application','track_application','verify_certificate','verify_document');
   assert bad is null, 'anon can execute: '||coalesce(bad,'');
   assert (select count(*) from information_schema.role_table_grants where table_schema='public' and grantee='anon' and table_name<>'partner_types')=0, 'anon holds table privileges';
 end $$;

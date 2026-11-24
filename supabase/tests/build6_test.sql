@@ -44,7 +44,7 @@ select pg_temp.fails(format($q$select dispatch_order(%L,'GJ01','LR1','B1')$q$, :
 select pg_temp.fails(format($q$select confirm_payment_proof(%s)$q$, :'pf'), 'Only Accounts');                               -- warehouse cannot verify
 reset role;
 select pg_temp.as_user('00000000-0000-0000-0000-000000000005'); set role authenticated;
-select pg_temp.fails(format($q$select issue_invoice(%L)$q$, :'og'), 'after payment is confirmed');
+select pg_temp.fails(format($q$select issue_invoice(%L)$q$, :'og'), 'issued automatically when the order is dispatched');
 select confirm_payment_proof(:'pf');
 reset role;
 do $$ begin assert (select status from orders where id=current_setting('t.og'))='Payment Confirmed', 'Accounts confirmation moves the order on'; end $$;

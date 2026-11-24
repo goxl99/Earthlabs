@@ -1,5 +1,6 @@
 "use client";
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import Shell from "@/components/Shell";
 import { supabase } from "@/lib/supabase";
 import { Msg } from "@/components/ui";
@@ -38,7 +39,7 @@ function Inner({ role }: { role: Role }) {
     <h2>Release orders</h2>
     <div className="card"><table><thead><tr><th>Order</th><th>Vendor</th><th>Item</th><th>Qty</th><th>Value</th><th>Status</th><th>Payment</th><th></th></tr></thead><tbody>
       {ros.map((r) => <tr key={r.id}><td>{r.id}<div style={{ fontSize: 12 }}>{r.eta ? "by " + r.eta : ""}</div></td><td>{r.vendor_id}</td><td>{r.rm_id}</td><td>{r.qty}</td><td>{inr(r.total)}</td><td>{r.status}</td><td>{r.pay_status}{r.pay_mode ? ` (${r.pay_mode})` : ""}</td>
-        <td style={{ whiteSpace: "nowrap" }}>{roActions(role, r).map((a) => a === "approve" ? <button key={a} className="btn sm" style={{ marginRight: 6 }} onClick={() => call("approve_release_order", { rid: r.id })}>Approve</button>
+        <td style={{ whiteSpace: "nowrap" }}><Link className="btn sm" style={{ marginRight: 6 }} href={`/doc/?k=rpo&id=${encodeURIComponent(r.id)}`} target="_blank" rel="noopener">Purchase order</Link>{["Dispatched", "Received"].includes(r.status) && <Link className="btn sm" style={{ marginRight: 6 }} href={`/doc/?k=vdn&id=${encodeURIComponent(r.id)}`} target="_blank" rel="noopener">Dispatch note</Link>}{roActions(role, r).map((a) => a === "approve" ? <button key={a} className="btn sm" style={{ marginRight: 6 }} onClick={() => call("approve_release_order", { rid: r.id })}>Approve</button>
           : a === "reject" ? <button key={a} className="btn sm" style={{ marginRight: 6 }} onClick={async () => { const w = await askReason("Reject release order", "Reason", "Reject", true); if (w) call("reject_release_order", { rid: r.id, why: w }); }}>Reject</button>
           : a === "pay" ? <button key={a} className="btn sm" style={{ marginRight: 6 }} onClick={async () => { const f = await askForm("Release payment to vendor", [{ name: "u", label: "UTR / reference number", required: true, hint: `Amount ${inr(r.pay_amount)}` }], { ok: "Release payment" }); if (f) call("release_vendor_payment", { rid: r.id, u: f.u.trim(), amt: r.pay_amount }); }}>Release payment</button>
           : a === "receive" ? <button key={a} className="btn" onClick={() => call("receive_release_order", { rid: r.id })}>Mark received</button> : null)}</td></tr>)}

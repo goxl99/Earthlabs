@@ -35,7 +35,7 @@ export default function Certificate() {
       .cert p { margin: 1.6mm 0; font-size: 4.6mm; line-height: 1.5 }
       .cert .meta { display: flex; gap: 16mm; margin-top: 4mm; font-family: system-ui, sans-serif; font-size: 3.7mm }
       .cert .meta b { display: block; font-size: 4.4mm; color: #13595a; margin-top: .6mm }
-      .cert .bot { position: absolute; left: 14mm; right: 14mm; bottom: 7mm; display: flex; justify-content: space-between; align-items: flex-end; font-family: system-ui, sans-serif; font-size: 3.4mm }
+      .cert .bot { position: absolute; left: 14mm; right: 14mm; bottom: 7mm; display: flex; justify-content: center; align-items: flex-end; font-family: system-ui, sans-serif; font-size: 3.4mm }
       .cert .sig { width: 62mm; text-align: center } .cert .sig i { display: block; border-top: .3mm solid #1c2b2b; padding-top: 1.2mm; font-style: normal }
       .cert .qr { width: 27mm; text-align: center } .cert .qr svg { width: 27mm; height: 27mm; display: block }
       .cert .addr { font-size: 3.2mm; color: #55625f; max-width: 105mm; text-align: center }
@@ -56,8 +56,6 @@ export default function Certificate() {
         <p>is appointed as an <b>{v.type_name}</b> of {v.company || "EarthLabs Innovative Products Pvt. Ltd."} for <b>{v.district}{v.state ? `, ${v.state}` : ""}</b>,<br />to sell EarthLabs herbal and eco-conscious hand wash and cleaning products under the terms of the signed Memorandum of Understanding.</p>
         <div className="meta"><div>Partner ID<b>{v.partner_id}</b></div><div>Certificate No.<b>{v.cert_no}</b></div><div>Date of issue<b>{longDate(v.issued_at)}</b></div><div>Valid till<b>{longDate(v.valid_till)}</b></div></div>
         <div className="bot">
-          <div className="sig"><i>Authorised Signatory<br />{v.company}</i></div>
-          <div />
           <div className="qr" dangerouslySetInnerHTML={{ __html: qr }} />
         </div>
       </div></div></div>

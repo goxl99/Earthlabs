@@ -1,0 +1,2 @@
+-- Record only (already applied): private storage bucket 'sent-docs' for invoice/challan PDFs shared by WhatsApp/email.
+-- Admin and qc_officer can upload and create signed links (60 days).

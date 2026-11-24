@@ -6,6 +6,8 @@ import { Msg, when } from "@/components/ui";
 import { inr } from "@/lib/orders";
 import type { Role } from "@/lib/roles";
 import { askForm, askConfirm, askReason } from "@/lib/dialog";
+import SubTabs from "@/components/SubTabs";
+import { PROC_TABS } from "@/lib/procTabs";
 
 type Rfq = { id: string; rm_id: string; qty: number; needed_by: string | null; note: string | null; status: string; created_at: string };
 type Quote = { id: number; rfq_id: string; vendor_id: string; rate: number; lead_days: number; valid_until: string | null; status: string };
@@ -28,7 +30,7 @@ function Inner({ role }: { role: Role }) {
   useEffect(() => { load(); }, [load]);
   async function call(fn: string, args: Record<string, unknown>) { const { error, data } = await supabase.rpc(fn, args); setMsg({ ok: !error, t: error ? error.message : fn === "award_quote" ? `Purchase order ${data} created. It follows the normal approval and payment gate.` : "Done" }); load(); }
   const lowest = (id: string) => Math.min(...qs.filter((q) => q.rfq_id === id).map((q) => Number(q.rate)));
-  return (<><h1>RFQs, quotes &amp; vendor performance</h1>{msg && <Msg kind={msg.ok ? "ok" : "bad"}>{msg.t}</Msg>}
+  return (<><h1>RFQs, quotes &amp; vendor performance</h1><SubTabs current="/rfq/" items={PROC_TABS} />{msg && <Msg kind={msg.ok ? "ok" : "bad"}>{msg.t}</Msg>}
     {wh && <div className="card"><h2 style={{ marginTop: 0 }}>Ask vendors for a quotation</h2>
       <label>Raw material<select value={rm} onChange={(e) => setRm(e.target.value)}><option value="">Choose</option>{rms.map((m) => <option key={m.id} value={m.id}>{m.id} · {m.name} ({m.unit})</option>)}</select></label>
       <label>Quantity<input type="number" min={0} value={qty} onChange={(e) => setQty(e.target.value)} /></label>

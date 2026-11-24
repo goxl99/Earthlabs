@@ -5,6 +5,8 @@ import { supabase } from "@/lib/supabase";
 import { Msg } from "@/components/ui";
 import type { Role } from "@/lib/roles";
 import { askForm, askConfirm, askReason } from "@/lib/dialog";
+import SubTabs from "@/components/SubTabs";
+import { PROC_TABS } from "@/lib/procTabs";
 
 type B = { sku: string; rm_id: string; qty_per_unit: number };
 type S = { sku: string; name: string };
@@ -27,7 +29,7 @@ function Inner({ role }: { role: Role }) {
   }
   async function order(r: Plan) { const { error } = await supabase.rpc("raise_release_order", { rm: r.rm_id, q: r.shortfall }); setMsg({ ok: !error, t: error ? error.message : `Release order raised for ${r.shortfall} ${r.unit} of ${r.name}` }); }
   const withBom = skus.filter((s) => bom.some((b) => b.sku === s.sku));
-  return (<><h1>Material planning (bill of materials)</h1>{msg && <Msg kind={msg.ok ? "ok" : "bad"}>{msg.t}</Msg>}
+  return (<><h1>Material planning (bill of materials)</h1><SubTabs current="/bom/" items={PROC_TABS} />{msg && <Msg kind={msg.ok ? "ok" : "bad"}>{msg.t}</Msg>}
     <div className="card"><h2 style={{ marginTop: 0 }}>Plan production</h2><p className="mini">Enter how many units of each product you plan to make. The plan shows the raw material needed, what is already in stock, and the date to order by.</p>
       {withBom.map((s) => <p key={s.sku} style={{ margin: "4px 0" }}><b>{s.sku}</b> {s.name} <input aria-label={`${s.sku} units`} type="number" min={0} placeholder="Units" style={{ width: 110 }} value={units[s.sku] ?? ""} onChange={(e) => setUnits({ ...units, [s.sku]: e.target.value })} /></p>)}
       {withBom.length === 0 && <p>No product has a bill of materials yet.{wh ? " Add lines below." : ""}</p>}

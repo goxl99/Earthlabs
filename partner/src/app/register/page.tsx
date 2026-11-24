@@ -8,6 +8,7 @@ import { PATHS } from "@/components/Public";
 import PublicShell from "@/components/PublicShell";
 import { markPartner } from "@/lib/visitor";
 import PotentialCard from "@/components/Potential";
+import { parsePin, osmLink } from "@/lib/geo";
 import { REG_Q, REG_DOCS, yesnoOpts, exclOpts } from "@/lib/regQuestions";
 
 type PType = { code: string; name: string };
@@ -16,6 +17,7 @@ type F = Record<string, string>;
 const need = (f: F, step: number, verified: boolean): string => {
   if (step === 1) return !f.biz.trim() ? "Enter your business name." : !f.contact.trim() ? "Enter the contact person." : !/^[0-9+\s-]{10,15}$/.test(f.ph.trim()) ? "Enter a valid mobile number." : !/^\S+@\S+\.\S+$/.test(f.mail.trim()) ? "Enter a valid e-mail." : !verified ? "Verify your e-mail with the code we send you." : "";
   if (step === 2) { const miss = (REG_Q[f.t] ?? []).find((q) => q[2] !== "yesno" && q[2] !== "excl" && !(f["q_" + q[0]] ?? "").trim()); return miss ? "Please answer: " + miss[1] : ""; }
+  if (step === 3 && ((f.pin_lat ?? "").trim() || (f.pin_lng ?? "").trim()) && !parsePin(f.pin_lat ?? "", f.pin_lng ?? "")) return "The map pin must be a latitude and longitude inside India, for example 22.3072 and 73.1812. Clear both boxes to skip it.";
   if (step === 3) return !f.addr.trim() ? "Enter your business address." : !f.dist ? "Choose your preferred district." : "";
   if (step === 4) return f.agree !== "1" ? "Please tick the confirmation." : "";
   return "";
@@ -45,6 +47,7 @@ export default function Register() {
     const e = need(f, 4, isVerified); setErr(e); if (e) return;
     setMsg(null); setBusy(true);
     const ans: Record<string, string> = { address: f.addr, other_areas: f.area };
+    const pin = parsePin(f.pin_lat ?? "", f.pin_lng ?? ""); if (pin) ans.map_pin = `${pin.lat},${pin.lng}`;
     qs.forEach((q) => { ans[q[0]] = f["q_" + q[0]] ?? (q[2] === "yesno" ? "Yes" : q[2] === "excl" ? "Non-exclusive" : ""); });
     const { data, error } = await supabase.rpc("submit_application", { t: f.t, biz: f.biz, contact: f.contact, ph: f.ph, mail, st: "Gujarat", dist: f.dist, gst: f.gst, ans });
     setBusy(false);
@@ -70,7 +73,10 @@ export default function Register() {
         <div className="frm2">{qs.map((q) => <Field key={q[0]} label={q[1]}>{q[2] === "yesno" || q[2] === "excl" ? <select value={f["q_" + q[0]] ?? (q[2] === "yesno" ? "Yes" : "Non-exclusive")} onChange={set("q_" + q[0])}>{(q[2] === "yesno" ? yesnoOpts : exclOpts).map((o) => <option key={o}>{o}</option>)}</select> : <input type={q[2] === "number" ? "number" : "text"} value={f["q_" + q[0]] ?? ""} onChange={set("q_" + q[0])} />}</Field>)}
           <Field label="GSTIN (if you have one)"><input value={f.gst} onChange={set("gst")} /></Field></div>
         <p className="mini">Exclusive rights are earned through performance. Everyone starts non-exclusive unless management decides otherwise.</p></>}
-      {step === 3 && <><h2>Where will you operate?</h2><Field label="Business address"><textarea rows={2} value={f.addr} onChange={set("addr")} disabled={f.addr === "Not applicable"} /></Field><label style={{ display: "block", marginBottom: 10, fontSize: 14 }}><input type="checkbox" checked={f.addr === "Not applicable"} onChange={(e) => setF({ ...f, addr: e.target.checked ? "Not applicable" : "" })} /> I do not have a separate business address yet (Not applicable)</label><Field label="Preferred district"><select value={f.dist} onChange={set("dist")}>{DISTRICTS.map((d) => <option key={d}>{d}</option>)}</select></Field><PotentialCard district={f.dist} /><Field label="Other areas you serve"><input value={f.area} onChange={set("area")} /></Field></>}
+      {step === 3 && <><h2>Where will you operate?</h2><Field label="Business address"><textarea rows={2} value={f.addr} onChange={set("addr")} disabled={f.addr === "Not applicable"} /></Field><label style={{ display: "block", marginBottom: 10, fontSize: 14 }}><input type="checkbox" checked={f.addr === "Not applicable"} onChange={(e) => setF({ ...f, addr: e.target.checked ? "Not applicable" : "" })} /> I do not have a separate business address yet (Not applicable)</label><Field label="Preferred district"><select value={f.dist} onChange={set("dist")}>{DISTRICTS.map((d) => <option key={d}>{d}</option>)}</select></Field><div className="card" style={{ margin: "10px 0" }}><b>Pin your location on the map (optional)</b><p className="mini" style={{ margin: "4px 0 8px" }}>Helps us place you in the right territory. Use your phone&apos;s location, or type the latitude and longitude.</p>
+        <div className="row" style={{ flexWrap: "wrap", gap: 8 }}><button type="button" className="btn out" onClick={() => { if (!navigator.geolocation) { setErr("This browser cannot share its location. Type the latitude and longitude instead."); return; } navigator.geolocation.getCurrentPosition((p) => setF((o) => ({ ...o, pin_lat: p.coords.latitude.toFixed(6), pin_lng: p.coords.longitude.toFixed(6) })), () => setErr("Location was not shared. You can type the latitude and longitude instead."), { timeout: 10000 }); }}>Use my current location</button>
+          <input aria-label="Latitude" placeholder="Latitude" inputMode="decimal" value={f.pin_lat ?? ""} onChange={set("pin_lat")} style={{ maxWidth: 140 }} /><input aria-label="Longitude" placeholder="Longitude" inputMode="decimal" value={f.pin_lng ?? ""} onChange={set("pin_lng")} style={{ maxWidth: 140 }} />
+          {parsePin(f.pin_lat ?? "", f.pin_lng ?? "") && <a className="lk" target="_blank" rel="noopener noreferrer" href={osmLink(parsePin(f.pin_lat ?? "", f.pin_lng ?? "")!)}>Check on map</a>}</div></div><PotentialCard district={f.dist} /><Field label="Other areas you serve"><input value={f.area} onChange={set("area")} /></Field></>}
       {step === 4 && <><h2>Check and submit</h2><table><tbody>{([["Type", tname], ["Business", f.biz], ["Contact", f.contact], ["Mobile", f.ph], ["E-mail (verified)", mail], ["Address", f.addr], ["District", f.dist], ["GSTIN", f.gst || "—"]] as [string, string][]).map(([k, v]) => <tr key={k}><td>{k}</td><td>{v}</td></tr>)}</tbody></table>
         <h3 style={{ marginTop: 14 }}>Please keep these documents ready</h3><ul className="mini">{docs.map((d) => <li key={d}>{d}</li>)}</ul><p className="mini">Our team will ask for them when your application is verified.</p>
         <label className="row" style={{ gap: 6, marginTop: 10 }}><input type="checkbox" checked={f.agree === "1"} onChange={(e) => setF({ ...f, agree: e.target.checked ? "1" : "" })} /> I confirm the details are correct and understand that registration does not authorise trading</label></>}

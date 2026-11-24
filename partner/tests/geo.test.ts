@@ -27,3 +27,10 @@ describe("Gujarat geography", () => {
     expect(exclConflict(ps, "DST", "Surat", "ELP-DST-0001", true)).toBeNull();
   });
 });
+
+import { parsePin, osmLink } from "../src/lib/geo";
+describe("application map pin", () => {
+  it("accepts a point in India and rounds it", () => { expect(parsePin("22.3072", " 73.1812 ")).toEqual({ lat: 22.3072, lng: 73.1812 }); expect(parsePin(22.30721234, 73.18121234)).toEqual({ lat: 22.307212, lng: 73.181212 }); });
+  it("rejects blanks, text and points outside India", () => { for (const [a, b] of [["", "73"], ["22", ""], ["x", "73"], ["51.5", "-0.12"], ["22", "120"], ["NaN", "73"]]) expect(parsePin(a, b)).toBeNull(); });
+  it("builds a map link for the pin", () => { expect(osmLink({ lat: 22.3, lng: 73.2 })).toBe("https://www.openstreetmap.org/?mlat=22.3&mlon=73.2#map=16/22.3/73.2"); });
+});

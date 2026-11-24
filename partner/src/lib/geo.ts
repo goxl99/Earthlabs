@@ -70,3 +70,14 @@ export function exclConflict(partners: { id: string; name: string; type_code: st
   if (ex) return `${ex.name} (${ex.id}) already holds exclusive rights in ${district}`;
   return null;
 }
+
+/** A map pin typed or captured by the applicant. Must fall inside India's bounding box; returns null otherwise. */
+export function parsePin(lat: string | number, lng: string | number): { lat: number; lng: number } | null {
+  if (String(lat).trim() === "" || String(lng).trim() === "") return null;
+  const a = Number(lat), b = Number(lng);
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return null;
+  if (a < 6 || a > 38 || b < 68 || b > 98) return null;
+  return { lat: Math.round(a * 1e6) / 1e6, lng: Math.round(b * 1e6) / 1e6 };
+}
+/** Link that opens the pin on OpenStreetMap in a new tab (the site's security policy does not allow embedding maps). */
+export const osmLink = (p: { lat: number; lng: number }) => `https://www.openstreetmap.org/?mlat=${p.lat}&mlon=${p.lng}#map=16/${p.lat}/${p.lng}`;

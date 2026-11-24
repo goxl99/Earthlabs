@@ -4,6 +4,7 @@ import Shell from "@/components/Shell";
 import { supabase } from "@/lib/supabase";
 import { Field, Msg, when } from "@/components/ui";
 import type { Role } from "@/lib/roles";
+import SubTabs from "@/components/SubTabs";
 
 type S = { id: string; name: string; kind: string; value: number; buy: number | null; get: number | null; min_cartons: number; min_value: number; first_order_only: boolean; stackable: boolean; skus: string[] | null; audience_mode: string; audience_types: string[]; audience_partners: string[]; valid_from: string; valid_to: string; budget: number; active: boolean; disclosed: boolean };
 const benefit = (s: S) => s.kind === "pct" ? `${s.value}% off` : s.kind === "flat" ? `₹${s.value} off the order` : s.kind === "free" ? `${s.get} free carton per ${s.buy} bought` : "Free brand kit";
@@ -38,7 +39,7 @@ function Inner({ role }: { role: Role }) {
   const flip = async (s: S, patch: Partial<S>, ok: string) => { const { error } = await supabase.from("schemes").update(patch).eq("id", s.id); say(error ? error.message : ok, !error); load(); };
   const disclose = async (s: S, show: boolean) => { const { error } = await supabase.rpc("disclose_scheme", { sid: s.id, show }); say(error ? error.message : show ? "Partners can now see this scheme" : "Scheme hidden from partners", !error); load(); };
   const set = (k: keyof typeof empty) => (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => setF({ ...f, [k]: e.target.type === "checkbox" ? (e.target as HTMLInputElement).checked : e.target.value });
-  return (<><h1>Schemes</h1><p>Schemes stay hidden from partners until disclosed. Only Super Admin creates and activates schemes{canDisclose && !boss ? "; you may disclose them" : ""}.</p>
+  return (<><h1>Schemes</h1><p>Schemes stay hidden from partners until disclosed. Only Super Admin creates and activates schemes{canDisclose && !boss ? "; you may disclose them" : ""}.</p><SubTabs current="/schemes/" items={[{ href: "/catalogue/", label: "Catalogue & SKUs" },{ href: "/schemes/", label: "Schemes & GST" }]} />
     {msg && <Msg kind={msg.ok ? "ok" : "bad"}>{msg.t}</Msg>}
     <div className="card"><table><thead><tr><th>Scheme</th><th>Benefit</th><th>Who</th><th>Valid</th><th>Budget used</th><th>State</th><th></th></tr></thead><tbody>
       {list.map((s) => (<tr key={s.id}><td><b>{s.name}</b><div style={{ fontSize: 12 }}>{s.id} · {s.stackable ? "stacks" : "does not stack"}{s.first_order_only ? " · first order only" : ""}{s.min_cartons ? ` · min ${s.min_cartons} cartons` : ""}{s.min_value ? ` · min ₹${s.min_value}` : ""}</div></td>

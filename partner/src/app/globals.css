@@ -238,7 +238,7 @@ table.t tr.cl:hover td{background:#f2f8f3}
 /* ===== built-app additions (not in the prototype markup) ===== */
 a.nav{text-decoration:none}a.btn{text-decoration:none;display:inline-block}
 a.brand{text-decoration:none}
-.tw table.t{min-width:560px}
+.tw 
 input,select,textarea{font:inherit}
 @media print { .top, .side, .no-print, nav { display: none !important; } .shell{display:block} .main { margin: 0 !important; padding: 0 !important; animation:none } }
 
@@ -255,3 +255,11 @@ input,select,textarea{font:inherit}
 .pubwrap input:not([type=checkbox]):not([type=radio]):not([type=file]),.pubwrap select,.pubwrap textarea{width:100%;border:1px solid rgba(19,89,90,.25);border-radius:10px;padding:9px 12px;background:#fff}
 .pubwrap .field input,.pubwrap .field select,.pubwrap .field textarea{margin:0}
 .pubwrap label{display:block}
+
+/* Inline filter controls (Category, Cluster …) look like the prototype's plain selects */
+.row>label.mini{display:inline}
+.row>select,.row select.flt{padding:3px 6px;border:1px solid #767676;border-radius:4px;background:#fff;font-size:13.33px;width:auto;height:auto}
+
+.tabs a.tabbtn{padding:8px 14px;font-weight:700;color:var(--teal);border-radius:9px 9px 0 0;font-size:14px;text-decoration:none;position:relative}
+.tabs a.tabbtn[aria-selected=true]{background:transparent}
+.tabs a.tabbtn[aria-selected=true]:after{content:"";position:absolute;left:10px;right:10px;bottom:-1px;height:3px;border-radius:3px;background:var(--goldg)}

@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { Field, Msg } from "@/components/ui";
 import { inr } from "@/lib/orders";
 import type { Role } from "@/lib/roles";
+import SubTabs from "@/components/SubTabs";
 
 type Sku = { sku: string; name: string; category: string; mrp: number; pack_size: number; moq: number; slab: number; status: string; restricted: boolean };
 type PL = { sku: string; name: string; mrp: number; status: string; type_code: string; margin_pct: number; price: number };
@@ -39,7 +40,7 @@ function Inner({ role }: { role: Role }) {
   const addAccess = async () => done((await supabase.from("sku_access").insert({ sku: ac.sku, partner_id: ac.pid.trim() })).error, "Partner can now see this SKU");
   const rmAccess = async (a: Access) => done((await supabase.from("sku_access").delete().eq("sku", a.sku).eq("partner_id", a.partner_id)).error, "Access removed");
 
-  return (<><h1>Products &amp; pricing</h1><p className="sub">The one commercial master. Partners see only the price for their own tier and agreement. Every change is written to the audit trail.</p>
+  return (<><h1>Products &amp; pricing</h1><p className="sub">The one commercial master. Partners see only the price for their own tier and agreement. Every change is written to the audit trail.</p><SubTabs current="/catalogue/" items={[{ href: "/catalogue/", label: "Catalogue & SKUs" },{ href: "/schemes/", label: "Schemes & GST" }]} />
     <div className="tabs" role="tablist">{(["products", "prices", "margins"] as const).map((t) => <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>{t === "products" ? "Products" : t === "prices" ? "Price list" : "Margin slabs"}</button>)}</div>
     {msg && <Msg kind={msg.ok ? "ok" : "bad"}>{msg.t}</Msg>}
     {tab === "products" && <>

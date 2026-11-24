@@ -7,6 +7,7 @@ import { inr } from "@/lib/orders";
 import { nextLevel, type Ladder } from "@/lib/procurement";
 import type { Role } from "@/lib/roles";
 import { askForm, askConfirm, askReason, notify } from "@/lib/dialog";
+import SubTabs from "@/components/SubTabs";
 
 type P = { id: string; entity_kind: string; entity_id: string; from_level: number; to_level: number; reason: string; source: string; status: string; created_at: string };
 
@@ -26,7 +27,7 @@ function Inner({ role }: { role: Role }) {
   const row = (kind: "partner" | "vendor", e: { id: string; name: string; credit_level: number }) => { const nx = nextLevel(e.credit_level, lad); return (
     <tr key={kind + e.id}><td>{e.id}</td><td>{e.name}</td><td>{lad[e.credit_level]?.n ?? e.credit_level}</td>
       <td>{nx != null && <button className="btn" onClick={async () => { const why = await askReason(`Propose move to ${lad[nx]?.n}`, "Why? (score, payment record)", "Propose"); if (why) call("propose_credit_change", { k: kind, i: e.id, to_lvl: nx, why }); }}>Propose {lad[nx]?.n}</button>}</td></tr>); };
-  return (<><h1>Credit ladder</h1>
+  return (<><h1>Procurement & raw materials</h1><SubTabs current="/credit/" items={[{ href: "/procurement/", label: "Overview" }, { href: "/credit/", label: "Credit ladder" }]} />
     <p>Everyone starts at <b>pay and carry</b>: payment is made before goods move. Credit opens one step at a time. <b>AI or staff propose; only Super Admin approves.</b></p>
     {pc && <Msg>Pay-and-carry is switched on, so no credit can be opened yet. Super Admin switches it off in settings when the business is ready.</Msg>}
     {msg && <Msg kind={msg.ok ? "ok" : "bad"}>{msg.t}</Msg>}

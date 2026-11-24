@@ -7,6 +7,8 @@ import { navFor, envOf, ROLE_LABEL, type Env, type Role } from "@/lib/roles";
 
 export type Profile = { id: string; role: Role; full_name: string; partner_id: string | null; active: boolean };
 
+/** Which count (from nav_counts) belongs to which menu item. */
+const NAVKEY: Record<string, string> = { appr: "appr", apps: "apps", agree: "agree", orders: "orders", fin: "fin", ai: "ai", proc: "proc" };
 const ENVS: { k: Env | "public"; label: string }[] = [
   { k: "internal", label: "Internal portal" }, { k: "partner", label: "Partner portal" },
   { k: "vendor", label: "Vendor portal" }, { k: "public", label: "Public website" },
@@ -17,6 +19,7 @@ const ENVS: { k: Env | "public"; label: string }[] = [
 export default function Shell({ page, children }: { page: string; children: (p: Profile) => ReactNode }) {
   const [p, setP] = useState<Profile | null | undefined>(undefined);
   const [open, setOpen] = useState(false);
+  const [ct, setCt] = useState<Record<string, number>>({});
   const path = usePathname() ?? "";
   useEffect(() => {
     if (!configured) { setP(null); return; }
@@ -24,6 +27,7 @@ export default function Shell({ page, children }: { page: string; children: (p: 
       if (!data.user) { location.href = "./../"; return; }
       const { data: prof } = await supabase.from("profiles").select("id,role,full_name,partner_id,active").eq("id", data.user.id).single();
       setP((prof as Profile) ?? null);
+      if (prof && ["super_admin", "sales", "accounts", "warehouse"].includes((prof as Profile).role)) supabase.rpc("nav_counts").then(({ data: c }) => setCt((c as Record<string, number>) ?? {}));
     });
   }, []);
   if (p === undefined) return <main className="main">Loading…</main>;
@@ -58,7 +62,7 @@ export default function Shell({ page, children }: { page: string; children: (p: 
           {items.map((n) => {
             const head = n.group && n.group !== lastGroup ? <div className="grp" key={`g-${n.group}`}>{n.group}</div> : null;
             if (n.group) lastGroup = n.group;
-            return [head, <Link key={n.key} className="nav" href={n.href} onClick={() => setOpen(false)} aria-current={n.key === current ? "page" : undefined}><span className="ic">{n.icon}</span>{n.label}</Link>];
+            return [head, <Link key={n.key} className="nav" href={n.href} onClick={() => setOpen(false)} aria-current={n.key === current ? "page" : undefined}><span className="ic">{n.icon}</span>{n.label}{ct[NAVKEY[n.key]] ? <span className="ct">{ct[NAVKEY[n.key]]}</span> : null}</Link>];
           })}
         </nav>
         <main className="main" id="main">{children(p)}</main>

@@ -7,6 +7,7 @@ import { inr } from "@/lib/orders";
 import { coverDays, rmState, roActions, type RM, type RO } from "@/lib/procurement";
 import type { Role } from "@/lib/roles";
 import { askForm, askConfirm, askReason, notify } from "@/lib/dialog";
+import SubTabs from "@/components/SubTabs";
 
 type Proc = { lead_buffer: number; ro_limit: number; auto_limit: number; advance_pct: number; auto_email: boolean };
 
@@ -22,7 +23,7 @@ function Inner({ role }: { role: Role }) {
   async function call(fn: string, args: Record<string, unknown>) { const { error } = await supabase.rpc(fn, args); setMsg({ ok: !error, t: error ? error.message : "Done" }); load(); }
   const incoming = (id: string) => ros.filter((r) => r.rm_id === id && ["Approved", "Acknowledged", "Dispatched"].includes(r.status)).reduce((a, r) => a + Number(r.qty), 0);
   async function saveSettings(s: Proc) { const { error } = await supabase.from("settings").update({ value: s }).eq("key", "procurement"); setMsg({ ok: !error, t: error ? error.message : "Settings saved" }); load(); }
-  return (<><h1>Procurement & raw materials</h1><p className="sub">Vendor stock, raw-material inventory, release orders and credit. Everything adjustable by management. Linked to the Batch Management System.</p>{msg && <Msg kind={msg.ok ? "ok" : "bad"}>{msg.t}</Msg>}
+  return (<><h1>Procurement & raw materials</h1><p className="sub">Vendor stock, raw-material inventory, release orders and credit. Everything adjustable by management. Linked to the Batch Management System.</p><SubTabs current="/procurement/" items={[{ href: "/procurement/", label: "Overview" },{ href: "/credit/", label: "Credit ladder" }]} />{msg && <Msg kind={msg.ok ? "ok" : "bad"}>{msg.t}</Msg>}
     <h2>Raw-material inventory</h2>
     <div className="card"><table><thead><tr><th>Item</th><th>On hand</th><th>Incoming</th><th>Cover</th><th>Lead</th><th>Vendor</th><th>State</th><th></th></tr></thead><tbody>
       {rms.map((m) => <tr key={m.id}><td>{m.name}<div style={{ fontSize: 12 }}>{m.id}</div></td><td>{m.on_hand} {m.unit}</td><td>{incoming(m.id)}</td><td>{coverDays(m) === 999 ? "n/a" : coverDays(m) + " d"}</td><td>{m.lead_days} d{m.v_lead ? ` (vendor ${m.v_lead})` : ""}</td><td>{m.vendor_id ?? "none"}</td><td>{rmState(m, incoming(m.id), set?.lead_buffer ?? 2)}</td>

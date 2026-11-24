@@ -27,3 +27,6 @@ export function balanceText(n: number): string {
 /** Proof actions: partners report payment on an approved order only; Accounts reviews. */
 export const canSubmitProof = (role: string, status: string) => (role === "dealer" || role === "distributor") && status === "Approved";
 export const canReviewProof = (role: string) => role === "super_admin" || role === "accounts";
+
+/** Rupees in lakh, the way the review prototype writes them: ₹38.1 lakh, ₹8.17 lakh. */
+export const lakh = (n: number) => "₹" + (n / 100000).toFixed(n >= 1000000 ? 1 : 2).replace(/\.?0+$/, "") + " lakh";

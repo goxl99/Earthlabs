@@ -57,3 +57,7 @@ export function toCsv(rows: Record<string, unknown>[]): string {
   };
   return [cols.join(","), ...rows.map((r) => cols.map((c) => cell(r[c])).join(","))].join("\n");
 }
+
+/** Badge colour per band, as in the prototype (SCORE_BANDS). */
+export const bandKind = (band: string | null): "good" | "info" | "warn" | "crit" | "mute" =>
+  band === "Outstanding" || band === "Excellent" ? "good" : band === "Good" ? "info" : band === "Needs Improvement" ? "warn" : band === "Underperforming" ? "crit" : "mute";

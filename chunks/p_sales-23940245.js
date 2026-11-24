@@ -13,15 +13,31 @@ const askTo = (channel, name) => new Promise(res => {
   modal(wa_ ? "WhatsApp number" : "Email address", `<p class="muted">${esc(name || "This customer")} has no ${wa_ ? "phone number" : "email"} saved. Enter one to send now. To save it for next time, add it under Customers.</p><label class="full">${wa_ ? "WhatsApp number (with or without +91)" : "Email address"}<input id="sto" ${wa_ ? 'type="tel" placeholder="98765 43210"' : 'type="email" placeholder="name@company.com"'}></label><div class="row end" style="margin-top:12px"><button class="btn" id="stgo">${wa_ ? "Open WhatsApp" : "Open email"}</button></div>`,
     { onMount: (m, close) => { $("#stgo", m).onclick = () => { const v = $("#sto", m).value.trim(), ok = wa_ ? phoneOf(v) : /^\S+@\S+\.\S+$/.test(v) && v; if (!ok) { toast(wa_ ? "Enter a valid mobile number" : "Enter a valid email", "err"); return; } done = true; close(); res(ok); }; const obs = new MutationObserver(() => { if (!document.body.contains(m) && !done) { done = true; res(""); obs.disconnect(); } }); obs.observe(document.body, { childList: true }); } });
 });
+const LABEL = { invoice: "Tax invoice", challan: "Delivery challan", proforma: "Proforma invoice" };
+const toB64 = async blob => { const buf = new Uint8Array(await blob.arrayBuffer()); let s = ""; for (let i = 0; i < buf.length; i += 0x8000) s += String.fromCharCode.apply(null, buf.subarray(i, i + 0x8000)); return btoa(s); };
+// Sends the PDF as an email attachment through the send-doc-email function. Returns { ok } or { error, message }.
+export const emailDoc = async (kind, d, meta, to) => {
+  try {
+    const r = await makePdf(kind, d, { ...meta, asBlob: true });
+    const { data, error } = await sb.functions.invoke("send-doc-email", { body: { to, subject: `${LABEL[kind]} ${meta.no} – ${d.seller?.name || "EarthLabs"}`, text: docMessage(kind, d, meta, ""), filename: r.name, pdf_base64: await toB64(r.blob), cc: d.seller?.email || "" } });
+    if (error) return { error: "failed", message: error.message };
+    return data || { error: "failed", message: "No answer from the email service" };
+  } catch (e) { return { error: "failed", message: e.message || String(e) }; }
+};
 export const docMessage = (kind, d, meta, link) => {
   const t = d.totals || {}, lines = (d.lines || []).map(l => `• ${l.desc || l.description}: ${Q(l.qty)}${kind === "invoice" && l.rate != null ? " × ₹" + INR(l.rate) : ""}`);
-  const head = kind === "invoice" ? `Tax invoice ${meta.no} dated ${dfmt(meta.date)}` : `Delivery challan ${meta.no} dated ${dfmt(meta.date)}`;
-  const extra = kind === "invoice" ? [`Taxable ₹${INR(t.taxable)} + GST ₹${INR((t.cgst || 0) + (t.sgst || 0) + (t.igst || 0))}`, `*Total ₹${INR(t.total)}*`, d.bank?.account_no ? `Bank: ${d.bank.bank} A/c ${d.bank.account_no} IFSC ${d.bank.ifsc}` : ""] : [meta.vehicle ? `Vehicle: ${meta.vehicle}` : "", meta.transporter ? `Transporter: ${meta.transporter}` : "", meta.lr_no ? `LR no: ${meta.lr_no}` : ""];
-  return [`Dear ${d.buyer?.name || "Sir/Madam"},`, "", `Please find your ${head} from ${d.seller?.name || "EarthLabs"}.`, ...lines, ...extra.filter(Boolean), "", `Download the PDF: ${link}`, "(Link works for 60 days)", "", `Thank you,`, d.seller?.name || ""].join("\n");
+  const head = `${LABEL[kind]} ${meta.no} dated ${dfmt(meta.date)}`;
+  const extra = kind === "proforma" ? [`*Total ₹${INR(t.total)}*`] : kind === "invoice" ? [`Taxable ₹${INR(t.taxable)} + GST ₹${INR((t.cgst || 0) + (t.sgst || 0) + (t.igst || 0))}`, `*Total ₹${INR(t.total)}*`, d.bank?.account_no ? `Bank: ${d.bank.bank} A/c ${d.bank.account_no} IFSC ${d.bank.ifsc}` : ""] : [meta.vehicle ? `Vehicle: ${meta.vehicle}` : "", meta.transporter ? `Transporter: ${meta.transporter}` : "", meta.lr_no ? `LR no: ${meta.lr_no}` : ""];
+  return [`Dear ${d.buyer?.name || "Sir/Madam"},`, "", `Please find your ${head} from ${d.seller?.name || "EarthLabs"}.`, ...lines, ...extra.filter(Boolean), "", ...(link ? [`Download the PDF: ${link}`, "(Link works for 60 days)"] : ["The PDF is attached to this email."]), "", `Thank you,`, d.seller?.name || ""].join("\n");
 };
 export const sendDoc = async (channel, kind, d, meta, cust) => {
   let to = channel === "wa" ? phoneOf(cust?.phone || d.buyer?.phone) : String(cust?.email || d.buyer?.email || "").trim();
   if (!to) { to = await askTo(channel, cust?.name); if (!to) return; }
+  if (channel === "em") {
+    toast("Sending email…"); const r = await emailDoc(kind, d, meta, to);
+    if (r.ok) { toast("Emailed to " + to); return; }
+    if (r.error !== "not_configured") toast("Could not email directly (" + r.message + "). Opening your email app instead.", "err");
+  }
   const w = channel === "wa" ? window.open("", "_blank") : null;
   try {
     const r = await makePdf(kind, d, { ...meta, asBlob: true });
@@ -32,7 +48,7 @@ export const sendDoc = async (channel, kind, d, meta, cust) => {
     if (su.error) throw su.error;
     const text = docMessage(kind, d, meta, su.data.signedUrl);
     if (channel === "wa") { const url = "https://wa.me/" + to + "?text=" + encodeURIComponent(text); if (w) w.location.href = url; else window.open(url, "_blank"); }
-    else location.href = `mailto:${to}?subject=${encodeURIComponent((kind === "invoice" ? "Tax invoice " : "Delivery challan ") + meta.no + " – " + (d.seller?.name || "EarthLabs"))}&body=${encodeURIComponent(text)}`;
+    else location.href = `mailto:${to}?subject=${encodeURIComponent(LABEL[kind] + " " + meta.no + " – " + (d.seller?.name || "EarthLabs"))}&body=${encodeURIComponent(text)}`;
   } catch (e) { if (w) w.close(); toast("Could not prepare the document: " + (e.message || e), "err"); }
 };
 const STATUS = { open: "Open", part_delivered: "Part delivered", delivered: "Delivered", cancelled: "Cancelled" };
@@ -206,6 +222,20 @@ export async function salesPage(el) {
   el.innerHTML = `<div class="tabs wrapt">${tabs.map(([k, t]) => `<button class="tab ${k === TAB ? "on" : ""}" data-k="${k}">${t}</button>`).join("")}</div><div id="sv"></div>`;
   $$(".tab", el).forEach(b => b.onclick = () => { TAB = b.dataset.k; salesPage(el); });
   const reload = tab => { if (tab) TAB = tab; salesPage(el); };
+  const autoOn = ((await sb.from("app_settings").select("value").eq("key", "auto_email_docs").maybeSingle()).data || {}).value === "on";
+  const autoMail = async (kind, id, orderId) => {
+    if (!autoOn || !id || id === true) return;
+    try {
+      const tbl = { challan: "challans", invoice: "tax_invoices", proforma: "proformas" }[kind];
+      const { data: row } = await sb.from(tbl).select("*").eq("id", id).single(); if (!row) return;
+      const cu = customers.find(x => x.id === orders.find(o => o.id === orderId)?.customer_id), d = row.data;
+      const to = String(cu?.email || d.buyer?.email || "").trim();
+      if (!to) { toast(`No email saved for ${cu?.name || "the customer"}, so it was not emailed`, "err"); return; }
+      const meta = kind === "invoice" ? { no: row.invoice_no, date: row.invoice_date } : kind === "proforma" ? { no: row.pi_no, date: row.pi_date } : { no: row.dc_no, date: row.dc_date, vehicle: row.vehicle, transporter: row.transporter, lr_no: row.lr_no };
+      const r = await emailDoc(kind, d, meta, to);
+      toast(r.ok ? `${LABEL[kind]} ${meta.no} emailed to ${to}` : r.error === "not_configured" ? "Automatic email is not set up yet. Use the Email button instead." : "Could not email: " + r.message, r.ok ? undefined : "err");
+    } catch (e) { toast("Could not email: " + (e.message || e), "err"); }
+  };
   const sv = $("#sv", el);
 
   // ----- customer form -----
@@ -365,7 +395,7 @@ export async function salesPage(el) {
           $("#ds", m).disabled = true;
           const id = await run(sb.rpc("create_challan", { p_order: o.id, p_header: f, p_lines: payload }), "Challan issued");
           $("#ds", m).disabled = false;
-          if (id) { close(); reload("orders"); }
+          if (id) { close(); await autoMail("challan", id, o.id); reload("orders"); }
         };
       },
     });
@@ -404,9 +434,9 @@ export async function salesPage(el) {
           const cu = customers.find(x => x.id === o.customer_id), dm = c => ({ no: c.dc_no, date: c.dc_date, vehicle: c.vehicle, transporter: c.transporter, lr_no: c.lr_no });
           if (a === "wa" || a === "em") { const i = I.find(x => x.id === id); return sendDoc(a, "invoice", i.data, { no: i.invoice_no, date: i.invoice_date }, cu); }
           if (a === "dcwa" || a === "dcem") { const c = D.find(x => x.id === id); return sendDoc(a === "dcwa" ? "wa" : "em", "challan", c.data, dm(c), cu); }
-          if (a === "mkpi") { if (await run(sb.rpc("create_proforma", { p_order: o.id }), "Proforma created")) { close(); reload("orders"); } }
+          if (a === "mkpi") { const r = await run(sb.rpc("create_proforma", { p_order: o.id }), "Proforma created"); if (r) { close(); await autoMail("proforma", r, o.id); reload("orders"); } }
           if (a === "mkdc") { close(); openChallan(o); }
-          if (a === "mkinv") { if (await run(sb.rpc("create_tax_invoice", { p_challan: id }), "Tax invoice created")) { close(); reload("orders"); } }
+          if (a === "mkinv") { const r = await run(sb.rpc("create_tax_invoice", { p_challan: id }), "Tax invoice created"); if (r) { close(); await autoMail("invoice", r, o.id); reload("orders"); } }
           if (a === "cancel") { if (confirm("Cancel this order?") && await run(sb.rpc("cancel_sales_order", { p_order: o.id }), "Order cancelled")) { close(); reload("orders"); } }
         });
       },
@@ -472,9 +502,10 @@ export async function salesPage(el) {
     $$(".pd", sv).forEach(b => b.onclick = () => rows.find(r => r.no === b.dataset.no).pdf());
     $$(".sd", sv).forEach(b => b.onclick = () => rows.find(r => r.no === b.dataset.no).send(b.dataset.ch));
   } else {
-    const { data: st } = await sb.from("app_settings").select("*").like("key", "co_%");
+    const { data: st } = await sb.from("app_settings").select("*").or("key.like.co_%,key.eq.auto_email_docs");
     const cur = Object.fromEntries((st || []).map(r => [r.key, r.value]));
     sv.innerHTML = `<form id="sf" class="form-grid">${CO_KEYS.map(([k, t]) => `<label class="${k === "co_address" || k === "co_terms" ? "full" : ""}">${t}<input name="${k}" value="${esc(cur[k] || "")}"></label>`).join("")}
+      <label class="full">Email customers automatically<select name="auto_email_docs"><option value="off" ${cur.auto_email_docs !== "on" ? "selected" : ""}>No, I will send manually</option><option value="on" ${cur.auto_email_docs === "on" ? "selected" : ""}>Yes: when a proforma, challan or tax invoice is made, email it to the customer with the PDF attached</option></select></label>
       <div class="full row end"><button class="btn">Save</button></div></form><p class="muted small">These details print on every proforma, challan and tax invoice. Invoice numbers run ELI/001, ELI/002…</p>`;
     $("#sf").onsubmit = async e => {
       e.preventDefault();

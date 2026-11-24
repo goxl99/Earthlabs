@@ -732,13 +732,13 @@ export async function accountsPage(el) {
 
   // =================== PROFITABILITY (per order) ===================
   const profit = async () => {
-    av.innerHTML = `<div class="toolbar"><label>Orders from <input type="date" id="df" value="${mAgo()}"></label><label>To <input type="date" id="dt" value="${today()}"></label></div><p class="muted small">Profit is worked out order by order: what the customer ordered, what was given, what it cost, and what you earn. Overall company profit is on the Accounting dashboard.</p><div id="pv"></div>`;
+    av.innerHTML = `<div class="toolbar"><label>Orders from <input type="date" id="df" value="${mAgo()}"></label><label>To <input type="date" id="dt" value="${today()}"></label><select id="by"><option value="order">By order</option><option value="customer">By customer</option></select></div><p class="muted small">Profit is worked out order by order: what the customer ordered, what was given, what it cost, and what you earn. Overall company profit is on the Accounting dashboard.</p><div id="pv"></div>`;
     const go = async () => {
-      const df = $("#df", av).value, dt = $("#dt", av).value, pv = $("#pv", av);
+      const df = $("#df", av).value, dt = $("#dt", av).value, by = $("#by", av).value, pv = $("#pv", av);
       pv.innerHTML = '<p class="muted">Calculating…</p>';
       try {
         const n = x => Number(x) || 0, q3 = v => (+v).toLocaleString("en-IN", { maximumFractionDigits: 3 });
-        const orders = await get(sb.from("sales_orders").select("id,order_no,order_date,customer_po_no,status,customers(name)").gte("order_date", df).lte("order_date", dt).order("order_date", { ascending: false }));
+        const orders = await get(sb.from("sales_orders").select("id,order_no,order_date,customer_id,customer_po_no,status,customers(name)").gte("order_date", df).lte("order_date", dt).order("order_date", { ascending: false }));
         const oids = orders.map(o => o.id);
         if (!oids.length) { pv.innerHTML = '<div class="notice">No orders in this period.</div>'; return; }
         const [ol, cl, sl, exps] = await Promise.all([
@@ -757,8 +757,13 @@ export async function accountsPage(el) {
           return { o, name: `${o.order_no} · ${o.customers?.name || ""}`, lines, val, dval, cogs, ex, exp, earn: dval - cogs - exp, it, miss: it.filter(i => i.basis === "missing" || i.basis === "nopack"), est: it.filter(i => i.basis === "estimate") };
         });
         const missAll = [...new Set(det.filter(i => i.basis === "missing" || i.basis === "nopack").map(i => i.item))], estAll = [...new Set(det.filter(i => i.basis === "estimate").map(i => i.item))];
+        const cg = {}; rows.forEach(r => { const k = r.o.customer_id || r.o.customers?.name; const c = (cg[k] ||= { name: r.o.customers?.name || "", n: 0, val: 0, dval: 0, cogs: 0, exp: 0, earn: 0, miss: 0, est: 0 }); c.n++; c.val += r.val; c.dval += r.dval; c.cogs += r.cogs; c.exp += r.exp; c.earn += r.earn; c.miss += r.miss.length; c.est += r.est.length; });
+        const custRows = Object.values(cg).sort((a, b) => b.earn - a.earn);
         pv.innerHTML = `${missAll.length ? `<div class="notice">⚠ Cost is incomplete: no rate or packing set for <b>${missAll.map(esc).join(", ")}</b>. Earnings are overstated until you add them: open an order's <b>Cost details</b>.</div>` : ""}${estAll.length ? `<div class="notice">≈ Includes your estimated rates for ${estAll.map(esc).join(", ")}. A purchase bill replaces them automatically.</div>` : ""}
-          <div class="card"><h3>Profit by order</h3>${table([
+          <div class="card"><h3>${by === "customer" ? "Profit by customer" : "Profit by order"}</h3>${by === "customer" ? table([
+            { h: "Customer", v: r => r.name }, { h: "Orders", v: r => r.n }, { h: "Order value (with GST)", v: r => R(r.val) }, { h: "Delivered value (before GST)", v: r => R(r.dval) },
+            { h: "Cost", v: r => r.dval ? R(r.cogs + r.exp) : "–" }, { h: "We earn", v: r => r.dval ? R(r.earn) : "Nothing delivered yet" }, { h: "Margin", v: r => r.dval ? (r.earn / r.dval * 100).toFixed(1) + "%" : "–" },
+            { h: "Cost check", html: r => !r.dval ? "" : r.miss ? `<span class="dev">⚠ ${r.miss} missing</span>` : r.est ? "≈ Estimated" : "✓ Complete" }], custRows, { empty: "Nothing to show" }) : table([
             { h: "Order", v: r => r.name }, { h: "Customer PO", v: r => r.o.customer_po_no || "–" },
             { h: "Order value (with GST)", v: r => R(r.val) },
             { h: "Given so far", v: r => r.lines.map(l => `${q3(l.given)} of ${q3(l.qty)} · ${l.description}`).join("; ") },

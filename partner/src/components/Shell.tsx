@@ -3,16 +3,12 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState, type ReactNode } from "react";
 import { supabase, configured } from "@/lib/supabase";
-import { navFor, envOf, ROLE_LABEL, type Env, type Role } from "@/lib/roles";
+import { navFor, ROLE_LABEL, type Role } from "@/lib/roles";
 
 export type Profile = { id: string; role: Role; full_name: string; partner_id: string | null; active: boolean };
 
 /** Which count (from nav_counts) belongs to which menu item. */
 const NAVKEY: Record<string, string> = { appr: "appr", apps: "apps", agree: "agree", orders: "orders", fin: "fin", ai: "ai", proc: "proc" };
-const ENVS: { k: Env | "public"; label: string }[] = [
-  { k: "internal", label: "Internal portal" }, { k: "partner", label: "Partner portal" },
-  { k: "vendor", label: "Vendor portal" }, { k: "public", label: "Public website" },
-];
 
 /** Signs the user in, loads their profile, and shows only the screens their role may open.
  *  Layout (top bar, portal switch, grouped side menu) follows the approved review prototype. */
@@ -36,7 +32,6 @@ export default function Shell({ page, children }: { page: string; children: (p: 
   if (!p) return <main className="main"><div className="note">No profile found. Ask Super Admin to activate your account.</div></main>;
   if (!p.active) return <main className="main"><h1>Waiting for approval</h1><div className="note">Your account is created. EarthLabs will activate it soon.</div></main>;
 
-  const env = envOf(p.role);
   const items = navFor(p.role, mods);
   // Highlight only the first item that points at this screen (partner menu has two entries for orders and performance).
   const current = items.find((n) => n.href.split("#")[0].replace(/\/$/, "").endsWith(page.replace(/\/$/, "")) || path.replace(/\/$/, "").endsWith(n.href.split("#")[0].replace(/\/$/, "")))?.key;
@@ -47,11 +42,6 @@ export default function Shell({ page, children }: { page: string; children: (p: 
       <div className="top no-print">
         <button className="btn sm mob" onClick={() => setOpen(!open)} aria-expanded={open}>☰ Menu</button>
         <Link href="/dashboard/" className="brand">EarthLabs<small>PARTNER &amp; DISTRIBUTION SYSTEM</small></Link>
-        <div className="seg" role="group" aria-label="Portal">
-          {ENVS.map((e) => e.k === "public"
-            ? <button key={e.k} aria-pressed="false" onClick={() => { location.href = "./../"; }}>{e.label}</button>
-            : <button key={e.k} aria-pressed={env === e.k} disabled={env !== e.k} style={env !== e.k ? { opacity: 0.55, cursor: "default" } : undefined} title={env !== e.k ? "Your role does not open this portal" : undefined}>{e.label}</button>)}
-        </div>
         <div className="who">
           <span className="av" title={p.full_name}>{initial}</span>
           <span className="mini" style={{ color: "var(--slate)" }}>{p.full_name || "Signed in"} · {ROLE_LABEL[p.role]}</span>

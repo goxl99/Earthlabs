@@ -81,7 +81,10 @@ describe("procurement helpers", () => {
     expect(navFor("vendor").map((n) => n.href)).not.toContain("/procurement/");
     expect(navFor("sales").map((n) => n.href)).not.toContain("/procurement/");
     expect(navFor("dealer").map((n) => n.href)).not.toContain("/ai/");
-    expect(navFor("super_admin").map((n) => n.href)).toEqual(expect.arrayContaining(["/approvals/", "/credit/", "/ai/", "/vendors/", "/procurement/"]));
+    expect(navFor("super_admin").map((n) => n.href)).toEqual(expect.arrayContaining(["/approvals/", "/ai/", "/vendors/", "/procurement/"]));
+    // The walkthrough shows Schemes and Credit ladder as tabs of Products & Pricing and Procurement, not as menu items.
+    expect(navFor("super_admin").map((n) => n.href)).not.toEqual(expect.arrayContaining(["/credit/"]));
+    expect(navFor("super_admin").map((n) => n.href)).not.toEqual(expect.arrayContaining(["/schemes/"]));
   });
 });
 

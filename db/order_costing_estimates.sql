@@ -1,0 +1,4 @@
+-- Record only (already applied): per-order costing.
+-- raw_materials.est_rate (optional estimated rate used until a purchase bill exists),
+-- rm_rate_value() falls back to est_rate, set_est_rate(rm, rate) admin RPC,
+-- order_cost_detail(order_ids[]) admin RPC returning materials/packing per order with source (bill / estimate / missing).

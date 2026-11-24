@@ -34,6 +34,49 @@ export const guessAsset = t => { const s = String(t || "").toLowerCase();
 const today = () => new Date().toISOString().slice(0, 10);
 const mAgo = () => { const d = new Date(); d.setMonth(d.getMonth() - 3); return d.toISOString().slice(0, 10); };
 
+
+// =================== UNIT ECONOMICS (model from the EarthLabs spreadsheet) ===================
+export const UE = [
+  ["Price", [["mrp", "MRP including GST", "₹"], ["gst", "GST", "%"], ["retailer", "Retailer margin", "%"], ["distributor", "Distributor margin", "%"], ["scheme", "Trade scheme / discount", "%"], ["returns", "Returns, leakage & expiry", "%"]]],
+  ["Liquid", [["bulk_kg", "Bulk cost per kg", "₹"], ["density", "Density (kg per litre)", "kg/L"], ["fill_ml", "Fill per unit", "ml"], ["overfill", "Overfill", "%"], ["loss", "Process loss", "%"]]],
+  ["Packaging (per unit, before wastage)", [["primary", "Primary container (film / bottle)", "₹"], ["closure", "Closure / pump", "₹"], ["label", "Label / printing", "₹"], ["inner", "Inner pack / tamper seal", "₹"], ["wastage", "Packaging wastage", "%"], ["units_per_carton", "Units per carton", "units"], ["carton", "Outer carton cost", "₹"], ["tape", "Tape & dividers per carton", "₹"], ["freight_carton", "Outward freight per carton", "₹"]]],
+  ["Conversion (per unit)", [["labour", "Direct labour", "₹"], ["power", "Power & utilities", "₹"], ["consumables", "Consumables, coding ink, QC", "₹"]]],
+  ["Selling & finance", [["commission", "Sales commission", "%"], ["marketing", "Variable marketing", "%"], ["baddebt", "Bad-debt provision", "%"], ["credit_days", "Credit days given", "days"], ["interest", "Financing interest (yearly)", "%"], ["target_cm", "Target contribution margin", "%"]]],
+  ["Fixed costs (this product's share)", [["monthly_units", "Units sold per month", "units"], ["fixed_cash", "Fixed cash cost per month", "₹"], ["depreciation", "Depreciation per month", "₹"]]],
+  ["Reference", [["actual_rate", "Average billed rate per unit, ex-GST (your orders)", "₹"]]],
+];
+export const ueModel = a => {
+  const g = k => Number(a[k]) || 0, p = k => g(k) / 100, dens = a.density == null || a.density === "" ? 1 : Number(a.density) || 1;
+  const mrp = g("mrp"), ex = mrp / (1 + p("gst")), gstAmt = mrp - ex, ret = ex * p("retailer"), dist = ex * p("distributor"), sch = ex * p("scheme"), real = ex - ret - dist - sch, retLoss = real * p("returns"), net = real - retLoss;
+  const perL = g("bulk_kg") * dens, litres = g("fill_ml") * (1 + p("overfill")) * (1 + p("loss")) / 1000, liquid = litres * perL;
+  const w = 1 + p("wastage"), prim = g("primary") * w, clos = g("closure") * w, lab = g("label") * w, inn = g("inner") * w, upc = g("units_per_carton"), outer = upc > 0 ? (g("carton") + g("tape")) / upc : 0, pack = prim + clos + lab + inn + outer;
+  const conv = g("labour") + g("power") + g("consumables"), cogs = liquid + pack + conv, gm = net - cogs;
+  const freight = upc > 0 ? g("freight_carton") / upc : 0, comm = net * p("commission"), mkt = net * p("marketing"), bad = net * p("baddebt"), wc = net * g("credit_days") / 365 * p("interest");
+  const contrib = gm - freight - comm - mkt - bad - wc, mu = g("monthly_units"), fixed = mu > 0 ? g("fixed_cash") / mu : 0, dep = mu > 0 ? g("depreciation") / mu : 0, ebitda = contrib - fixed, profit = ebitda - dep;
+  const fr = cogs + freight, vp = p("commission") + p("marketing") + p("baddebt") + g("credit_days") / 365 * p("interest"), tcm = p("target_cm"), den = 1 - vp - tcm, netNeed = den > 0 ? fr / den : null;
+  const tm = (1 - p("retailer") - p("distributor") - p("scheme")) * (1 - p("returns")), exNeed = netNeed != null && tm > 0 ? netNeed / tm : null, mrpNeed = exNeed != null ? exNeed * (1 + p("gst")) : null, mrpR = mrpNeed != null ? Math.ceil(mrpNeed * 2) / 2 : null;
+  const L = g("fill_ml") / 1000;
+  return { mrp, gstAmt, ex, ret, dist, sch, real, retLoss, net, netPct: mrp ? net / mrp : 0, perL, litres, liquid, prim, clos, lab, inn, outer, pack, conv, cogs, gm, gmPct: net ? gm / net : 0, freight, comm, mkt, bad, wc, contrib, cmPct: net ? contrib / net : 0, cmMrp: mrp ? contrib / mrp : 0, fixed, dep, ebitda, profit, profitPct: net ? profit / net : 0, profitMrp: mrp ? profit / mrp : 0, fr, vp, tcm, netNeed, exNeed, mrpNeed, mrpR, gap: mrpR != null ? mrpR - mrp : null, headroom: net * (1 - vp - tcm) - fr, perLitre: L ? { mrp: mrp / L, net: net / L, cogs: cogs / L, contrib: contrib / L } : null, packPct: cogs ? pack / cogs : 0, actual: g("actual_rate") };
+};
+
+// ---------- AI recommendations card (shared) ----------
+export const aiPanel = (host, topic, getCtx) => {
+  host.innerHTML = `<div class="card"><div class="toolbar"><h3 style="margin:0">AI recommendations</h3><span class="grow"></span><button class="btn" id="aigo">Get recommendations</button></div><p class="muted small">An advisor reads your numbers and tells you what to do first. It only uses what is in the system, so incomplete costs lower its confidence.</p><div id="aiout"></div></div>`;
+  const out = $("#aiout", host), btn = $("#aigo", host);
+  const badge = i => ({ high: "🔴 High impact", medium: "🟠 Medium", low: "⚪ Low" })[i] || i;
+  btn.onclick = async () => {
+    btn.disabled = true; out.innerHTML = '<p class="muted">Thinking through your numbers…</p>';
+    try {
+      const ctx = await getCtx(); const { data, error } = await sb.functions.invoke("ai-insights", { body: { topic, context: ctx } });
+      if (error) throw error;
+      if (!data || data.error) { out.innerHTML = `<div class="notice">${data?.error === "not_configured" ? "AI advice is not switched on yet. Add the ANTHROPIC_API_KEY secret in Supabase → Edge Functions → Secrets, then try again." : esc(data?.message || "No advice came back")}</div>`; return; }
+      const x = data.insights;
+      out.innerHTML = `<div class="notice"><b>${esc(x.headline)}</b></div>${(x.recommendations || []).map(r => `<div class="card" style="margin:8px 0"><div class="row" style="gap:8px;flex-wrap:wrap"><b>${esc(r.title)}</b><span class="muted small">${badge(r.impact)} · ${esc(String(r.area || "").replace("_", " "))}</span></div><p style="margin:4px 0">${esc(r.why)}</p><p style="margin:4px 0"><b>Do this:</b> ${esc(r.action)}</p></div>`).join("")}${(x.watch_out || []).length ? `<h4>Watch out</h4><ul>${x.watch_out.map(w => `<li>${esc(w)}</li>`).join("")}</ul>` : ""}<p class="muted small">Advice from an AI model on indicative numbers. Check before acting.</p>`;
+    } catch (e) { out.innerHTML = `<div class="notice">Could not get advice: ${esc(e.message || String(e))}</div>`; }
+    finally { btn.disabled = false; }
+  };
+};
+
 // ---------- helpers for spreadsheets ----------
 const loadX = () => import("./xlsx-TPH7KT7D.js");
 const readSheet = async file => {
@@ -132,7 +175,7 @@ const compress = async file => {
 
 export async function accountsPage(el) {
   if (!hasRole("admin")) { el.innerHTML = '<p class="muted">Accounts is for admin only.</p>'; return; }
-  const tabs = [["overview", "Overview"], ["account", "Overall account"], ["ledger", "Party ledger"], ["expenses", "Expenses"], ["assets", "Assets"], ["earlier", "Earlier records"], ["bank", "Bank statement"], ["profit", "Profitability"]];
+  const tabs = [["overview", "Overview"], ["account", "Overall account"], ["ledger", "Party ledger"], ["expenses", "Expenses"], ["assets", "Assets"], ["earlier", "Earlier records"], ["bank", "Bank statement"], ["profit", "Profitability"], ["unit", "Unit economics"]];
   if (!tabs.some(([k]) => k === TAB)) TAB = "overview";
   el.innerHTML = `<div class="tabs wrapt">${tabs.map(([k, t]) => `<button class="tab ${k === TAB ? "on" : ""}" data-k="${k}">${t}</button>`).join("")}</div><div id="av"><p class="muted">Loading…</p></div>`;
   $$(".tab", el).forEach(b => b.onclick = () => { TAB = b.dataset.k; accountsPage(el); });
@@ -801,5 +844,45 @@ export async function accountsPage(el) {
     $$("input,select", $(".toolbar", av)).forEach(x => x.onchange = go); go();
   };
 
-  try { await ({ overview, account, ledger, expenses, assets, earlier, bank, profit }[TAB])(); } catch (e) { fail(e); }
+  // =================== UNIT ECONOMICS TAB ===================
+  const unitecon = async () => {
+    const saved = await get(sb.from("unit_econ").select("*")), A = { sachet: {}, bottle: {} };
+    saved.forEach(r => { A[r.product][r.key] = r.value == null ? "" : Number(r.value); });
+    const N = { sachet: "Sachet 5 ml", bottle: "Bottle 250 ml" }, PCT = new Set(["gst", "retailer", "distributor", "scheme", "returns", "overfill", "loss", "wastage", "commission", "marketing", "baddebt", "interest", "target_cm"]);
+    av.innerHTML = `<div class="toolbar"><h3 style="margin:0">Unit economics</h3><span class="grow"></span><button class="btn ghost" id="uef">Fill from my data</button><button class="btn" id="ues">Save</button></div>
+      <p class="muted small">What one sachet and one bottle earn after every cost, step by step, based on your spreadsheet. Type the assumptions below, or press <b>Fill from my data</b> to pull costs, packing, units sold and fixed-cost share from your batches, bills, orders and expenses. Figures are indicative.</p>
+      <div id="uenotes"></div><div class="card" id="ueres"></div><div id="ueai"></div>
+      <div class="card"><h3>Assumptions</h3><div style="overflow:auto"><table><thead><tr><th>Item</th><th>${N.sachet}</th><th>${N.bottle}</th><th></th></tr></thead><tbody>${UE.map(([sec, fs]) => `<tr><td colspan="4"><b>${esc(sec)}</b></td></tr>` + fs.map(([k, l, u]) => `<tr><td>${esc(l)}</td>${["sachet", "bottle"].map(p => `<td><input type="number" step="any" class="uei" data-p="${p}" data-k="${k}" value="${A[p][k] ?? ""}" style="width:110px"></td>`).join("")}<td class="muted small">${u}</td></tr>`).join("")).join("")}</tbody></table></div></div>`;
+    const read = () => { $$(".uei", av).forEach(i => { A[i.dataset.p][i.dataset.k] = i.value === "" ? "" : Number(i.value); }); };
+    const f2 = v => v == null || !isFinite(v) ? "n/a" : "₹" + INR(v), pc = v => v == null || !isFinite(v) ? "n/a" : (v * 100).toFixed(1) + "%";
+    const draw = () => {
+      read(); const m = { sachet: ueModel(A.sachet), bottle: ueModel(A.bottle) };
+      const row = (l, fn, how = "", bold = false, kind = "r") => `<tr${bold ? ' style="font-weight:600"' : ""}><td>${l}</td>${["sachet", "bottle"].map(p => `<td style="text-align:right">${kind === "p" ? pc(fn(m[p])) : f2(fn(m[p]))}</td>`).join("")}<td class="muted small">${how}</td></tr>`;
+      const head = t => `<tr><td colspan="4" style="background:var(--tint,#ecf4f4)"><b>${t}</b></td></tr>`;
+      $("#ueres", av).innerHTML = `<h3>Result per unit</h3><div class="stats">${["sachet", "bottle"].map(p => stat(N[p] + ": profit per unit", f2(m[p].profit), pc(m[p].profitPct) + " of net revenue", m[p].profit >= 0 ? "good" : "bad")).join("")}${["sachet", "bottle"].map(p => stat(N[p] + ": contribution", f2(m[p].contrib), pc(m[p].cmPct) + " of net revenue")).join("")}</div>
+        <div style="overflow:auto"><table><thead><tr><th>₹ per unit</th><th>${N.sachet}</th><th>${N.bottle}</th><th>How it is calculated</th></tr></thead><tbody>
+        ${head("1. From consumer MRP to your net revenue")}${row("MRP (incl. GST)", x => x.mrp)}${row("less: GST collected", x => x.gstAmt, "Passed to government")}${row("Ex-GST MRP", x => x.ex, "MRP ÷ (1 + GST)")}${row("less: Retailer margin", x => x.ret)}${row("less: Distributor margin", x => x.dist)}${row("less: Trade scheme", x => x.sch)}${row("Net realisation (invoice value, ex-GST)", x => x.real, "What you actually bill", true)}${row("less: Returns, leakage & expiry", x => x.retLoss)}${row("NET REVENUE per unit", x => x.net, "After all deductions", true)}${row("Net revenue as % of MRP", x => x.netPct, "", false, "p")}
+        ${head("2. Cost of making it")}${row("Bulk liquid cost", x => x.liquid, "Litres used × cost per litre")}${row("Packaging (with wastage, carton share)", x => x.pack)}${row("Conversion (labour, power, consumables)", x => x.conv)}${row("COGS", x => x.cogs, "Liquid + packaging + conversion", true)}${row("GROSS MARGIN", x => x.gm, "Net revenue – COGS", true)}${row("Gross margin %", x => x.gmPct, "", false, "p")}
+        ${head("3. Selling and finance")}${row("less: Outward freight", x => x.freight)}${row("less: Sales commission", x => x.comm)}${row("less: Variable marketing", x => x.mkt)}${row("less: Bad-debt provision", x => x.bad)}${row("less: Working-capital cost", x => x.wc, "Net revenue × credit days ÷ 365 × interest")}${row("CONTRIBUTION per unit", x => x.contrib, "What each unit leaves to cover fixed costs", true)}${row("Contribution % of net revenue", x => x.cmPct, "", false, "p")}
+        ${head("4. Fixed costs and profit")}${row("less: Fixed cash cost per unit", x => x.fixed, "Monthly share ÷ monthly units")}${row("EBITDA per unit", x => x.ebitda)}${row("less: Depreciation per unit", x => x.dep)}${row("PROFIT PER UNIT (before tax)", x => x.profit, "After every cost", true)}${row("Profit margin % of net revenue", x => x.profitPct, "", false, "p")}${row("Profit margin % of MRP", x => x.profitMrp, "", false, "p")}
+        ${head("5. Pricing guide: what MRP do you need?")}${row("MRP needed to hit target margin (rounded up to ₹0.50)", x => x.mrpR, "Cost ÷ (1 – selling % – target margin), grossed up for trade margins, returns and GST", true)}${row("Gap vs current MRP (+ = raise price)", x => x.gap)}${row("Cost headroom at current MRP", x => x.headroom, "+ = extra cost you can absorb and still hit the target")}
+        ${head("6. Per litre, to compare formats")}${row("MRP per litre", x => x.perLitre?.mrp)}${row("Net revenue per litre", x => x.perLitre?.net)}${row("COGS per litre", x => x.perLitre?.cogs)}${row("Contribution per litre", x => x.perLitre?.contrib)}${row("Packaging as % of COGS", x => x.packPct, "", false, "p")}
+        ${m.sachet.actual || m.bottle.actual ? head("7. Check against your real orders") + row("Average billed rate (ex-GST), your orders", x => x.actual || null, "From delivered orders") + row("Model net realisation (ex-GST)", x => x.real, "Compare: they should be close for the channel you sell through") : ""}
+        </tbody></table></div>`;
+    };
+    $$(".uei", av).forEach(i => i.oninput = draw); draw();
+    $("#uef", av).onclick = async () => {
+      const r = await run(sb.rpc("unit_econ_actuals"), null); if (!r) return;
+      let n = 0; Object.entries(r.values || {}).forEach(([p, kv]) => Object.entries(kv).forEach(([k, v]) => { const i = $(`.uei[data-p="${p}"][data-k="${k}"]`, av); if (i && v != null) { i.value = v; n++; } }));
+      draw(); const notes = r.notes || [];
+      $("#uenotes", av).innerHTML = `<div class="notice">Filled ${n} values from your data. Check them, fill the rest (MRP, margins, labour…), then press <b>Save</b>.${notes.length ? "<ul>" + notes.map(t => `<li>${esc(t)}</li>`).join("") + "</ul>" : ""}</div>`;
+    };
+    $("#ues", av).onclick = async () => {
+      read(); const p = {}; ["sachet", "bottle"].forEach(k => { p[k] = {}; UE.forEach(([, fs]) => fs.forEach(([key]) => { const v = A[k][key]; p[k][key] = v === "" || v == null ? null : v; })); });
+      if (await run(sb.rpc("save_unit_econ", { p }), "Saved")) { /* keep screen */ }
+    };
+    aiPanel($("#ueai", av), "unit_economics", async () => { read(); const snap = (await sb.rpc("business_snapshot")).data || {}; return { unit_economics: Object.fromEntries(["sachet", "bottle"].map(k => [N[k], { assumptions: A[k], result: Object.fromEntries(Object.entries(ueModel(A[k])).filter(([, v]) => typeof v === "number" && isFinite(v)).map(([a, b]) => [a, Math.round(b * 10000) / 10000])) }])), business: snap }; });
+  };
+
+  try { await ({ overview, account, ledger, expenses, assets, earlier, bank, profit, unit: unitecon }[TAB])(); } catch (e) { fail(e); }
 }

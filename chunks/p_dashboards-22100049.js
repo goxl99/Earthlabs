@@ -87,6 +87,24 @@ const soft = async (q) => { try { return await get(q); } catch { return []; } };
 // ACCOUNTING DASHBOARD
 // =====================================================================
 let ARANGE = "month";
+// ---------- AI recommendations card (shared) ----------
+const aiPanel = (host, topic, getCtx) => {
+  host.innerHTML = `<div class="card"><div class="toolbar"><h3 style="margin:0">AI recommendations</h3><span class="grow"></span><button class="btn" id="aigo">Get recommendations</button></div><p class="muted small">An advisor reads your numbers and tells you what to do first. It only uses what is in the system, so incomplete costs lower its confidence.</p><div id="aiout"></div></div>`;
+  const out = $("#aiout", host), btn = $("#aigo", host);
+  const badge = i => ({ high: "🔴 High impact", medium: "🟠 Medium", low: "⚪ Low" })[i] || i;
+  btn.onclick = async () => {
+    btn.disabled = true; out.innerHTML = '<p class="muted">Thinking through your numbers…</p>';
+    try {
+      const ctx = await getCtx(); const { data, error } = await sb.functions.invoke("ai-insights", { body: { topic, context: ctx } });
+      if (error) throw error;
+      if (!data || data.error) { out.innerHTML = `<div class="notice">${data?.error === "not_configured" ? "AI advice is not switched on yet. Add the ANTHROPIC_API_KEY secret in Supabase → Edge Functions → Secrets, then try again." : esc(data?.message || "No advice came back")}</div>`; return; }
+      const x = data.insights;
+      out.innerHTML = `<div class="notice"><b>${esc(x.headline)}</b></div>${(x.recommendations || []).map(r => `<div class="card" style="margin:8px 0"><div class="row" style="gap:8px;flex-wrap:wrap"><b>${esc(r.title)}</b><span class="muted small">${badge(r.impact)} · ${esc(String(r.area || "").replace("_", " "))}</span></div><p style="margin:4px 0">${esc(r.why)}</p><p style="margin:4px 0"><b>Do this:</b> ${esc(r.action)}</p></div>`).join("")}${(x.watch_out || []).length ? `<h4>Watch out</h4><ul>${x.watch_out.map(w => `<li>${esc(w)}</li>`).join("")}</ul>` : ""}<p class="muted small">Advice from an AI model on indicative numbers. Check before acting.</p>`;
+    } catch (e) { out.innerHTML = `<div class="notice">Could not get advice: ${esc(e.message || String(e))}</div>`; }
+    finally { btn.disabled = false; }
+  };
+};
+
 export async function accountingDashboardPage(el) {
   if (!hasRole("admin")) { el.innerHTML = '<p class="muted">The accounting dashboard is for admin only.</p>'; return; }
   css(); el.innerHTML = '<p class="muted">Loading…</p>';
@@ -144,9 +162,10 @@ export async function accountingDashboardPage(el) {
         ${card("Biggest balances due", "Customers with the most unpaid.", hbars(topDue) + tview(["Customer", "Due"], topDue.map(c => [c.label, inr(c.value)])))}
         ${card("Business development and marketing", `${R.label}. Blue = business development, orange = marketing.`, hbars(subItems) + tview(["Main · sub-category", "Amount"], subItems.map(c => [c.label, inr(c.value)])))}
         ${card("Where the money went", `${R.label}. Includes raw material, packaging and assets.`, hbars(catItems) + tview(["Label", "Amount"], catItems.map(c => [c.label, inr(c.value)])))}
-      </div>`;
+      </div><div id="aidash"></div>`;
     el.innerHTML = body; tipInit(el);
     $("#rg", el).onchange = e => { ARANGE = e.target.value; draw(); };
+    aiPanel($("#aidash", el), "business", async () => ({ business: (await sb.rpc("business_snapshot")).data || {} }));
   };
   await draw();
 }

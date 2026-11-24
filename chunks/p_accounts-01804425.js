@@ -3,8 +3,12 @@ import"./chunk-QHDNOTBI.js";
 
 const INR = n => new Intl.NumberFormat("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(n) || 0);
 const R = n => "₹" + INR(n);
-const CATS = [["raw_material", "Raw material"], ["packaging", "Packaging"], ["marketing", "Marketing"], ["transport", "Transport"], ["utilities", "Utilities"], ["salary", "Salary"], ["rent", "Rent"], ["asset", "Asset / investment"], ["other", "Other"]];
+const CATS = [["raw_material", "Raw material"], ["packaging", "Packaging"], ["marketing", "Marketing"], ["meals", "Client meals & hospitality"], ["gifts", "Gifts"], ["travel", "Travel for visits"], ["samples", "Free samples & demos"], ["transport", "Transport"], ["utilities", "Utilities"], ["salary", "Salary"], ["rent", "Rent"], ["asset", "Asset / investment"], ["other", "Other"]];
 const CAT = Object.fromEntries(CATS);
+const EARLY_NOTE = "Before the system (not added to stock)";
+const EARLY_HELP = "Read from the bill. Bought before the system: this is for your accounts only and does <b>not</b> add to stock.";
+const BIZ = ["marketing", "meals", "gifts", "travel", "samples"];
+CAT.bizdev = "Business development (all)";
 const MODES = [["bank", "Bank transfer"], ["upi", "UPI"], ["cash", "Cash"], ["cheque", "Cheque"], ["other", "Other"]];
 const MODE = Object.fromEntries(MODES);
 const PAYERS = ["Company", "Gaurang", "Viraj"];
@@ -40,6 +44,10 @@ export const toNum = v => { if (typeof v === "number") return v; const s = Strin
 export const normCat = v => {
   const s = String(v || "").toLowerCase();
   if (/asset|machin|equipment|capex|drum|vehicle|computer|laptop|furniture|compressor|mixer|boiler|reactor|stirrer|\bpump\b|investment/.test(s)) return "asset";
+  if (/sample|\bdemo\b|trial pack/.test(s)) return "samples";
+  if (/lunch|dinner|breakfast|\bmeals?\b|restaurant|\bhotel\b|cafe|snacks?|hospitality|\btea\b/.test(s)) return "meals";
+  if (/\bgifts?\b|hamper|sweets|bouquet|memento/.test(s)) return "gifts";
+  if (/travel|\btaxi\b|\bcab\b|\btrain\b|flight|bus fare|\btoll\b|\bticket|petrol|\bvisit/.test(s)) return "travel";
   if (/raw|material|chemical/.test(s)) return "raw_material"; if (/pack|bottle|carton|label|box/.test(s)) return "packaging";
   if (/market|advert|promo|\bads?\b|brand|social/.test(s)) return "marketing"; if (/transport|freight|logistic|tempo|truck|courier|cartage|delivery/.test(s)) return "transport";
   if (/electric|water|utilit|power|fuel|internet|phone|diesel/.test(s)) return "utilities"; if (/salary|wage|payroll|labou?r/.test(s)) return "salary"; if (/rent|lease/.test(s)) return "rent";
@@ -141,6 +149,7 @@ export async function accountsPage(el) {
       <label>For order (optional)<select name="order_id"><option value="">Not linked</option>${orders.map(r => `<option value="${r.id}" ${x.order_id === r.id ? "selected" : ""}>${esc(r.order_no)} · ${esc(r.customers?.name || "")}</option>`).join("")}</select></label>
       <label>For delivery / challan (optional)<select name="challan_id"><option value="">Not linked</option>${chs.map(r => `<option value="${r.id}" ${x.challan_id === r.id ? "selected" : ""}>${esc(r.dc_no)}</option>`).join("")}</select></label>
       <label class="full">Description<input name="description" value="${esc(x.description || "")}"></label>
+      <label class="full">For (person or company you met, or gave the gift / sample to) <span class="muted small">optional</span><input name="prospect" value="${esc(x.prospect || "")}" placeholder="e.g. Kerone Enterprises, Mr. Shah"></label>
       ${x.id ? "" : `<div id="afx" class="form-grid full" style="display:${(x.category || "") === "asset" ? "grid" : "none"};margin:0;padding:0"><div class="notice full">This is an asset (investment). It is added to the Assets register and is not counted as a running cost.</div>
         <label>Asset type<select name="asset_type">${ASSET_TYPES.map(a => `<option value="${a[0]}" ${(x.asset_type || guessAsset(x.description)) === a[0] ? "selected" : ""}>${a[1]}</option>`).join("")}</select></label>
         <label>Quantity<input type="number" step="0.001" min="0.001" name="qty" value="${x.qty > 0 ? x.qty : 1}"></label>
@@ -157,7 +166,7 @@ export async function accountsPage(el) {
           $("#es", m).disabled = true;
           const r = await run(sb.rpc("save_expense", { p: { ...f, id: x.id || null, file_path: x.file_path || null, source: x.source || "manual", bank_txn_id: o.bank_txn_id || null, supplier_invoice_id: x.supplier_invoice_id || null } }), "Expense saved");
           $("#es", m).disabled = false;
-          if (r) { close(); reload(); }
+          if (r) { const eid = x.id || (typeof r === "string" ? r : null); if (eid && (f.prospect || x.prospect)) await run(sb.rpc("set_expense_prospect", { p_id: eid, p_text: f.prospect || "" }), ""); close(); reload(); }
         };
       },
     });
@@ -209,7 +218,7 @@ export async function accountsPage(el) {
   };
 
   // ---------- scan a bill ----------
-  const openScan = () => modal("Scan a bill or receipt", `<p class="muted">Take a photo or upload a PDF of any expense bill or purchase invoice. The details are read automatically. You then choose the label (raw material, packaging, marketing, transport…) and save.</p>
+  const openScan = (opt = {}) => modal("Scan a bill or receipt", `<p class="muted">Take a photo or upload a PDF of any expense bill or purchase invoice. The details are read automatically. You then choose the label (raw material, packaging, marketing, transport…) and save.</p>
     <div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn" id="spick">Choose photo / PDF</button><button class="btn ghost" id="scam">Take photo</button></div>
     <input id="sf" type="file" accept="application/pdf,image/*" hidden><input id="sc" type="file" accept="image/*" capture="environment" hidden><p id="sst" class="muted small"></p>`, {
     onMount: (m, close) => {
@@ -228,13 +237,13 @@ export async function accountsPage(el) {
         if (!ex) {
           status(""); en(true); close();
           toast(data?.error === "not_configured" ? "Automatic reading isn't switched on. Fill the details yourself; the photo is attached." : "Could not read it" + (data?.message ? ": " + data.message : "") + ". Fill the details yourself; the photo is attached.", "err");
-          return openExpense({ file_path: path, source: "scan" }, { note: "The photo is attached. Type the details." });
+          return openExpense({ file_path: path, source: "scan", ...(opt.earlier ? { notes: EARLY_NOTE } : {}) }, { note: opt.earlier ? EARLY_HELP : "The photo is attached. Type the details." });
         }
         close();
-        if (["raw_material", "packaging"].includes(ex.suggested_category) && (ex.lines || []).length) return openPurchaseBill(ex, path);
+        if (!opt.earlier && ["raw_material", "packaging"].includes(ex.suggested_category) && (ex.lines || []).length) return openPurchaseBill(ex, path);
         openExpense({ exp_date: ex.bill_date || today(), vendor: ex.vendor || "", description: [ex.description, ex.bill_no ? "Bill " + ex.bill_no : ""].filter(Boolean).join(" · "), category: ex.suggested_category || "other",
-          amount: ex.total ?? "", gst_amount: ex.gst_amount ?? 0, payment_mode: ex.payment_mode || "bank", file_path: path, source: "scan" },
-          { note: "Read from the bill. Check the amount, then choose the correct label and who paid before saving." });
+          amount: ex.total ?? "", gst_amount: ex.gst_amount ?? 0, payment_mode: ex.payment_mode || "bank", file_path: path, source: "scan", ...(opt.earlier ? { notes: EARLY_NOTE } : {}) },
+          { note: opt.earlier ? EARLY_HELP : "Read from the bill. Check the amount, then choose the correct label and who paid before saving." });
       };
       $("#spick", m).onclick = () => $("#sf", m).click(); $("#scam", m).onclick = () => $("#sc", m).click();
       $("#sf", m).onchange = e => onFile(e.target.files[0]); $("#sc", m).onchange = e => onFile(e.target.files[0]);
@@ -431,8 +440,8 @@ export async function accountsPage(el) {
   const expenses = async () => {
     const list = await get(sb.from("expenses").select("*").order("exp_date", { ascending: false }).limit(2000));
     if (SUB !== "all" && !CAT[SUB]) SUB = "all";
-    const payers = [...new Set(list.map(e => e.paid_by))], inSub = k => list.filter(e => k === "all" || e.category === k);
-    av.innerHTML = `<div class="tabs wrapt">${[["all", "All"], ...CATS].map(([k, t]) => `<button class="tab sm ${k === SUB ? "on" : ""}" data-s="${k}">${t} (${inSub(k).length})</button>`).join("")}</div>
+    const payers = [...new Set(list.map(e => e.paid_by))], inSub = k => list.filter(e => k === "all" || (k === "bizdev" ? BIZ.includes(e.category) : e.category === k));
+    av.innerHTML = `<div class="tabs wrapt">${[["all", "All"], ["bizdev", "Business development (all)"], ...CATS].map(([k, t]) => `<button class="tab sm ${k === SUB ? "on" : ""}" data-s="${k}">${t} (${inSub(k).length})</button>`).join("")}</div>
       <div class="toolbar"><button class="btn" id="sc">📷 Scan bill / photo</button><button class="btn ghost" id="ad">Add ${SUB === "all" ? "expense" : esc(CAT[SUB]).toLowerCase()}</button><button class="btn ghost" id="bx">Upload Excel</button><span class="grow"></span>
       <select id="fp"><option value="">Paid by anyone</option>${payers.map(p => `<option>${esc(p)}</option>`).join("")}</select></div><div id="ss"></div><div id="tb"></div>`;
     $$("[data-s]", av).forEach(b => b.onclick = () => { SUB = b.dataset.s; expenses(); });
@@ -443,7 +452,7 @@ export async function accountsPage(el) {
       const owed = rows.filter(e => e.paid_by.toLowerCase() !== "company" && !e.reimbursed).reduce((s2, e) => s2 + n(e.amount), 0);
       $("#ss", av).innerHTML = `<div class="stats">${stat(SUB === "all" ? "All expenses" : esc(CAT[SUB]), R(tot), `${rows.length} entries`)}${stat("This month", R(rows.filter(e => String(e.exp_date).startsWith(mo)).reduce((s2, e) => s2 + n(e.amount), 0)))}${stat("GST included", R(rows.reduce((s2, e) => s2 + n(e.gst_amount), 0)))}${stat("To pay back to partners", R(owed), "", owed ? "warn" : "")}</div>
         ${top.length ? `<div class="card"><h3>Top vendors</h3>${table([{ h: "Vendor", v: r => r[0] }, { h: "Total", v: r => R(r[1]) }], top, { empty: "" })}</div>` : ""}`;
-      $("#tb", av).innerHTML = table([{ h: "Date", v: e => dfmt(e.exp_date) }, { h: "Vendor", v: e => e.vendor || "–" }, { h: "Details", v: e => e.description || "" }, ...(SUB === "all" ? [{ h: "Label", v: e => CAT[e.category] }] : []),
+      $("#tb", av).innerHTML = table([{ h: "Date", v: e => dfmt(e.exp_date) }, { h: "Vendor", v: e => e.vendor || "–" }, { h: "Details", v: e => e.description || "" }, ...(BIZ.includes(SUB) || SUB === "bizdev" ? [{ h: "For", v: e => e.prospect || "–" }] : []), ...(SUB === "all" || SUB === "bizdev" ? [{ h: "Label", v: e => CAT[e.category] }] : []),
         { h: "Amount", v: e => R(e.amount) }, { h: "Paid by", v: e => e.paid_by.toLowerCase() === "company" ? "Company" : e.paid_by + (e.reimbursed ? " (paid back)" : " (to pay back)") },
         { h: "", html: e => `${e.file_path ? `<button class="btn ghost sm vf" data-id="${e.id}">Bill</button> ` : ""}${e.paid_by.toLowerCase() !== "company" ? `<button class="btn ghost sm rb" data-id="${e.id}">${e.reimbursed ? "Undo paid back" : "Mark paid back"}</button> ` : ""}<button class="btn ghost sm ed" data-id="${e.id}">Edit</button> <button class="btn ghost sm dl" data-id="${e.id}">Delete</button>` }], rows, { empty: "Nothing here yet. Scan a bill, add one, or upload an Excel." });
       $$(".vf", av).forEach(b => b.onclick = async () => { const x = list.find(e => e.id === b.dataset.id), { data } = await sb.storage.from("expense-files").createSignedUrl(x.file_path, 300); data ? window.open(data.signedUrl, "_blank", "noopener") : toast("Could not open the file", "err"); });
@@ -452,7 +461,7 @@ export async function accountsPage(el) {
       $$(".dl", av).forEach(b => b.onclick = async () => { if (!confirm("Delete this entry?")) return; if (await run(sb.rpc("delete_expense", { p_id: b.dataset.id }), "Deleted") !== null) reload(); });
     };
     draw(); $("#fp", av).onchange = draw;
-    $("#sc", av).onclick = openScan; $("#ad", av).onclick = () => openExpense(SUB === "all" ? {} : { category: SUB }); $("#bx", av).onclick = () => openBulkExpenses(SUB === "all" ? "auto" : SUB);
+    $("#sc", av).onclick = openScan; $("#ad", av).onclick = () => openExpense(SUB === "all" ? {} : SUB === "bizdev" ? { category: "meals" } : { category: SUB }); $("#bx", av).onclick = () => openBulkExpenses(SUB === "all" || SUB === "bizdev" ? "auto" : SUB);
   };
 
   // =================== OVERALL ACCOUNT ===================
@@ -550,6 +559,9 @@ export async function accountsPage(el) {
     let custs = []; try { custs = await get(sb.from("customers").select("id,name").order("name")); } catch (e) { return toast(e.message, "err"); }
     modal("Add an earlier sale", `<form id="esf" class="form-grid">
       <div class="notice full">A sale made before the system. It counts in sales, the party ledger and profit. It does <b>not</b> change stock.</div>
+      <div class="full card" style="margin:0"><b>Have the invoice or purchase order?</b> <span class="muted small">Upload a photo or PDF and the details are filled in for you. The document is kept, so you can look at it when the customer orders again.</span>
+        <div class="row" style="gap:8px;margin-top:6px;flex-wrap:wrap"><button type="button" class="btn ghost" id="edpick">Choose photo / PDF</button><button type="button" class="btn ghost" id="edcam">Take photo</button></div>
+        <input id="edf" type="file" accept="application/pdf,image/*" hidden><input id="edc" type="file" accept="image/*" capture="environment" hidden><p id="edst" class="muted small" style="margin:6px 0 0"></p><div id="edl" class="small"></div></div>
       <label>Date of sale<input type="date" name="sale_date" required value="${today()}"></label>
       <label>Type${sel("kind", [["company", "Company"], ["local", "Local"]], "company")}</label>
       <label class="full">Customer (pick, or type a new name)<input name="customer_name" list="escl" required placeholder="Customer name"><datalist id="escl">${custs.map(c => `<option value="${esc(c.name)}">`).join("")}</datalist></label>
@@ -564,12 +576,38 @@ export async function accountsPage(el) {
       <label class="full">Notes<input name="notes"></label>
       <div class="full row end"><button class="btn" id="ess">Save earlier sale</button></div></form>`, {
       onMount: (m, close) => {
+        let doc = { file_path: "", lines: null, doc_no: "", gstin: "", address: "" };
+        const setv = (n, v) => { const el2 = $("[name=" + n + "]", m); if (el2 && v !== undefined && v !== null && v !== "") el2.value = v; };
+        const stat2 = t => { $("#edst", m).textContent = t; };
+        const onDoc = async file => {
+          if (!file) return;
+          if (file.size > 25 * 1024 * 1024) return toast("File is too large (max 25 MB)", "err");
+          ["edpick", "edcam"].forEach(i => $("#" + i, m).disabled = true); stat2("Uploading…");
+          const up = await compress(file), ext = (up.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, ""), path = `${new Date().getFullYear()}/${crypto.randomUUID()}.${ext}`;
+          const { error: ue } = await sb.storage.from("expense-files").upload(path, up, { contentType: up.type || undefined });
+          if (ue) { stat2(""); ["edpick", "edcam"].forEach(i => $("#" + i, m).disabled = false); return toast("Upload failed: " + ue.message, "err"); }
+          doc.file_path = path; stat2("Reading the document… about 10–20 seconds.");
+          const { data } = await sb.functions.invoke("read-earlier-sale", { body: { path } });
+          ["edpick", "edcam"].forEach(i => $("#" + i, m).disabled = false); const ex = data?.extracted;
+          if (!ex) { stat2("The document is attached. " + (data?.error === "not_configured" ? "Automatic reading isn't switched on, so type the details." : "Could not read it" + (data?.message ? ": " + data.message : "") + ". Type the details.")); return; }
+          const L = (ex.lines || []).filter(l => l && l.description); doc.lines = L; doc.doc_no = ex.doc_no || ""; doc.gstin = ex.customer_gstin || ""; doc.address = ex.customer_address || "";
+          setv("customer_name", ex.customer_name); setv("sale_date", ex.doc_date);
+          setv("product", L.length ? (L.length > 2 ? L.slice(0, 2).map(l => l.description).join(", ") + ` +${L.length - 2} more` : L.map(l => l.description).join(", ")) : "");
+          const sub = ex.subtotal ?? (ex.total != null ? Number(ex.total) - Number(ex.gst_amount || 0) : null);
+          if (L.length === 1) { setv("qty", L[0].qty); setv("unit", L[0].unit); setv("rate", L[0].rate); }
+          setv("amount", sub != null ? Number(sub).toFixed(2) : ""); setv("gst_amount", ex.gst_amount ?? 0);
+          if (ex.amount_received) { setv("received", ex.amount_received); setv("mode", ex.payment_mode); }
+          $("#edl", m).innerHTML = L.length ? `<table><thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th>Amount</th></tr></thead><tbody>${L.map(l => `<tr><td>${esc(l.description)}</td><td>${l.qty ?? ""} ${esc(l.unit || "")}</td><td>${l.rate ?? ""}</td><td>${l.amount ?? ""}</td></tr>`).join("")}</tbody></table>` : "";
+          stat2(`Read ${ex.doc_type ? ex.doc_type.replace("_", " ") : "document"}${ex.doc_no ? " " + ex.doc_no : ""}. Please check the details, then save.`);
+        };
+        $("#edpick", m).onclick = () => $("#edf", m).click(); $("#edcam", m).onclick = () => $("#edc", m).click();
+        $("#edf", m).onchange = e => onDoc(e.target.files[0]); $("#edc", m).onchange = e => onDoc(e.target.files[0]);
         const q = $("[name=qty]", m), rt = $("[name=rate]", m), am = $("[name=amount]", m), calc = () => { if (q.value && rt.value) am.value = (Number(q.value) * Number(rt.value)).toFixed(2); };
         q.oninput = calc; rt.oninput = calc;
         $("#esf", m).onsubmit = async e => {
           e.preventDefault(); const f = Object.fromEntries(new FormData(e.target)), hit = custs.find(c => c.name.toLowerCase() === String(f.customer_name).trim().toLowerCase());
           $("#ess", m).disabled = true;
-          const r = await run(sb.rpc("save_earlier_sale", { p: { ...f, customer_id: hit ? hit.id : null } }), "Earlier sale saved");
+          const r = await run(sb.rpc("save_earlier_sale", { p: { ...f, customer_id: hit ? hit.id : null, file_path: doc.file_path || null, lines: doc.lines, doc_no: doc.doc_no || null, gstin: doc.gstin || null, address: doc.address || null } }), "Earlier sale saved");
           $("#ess", m).disabled = false; if (r) { close(); reload(); }
         };
       },
@@ -610,16 +648,17 @@ export async function accountsPage(el) {
       <div class="card"><div class="toolbar"><h3 style="margin:0">Earlier sales</h3><span class="grow"></span><button class="btn" id="aes">Add earlier sale</button></div>
         <div class="stats">${stat("Sales (before GST)", R(sum(es, e => e.amount)))}${stat("Received", R(sum(es, e => e.received)), "", "good")}${stat("Still to receive", R(sum(es, e => e.total - e.received)), "", sum(es, e => e.total - e.received) > 0.005 ? "warn" : "")}</div>
         ${table([{ h: "Date", v: e => dfmt(e.sale_date) }, { h: "Customer", v: e => e.customers?.name || "" }, { h: "Type", v: e => e.kind === "local" ? "Local" : "Company" }, { h: "Sold", v: e => e.product + (e.qty ? ` · ${n(e.qty)} ${e.unit || ""}` : "") },
-          { h: "Total", v: e => R(e.total) }, { h: "Received", v: e => R(e.received) }, { h: "", html: e => `<button class="btn ghost sm esd" data-id="${e.id}">Delete</button>` }], es, { empty: "No earlier sales added yet." })}</div>
+          { h: "Total", v: e => R(e.total) }, { h: "Received", v: e => R(e.received) }, { h: "", html: e => `${e.file_path || (e.lines || []).length ? `<button class="btn ghost sm esv" data-id="${e.id}">Details</button> ` : ""}<button class="btn ghost sm esd" data-id="${e.id}">Delete</button>` }], es, { empty: "No earlier sales added yet." })}</div>
       <div class="card"><div class="toolbar"><h3 style="margin:0">Earlier production</h3><span class="grow"></span><button class="btn" id="aep">Add earlier production</button></div>
         ${table([{ h: "Date", v: b => dfmt(b.mfg_date) }, { h: "Reference", v: b => b.batch_code }, { h: "Product", v: b => (b.products?.name || "") + (b.products?.variant ? " · " + b.products.variant : "") }, { h: "Litres", v: b => n(b.batch_size_l).toFixed(1) + " L" },
           { h: "Filled", v: b => (b.filling_lines || []).map(l => `${n(l.filled)} × ${l.size_ml} mL ${l.pack_type}`).join(", ") }, { h: "Sold", v: b => sum(b.filling_lines || [], l => l.pre_sold) }, { h: "In stock", v: b => sum(b.filling_lines || [], l => l.filled - l.pre_sold) }], pb, { empty: "No earlier production added yet." })}</div>
-      <div class="card"><div class="toolbar"><h3 style="margin:0">Earlier purchases (bought before the company was set up)</h3><span class="grow"></span><button class="btn" id="aex">Add earlier purchase</button></div>
+      <div class="card"><div class="toolbar"><h3 style="margin:0">Earlier purchases (bought before the company was set up)</h3><span class="grow"></span><button class="btn" id="asc">📷 Scan bill</button><button class="btn ghost" id="aex">Add earlier purchase</button></div>
         <p class="muted small">Counts in what you have spent. Does not add to raw material stock, so current stock stays as it is.</p>
         ${table([{ h: "Date", v: e => dfmt(e.exp_date) }, { h: "Label", v: e => CAT[e.category] || e.category }, { h: "Paid to", v: e => e.vendor || "" }, { h: "Details", v: e => e.description || "" }, { h: "Amount", v: e => R(e.amount) }, { h: "Paid by", v: e => e.paid_by }], ex, { empty: "No earlier purchases added yet." })}
         <p class="muted small">To fix or remove one, open it in the Expenses tab.</p></div>`;
     $("#aes", av).onclick = openEarlierSale; $("#aep", av).onclick = openEarlierProduction;
-    $("#aex", av).onclick = () => openExpense({ notes: "Before the system (not added to stock)" }, { note: "Bought before the system. This is for your accounts only and does <b>not</b> add to stock." });
+    $("#aex", av).onclick = () => openExpense({ notes: EARLY_NOTE }, { note: "Bought before the system. This is for your accounts only and does <b>not</b> add to stock." }); $("#asc", av).onclick = () => openScan({ earlier: true });
+    $$(".esv", av).forEach(b => b.onclick = () => { const e = es.find(x => x.id === b.dataset.id); modal("Earlier sale · " + (e.customers?.name || ""), `<p>${dfmt(e.sale_date)} · ${e.doc_no ? "Document " + esc(e.doc_no) + " · " : ""}${R(e.total)}</p>${(e.lines || []).length ? `<table><thead><tr><th>Item</th><th>Qty</th><th>Rate</th><th>Amount</th></tr></thead><tbody>${e.lines.map(l => `<tr><td>${esc(l.description)}</td><td>${l.qty ?? ""} ${esc(l.unit || "")}</td><td>${l.rate ?? ""}</td><td>${l.amount ?? ""}</td></tr>`).join("")}</tbody></table>` : ""}${e.file_path ? `<div class="row end" style="margin-top:8px"><button class="btn" id="edv">Open the document</button></div>` : ""}`, { onMount: m => { const v = $("#edv", m); if (v) v.onclick = async () => { const { data } = await sb.storage.from("expense-files").createSignedUrl(e.file_path, 300); data ? window.open(data.signedUrl, "_blank", "noopener") : toast("Could not open the document", "err"); }; } }); });
     $$(".esd", av).forEach(b => b.onclick = async () => { if (!confirm("Delete this earlier sale and the payment recorded with it?")) return; if (await run(sb.rpc("delete_earlier_sale", { p_id: b.dataset.id }), "Deleted") !== null) reload(); });
   };
 

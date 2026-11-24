@@ -6,6 +6,7 @@ import { Field, Msg } from "@/components/ui";
 import { inr } from "@/lib/orders";
 import type { Role } from "@/lib/roles";
 import SubTabs from "@/components/SubTabs";
+import { PRICING_TABS, HASH_TAB, type CatTab } from "@/lib/pricingTabs";
 
 type Sku = { sku: string; name: string; category: string; mrp: number; pack_size: number; moq: number; slab: number; status: string; restricted: boolean };
 type PL = { sku: string; name: string; mrp: number; status: string; type_code: string; margin_pct: number; price: number };
@@ -14,7 +15,8 @@ type Access = { sku: string; partner_id: string };
 
 function Inner({ role }: { role: Role }) {
   const boss = role === "super_admin";
-  const [tab, setTab] = useState<"products" | "prices" | "margins">("products");
+  const [tab, setTab] = useState<CatTab>("products");
+  useEffect(() => { const sync = () => setTab(HASH_TAB[window.location.hash.replace("#", "")] ?? "products"); sync(); window.addEventListener("hashchange", sync); return () => window.removeEventListener("hashchange", sync); }, []);
   const [skus, setSkus] = useState<Sku[]>([]); const [pl, setPl] = useState<PL[]>([]); const [slabs, setSlabs] = useState<Slab[]>([]); const [access, setAccess] = useState<Access[]>([]);
   const [msg, setMsg] = useState<{ ok: boolean; t: string } | null>(null);
   const [n, setN] = useState({ sku: "", name: "", category: "", mrp: "", pack: "", moq: "5", slab: "1" });
@@ -27,6 +29,7 @@ function Inner({ role }: { role: Role }) {
     setAccess(((await supabase.from("sku_access").select("sku,partner_id").limit(1000)).data as Access[]) ?? []);
   }, []);
   useEffect(() => { load(); }, [load]);
+  const types = [...new Set(slabs.map((x) => x.type_code))];
   const done = (error: { message: string } | null, ok: string) => { say(error ? error.message : ok, !error); if (!error) load(); };
 
   async function add() {
@@ -40,8 +43,7 @@ function Inner({ role }: { role: Role }) {
   const addAccess = async () => done((await supabase.from("sku_access").insert({ sku: ac.sku, partner_id: ac.pid.trim() })).error, "Partner can now see this SKU");
   const rmAccess = async (a: Access) => done((await supabase.from("sku_access").delete().eq("sku", a.sku).eq("partner_id", a.partner_id)).error, "Access removed");
 
-  return (<><h1>Products &amp; pricing</h1><p className="sub">The one commercial master. Partners see only the price for their own tier and agreement. Every change is written to the audit trail.</p><SubTabs current="/catalogue/" items={[{ href: "/catalogue/", label: "Catalogue & SKUs" },{ href: "/schemes/", label: "Schemes & GST" }]} />
-    <div className="tabs" role="tablist">{(["products", "prices", "margins"] as const).map((t) => <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>{t === "products" ? "Products" : t === "prices" ? "Price list" : "Margin slabs"}</button>)}</div>
+  return (<><h1>Products &amp; pricing</h1><p className="sub">The one commercial master. Partners see only the price for their own tier and agreement. Every change is written to the audit trail.</p><SubTabs current={{ products: "/catalogue/", skumargins: "/catalogue/#sku-margins", access: "/catalogue/#access", prices: "/catalogue/#prices", margins: "/catalogue/#margins" }[tab]} items={PRICING_TABS} />
     {msg && <Msg kind={msg.ok ? "ok" : "bad"}>{msg.t}</Msg>}
     {tab === "products" && <>
       <div className="card"><table><thead><tr><th>SKU</th><th>Product</th><th>MRP incl. GST</th><th>Pack</th><th>Min cartons</th><th>Status</th><th>Visibility</th>{boss && <th></th>}</tr></thead><tbody>
@@ -57,12 +59,20 @@ function Inner({ role }: { role: Role }) {
         <Field label="Units per carton"><input inputMode="numeric" value={n.pack} onChange={(e) => setN({ ...n, pack: e.target.value })} /></Field><Field label="Minimum cartons"><input inputMode="numeric" value={n.moq} onChange={(e) => setN({ ...n, moq: e.target.value })} /></Field>
         <Field label="Margin group"><select value={n.slab} onChange={(e) => setN({ ...n, slab: e.target.value })} style={{ width: "100%", padding: 10 }}><option value="0">Sachet type</option><option value="1">Bottle type</option></select></Field>
         <div style={{ alignSelf: "end" }}><button className="btn" disabled={!n.sku || !n.name || !n.mrp || !n.pack} onClick={add}>Add as draft</button></div></div>
-        <h2>Partner-wise access</h2><div className="card"><p>For a restricted SKU, add the partners who may see and order it.</p>
-          <select value={ac.sku} onChange={(e) => setAc({ ...ac, sku: e.target.value })}><option value="">SKU</option>{skus.filter((k) => k.restricted).map((k) => <option key={k.sku} value={k.sku}>{k.sku}</option>)}</select> <input style={{ width: 220 }} placeholder="Partner ID" value={ac.pid} onChange={(e) => setAc({ ...ac, pid: e.target.value })} /> <button className="btn" disabled={!ac.sku || !ac.pid} onClick={addAccess}>Give access</button></div></>}
+      </>}
     </>}
+    {tab === "access" && <>
+      <div className="card"><table><thead><tr><th>SKU</th><th>Product</th><th>Who may order it</th></tr></thead><tbody>{skus.map((k) => <tr key={k.sku}><td>{k.sku}</td><td>{k.name}</td><td>{k.restricted ? (access.filter((a) => a.sku === k.sku).map((a) => a.partner_id).join(", ") || "Nobody yet") : "All partners"}</td></tr>)}</tbody></table></div>
+      {boss ? <>
+        <h2>Partner-wise access</h2><div className="card"><p>For a restricted SKU, add the partners who may see and order it.</p>
+          <select value={ac.sku} onChange={(e) => setAc({ ...ac, sku: e.target.value })}><option value="">SKU</option>{skus.filter((k) => k.restricted).map((k) => <option key={k.sku} value={k.sku}>{k.sku}</option>)}</select> <input style={{ width: 220 }} placeholder="Partner ID" value={ac.pid} onChange={(e) => setAc({ ...ac, pid: e.target.value })} /> <button className="btn" disabled={!ac.sku || !ac.pid} onClick={addAccess}>Give access</button></div></> : <p className="mini">Only Super Admin changes who may order a restricted SKU.</p>}
+    </>}
+    {tab === "skumargins" && <><div className="card"><p>Partner margin by SKU and partner type. A SKU-wise margin beats the default slab.</p><table><thead><tr><th>SKU</th><th>Product</th><th>MRP incl. GST</th>{types.map((t) => <th key={t}>{t}</th>)}</tr></thead><tbody>
+      {skus.map((k) => <tr key={k.sku}><td>{k.sku}</td><td>{k.name}</td><td>{inr(k.mrp)}</td>{types.map((t) => { const r = pl.find((x) => x.sku === k.sku && x.type_code === t); return <td key={t}>{r ? `${r.margin_pct}%` : "—"}</td>; })}</tr>)}</tbody></table></div>
+      {boss && <><h2>SKU-wise margin override</h2><div className="card"><select value={ov.sku} onChange={(e) => setOv({ ...ov, sku: e.target.value })}><option value="">SKU</option>{skus.map((k) => <option key={k.sku} value={k.sku}>{k.sku}</option>)}</select> <select value={ov.type} onChange={(e) => setOv({ ...ov, type: e.target.value })}>{[...new Set(slabs.map((s) => s.type_code))].map((c) => <option key={c}>{c}</option>)}</select> <input style={{ width: 120 }} placeholder="Margin %" inputMode="decimal" value={ov.pct} onChange={(e) => setOv({ ...ov, pct: e.target.value })} /> <button className="btn" disabled={!ov.sku || !ov.pct} onClick={saveOverride}>Save</button></div></>}</>}
     {tab === "prices" && <><div className="card"><p>Partner price per unit, excluding GST = MRP ÷ 1.18 × (1 − margin). Only margins set for a partner type are shown.</p><table><thead><tr><th>SKU</th><th>Product</th><th>MRP</th><th>Partner type</th><th>Margin</th><th>Unit price</th></tr></thead><tbody>
       {pl.map((r) => <tr key={r.sku + r.type_code}><td>{r.sku}</td><td>{r.name} {r.status !== "active" && <i>({r.status})</i>}</td><td>{inr(r.mrp)}</td><td>{r.type_code}</td><td>{r.margin_pct}%</td><td>{inr(r.price)}</td></tr>)}</tbody></table></div>
-      {boss && <><h2>SKU-wise margin override</h2><div className="card"><select value={ov.sku} onChange={(e) => setOv({ ...ov, sku: e.target.value })}><option value="">SKU</option>{skus.map((k) => <option key={k.sku} value={k.sku}>{k.sku}</option>)}</select> <select value={ov.type} onChange={(e) => setOv({ ...ov, type: e.target.value })}>{[...new Set(slabs.map((s) => s.type_code))].map((c) => <option key={c}>{c}</option>)}</select> <input style={{ width: 120 }} placeholder="Margin %" inputMode="decimal" value={ov.pct} onChange={(e) => setOv({ ...ov, pct: e.target.value })} /> <button className="btn" disabled={!ov.sku || !ov.pct} onClick={saveOverride}>Save</button></div></>}</>}
+      </>}
     {tab === "margins" && <div className="card"><p>Default margin by partner type and margin group. A SKU-wise override beats this.</p><table><thead><tr><th>Partner type</th><th>Group</th><th>Margin %</th></tr></thead><tbody>
       {slabs.map((s) => <tr key={s.type_code + s.slab}><td>{s.type_code}</td><td>{s.slab === 0 ? "Sachet type" : "Bottle type"}</td><td>{boss ? <input style={{ width: 90, margin: 0 }} defaultValue={s.margin_pct} onBlur={(e) => Number(e.target.value) !== Number(s.margin_pct) && saveSlab(s, e.target.value)} /> : `${s.margin_pct}%`}</td></tr>)}</tbody></table></div>}
   </>);

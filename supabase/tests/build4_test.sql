@@ -217,10 +217,17 @@ do $$ begin assert (select status from partners where id='ELP-DLR-0006')='Agreem
 select esign_completed('LGDOC-1','ELP-DLR-0006/signed.pdf') as code \gset
 do $$ begin
   assert (select status from agreements where esign_document_id='LGDOC-1')='Signed', 'verified completion marks the agreement Signed';
-  assert (select status from partners where id='ELP-DLR-0006')='Active', 'partner becomes Active after e-sign';
-  assert (select count(*) from certificates where partner_id='ELP-DLR-0006')=1, 'certificate issued';
+  -- Since migration 022 a signature does not activate the partner: Super Admin approves the signed MOU first.
+  assert (select status from partners where id='ELP-DLR-0006')='Agreement Pending', 'partner stays Agreement Pending until the signed MOU is approved';
+  assert (select count(*) from certificates where partner_id='ELP-DLR-0006')=0, 'no certificate before approval';
   assert esign_completed('LGDOC-1','ELP-DLR-0006/signed.pdf') is null, 'a repeated webhook changes nothing';
-  assert (select count(*) from certificates where partner_id='ELP-DLR-0006')=1, 'no second certificate';
+end $$;
+select pg_temp.as_user('00000000-0000-0000-0000-000000000001'); set role authenticated;
+select activate_partner('ELP-DLR-0006');
+reset role;
+do $$ begin
+  assert (select status from partners where id='ELP-DLR-0006')='Active', 'partner becomes Active after the signed MOU is approved';
+  assert (select count(*) from certificates where partner_id='ELP-DLR-0006')=1, 'certificate issued';
 end $$;
 select pg_temp.fails($q$select esign_started((select id from agreements where esign_document_id='LGDOC-1'),'DOC9','x')$q$, 'already signed');
 \echo E-SIGN DB TESTS PASSED

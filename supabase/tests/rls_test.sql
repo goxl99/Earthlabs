@@ -17,7 +17,7 @@ select submit_application('DLR','Test Traders','A','9999999999','a@a.com','Gujar
 do $$ begin begin perform submit_application('INS','Closed','A','9999999999','b@b.com','Gujarat','Anand',null,'{}'); raise exception 'INS registration should be blocked'; exception when raise_exception then if sqlerrm like '%should be blocked' then raise; end if; end; end $$;
 do $$ begin begin perform submit_application('DLR','Dup','A','9999999999','a@a.com','Gujarat','Anand',null,'{}'); raise exception 'duplicate allowed'; exception when raise_exception then if sqlerrm like '%allowed' then raise; end if; end; end $$;
 select set_config('t.appid', :'appid', false);
-do $$ begin assert (select count(*) from track_application(current_setting('t.appid')::uuid,'A@A.com'))=1, 'tracking works with matching e-mail'; assert (select count(*) from track_application(current_setting('t.appid')::uuid,'x@y.com'))=0, 'tracking blocked with wrong e-mail'; end $$;
+do $$ begin assert (select count(*) from track_application(current_setting('t.appid'),'A@A.com'))=1, 'tracking works with matching e-mail'; assert (select count(*) from track_application(current_setting('t.appid'),'x@y.com'))=0, 'tracking blocked with wrong e-mail'; end $$;
 do $$ begin begin assert (select count(*) from applications)=0, 'anon cannot read applications'; exception when insufficient_privilege then null; end; end $$; -- build 8: anon now has no table privilege at all (also fine)
 reset role;
 
@@ -139,18 +139,22 @@ do $$ begin begin update partners set status='Active' where id='ELP-DLR-0004'; r
 select create_agreement('ELP-DLR-0004',(select id from mou_templates limit 1)) as agr \gset
 select set_config('t.agr', :'agr', false);
 do $$ begin begin perform create_agreement('ELP-DLR-0004',(select id from mou_templates limit 1)); raise exception 'second open agreement allowed'; exception when raise_exception then if sqlerrm like '%allowed' then raise; end if; end; end $$;
-do $$ begin begin perform record_signed_agreement(current_setting('t.agr')::uuid,'x.pdf'); raise exception 'signing an unsent agreement allowed'; exception when raise_exception then if sqlerrm like '%allowed' then raise; end if; end; end $$;
+do $$ begin begin perform record_signed_agreement('00000000-0000-0000-0000-00000000dead'::uuid,'x.pdf'); raise exception 'signing an unknown agreement allowed'; exception when raise_exception then if sqlerrm like '%allowed' then raise; end if; end; end $$;
+-- Since migration 022 a Draft MOU may be marked signed (hand-signed copy), so only an unknown or closed agreement is refused above.
 select send_agreement(current_setting('t.agr')::uuid);
 reset role;
 select pg_temp.as_user('00000000-0000-0000-0000-000000000002'); set role authenticated;
 do $$ begin begin perform record_signed_agreement(current_setting('t.agr')::uuid,'x.pdf'); raise exception 'sales recorded signature allowed'; exception when raise_exception then if sqlerrm like '%allowed' then raise; end if; end; end $$;
 reset role;
 select pg_temp.as_user('00000000-0000-0000-0000-000000000001'); set role authenticated;
-select record_signed_agreement(current_setting('t.agr')::uuid,'ELP-DLR-0004/signed.pdf') as certcode \gset
+select record_signed_agreement(current_setting('t.agr')::uuid,'ELP-DLR-0004/signed.pdf');
+-- Since migration 022 the signed MOU is approved by Super Admin (activate_partner) before the partner becomes Active and a certificate is issued.
+do $$ begin assert (select status from partners where id='ELP-DLR-0004')<>'Active', 'partner not active until the signed MOU is approved'; end $$;
+select activate_partner('ELP-DLR-0004') as certcode \gset
 select set_config('t.cert', :'certcode', false);
 do $$ begin begin update agreements set status='Sent' where id=current_setting('t.agr')::uuid; raise exception 'reopening signed allowed'; exception when raise_exception then if sqlerrm like '%allowed' then raise; end if; end; end $$;
 reset role;
-do $$ begin assert (select status from partners where id='ELP-DLR-0004')='Active', 'partner active after signing'; end $$;
+do $$ begin assert (select status from partners where id='ELP-DLR-0004')='Active', 'partner active after the signed MOU is approved'; end $$;
 select pg_temp.as_user(null); set role anon;
 do $$ begin assert (select valid from verify_certificate(lower(current_setting('t.cert'))))=true, 'public verify works'; assert (select count(*) from verify_certificate('NOSUCHCODE'))=0, 'unknown code not valid'; begin assert (select count(*) from certificates)=0, 'anon cannot list certificates'; exception when insufficient_privilege then null; end; end $$;
 reset role;

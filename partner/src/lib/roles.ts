@@ -32,6 +32,7 @@ export const NAV: NavItem[] = [
   { key: "ai", href: "/ai/", label: "AI Intelligence", icon: "✦", group: "Intelligence", module: "ai", roles: STAFF },
   { key: "vendors", href: "/vendors/", label: "Vendors", icon: "⚙", group: "Intelligence", module: "vendors", roles: ["super_admin", "accounts", "warehouse"] },
   { key: "reports", href: "/reports/", label: "Reports & Exports", icon: "⇩", group: "Intelligence", module: "reports", roles: STAFF },
+  { key: "brand", href: "/branding/", label: "Brand & documents", icon: "❖", group: "Admin", roles: ["super_admin"] },
   { key: "notif", href: "/notifications/", label: "Notifications", icon: "✉", group: "Admin", roles: STAFF },
   { key: "users", href: "/users/", label: "Users & Access", icon: "☗", group: "Admin", roles: ["super_admin"] },
   { key: "audit", href: "/audit/", label: "Audit Trail", icon: "☰", group: "Admin", roles: ["super_admin"] },
@@ -45,6 +46,7 @@ export const NAV: NavItem[] = [
   { key: "pagree", href: "/agreements/", label: "Agreement & certificate", icon: "✍", module: "agreements", roles: PARTNER },
   { key: "pnet", href: "/network/", label: "My network", icon: "⌘", module: "network", roles: ["distributor"] },
   { key: "poffers", href: "/offers/", label: "Offers & credit", icon: "✱", roles: PARTNER },
+  { key: "pbrand", href: "/branding/", label: "Logo & bank details", icon: "❖", roles: PARTNER },
   { key: "pnotif", href: "/notifications/", label: "Notifications", icon: "✉", roles: PARTNER },
   // Vendor portal
   { key: "vdash", href: "/dashboard/", label: "My dashboard", icon: "▦", roles: ["vendor"] },
@@ -53,6 +55,7 @@ export const NAV: NavItem[] = [
   { key: "vquote", href: "/vendor/quotes/", label: "Quotations", icon: "❝", roles: ["vendor"] },
   { key: "vinv", href: "/vendor/invoices/", label: "Invoices & payments", icon: "₹", roles: ["vendor"] },
   { key: "vperf", href: "/vendor/performance/", label: "My performance", icon: "★", roles: ["vendor"] },
+  { key: "vbrand", href: "/branding/", label: "Logo & bank details", icon: "❖", roles: ["vendor"] },
   { key: "vnotif", href: "/notifications/", label: "Notifications", icon: "✉", roles: ["vendor"] },
 ];
 

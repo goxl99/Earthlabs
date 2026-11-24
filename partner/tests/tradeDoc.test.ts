@@ -9,5 +9,5 @@ describe("trade document helpers", () => {
     expect(rupeesInWords(99.5)).toBe("Rupees Ninety Nine and Fifty Paise Only");
   });
   it("tells intra-state from inter-state supply", () => { expect(isIntra("Gujarat", " gujarat ")).toBe(true); expect(isIntra("Gujarat", "Maharashtra")).toBe(false); });
-  it("names the documents", () => { expect(docTitle("invoice")).toBe("Tax Invoice"); expect(docTitle("po")).toBe("Purchase Order"); });
+  it("names the documents", () => { expect(docTitle("invoice")).toBe("Invoice"); expect(docTitle("challan")).toBe("Delivery Challan"); expect(docTitle("proforma")).toBe("Proforma Invoice"); expect(docTitle("po")).toBe("Purchase Order"); });
 });

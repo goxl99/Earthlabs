@@ -14,11 +14,17 @@ Deno.serve(async (req) => {
   const { data: u } = await me.auth.getUser();
   if (!u.user) return json({ error: "Sign in first" }, 401, origin);
   const { data: role } = await me.rpc("my_role");
-  if (!["super_admin", "warehouse", "sales"].includes(role as string)) return json({ error: "Not allowed" }, 403, origin);
-  const url = Deno.env.get("BATCH_SUPABASE_URL"); const key = Deno.env.get("BATCH_READ_KEY");
+  if (!["super_admin", "warehouse", "sales", "accounts"].includes(role as string)) return json({ error: "Not allowed" }, 403, origin);
+  const url = Deno.env.get("BATCH_SUPABASE_URL") ?? "https://hgdltduqwayfepzuurke.supabase.co"; const key = Deno.env.get("BATCH_READ_KEY");
   if (!url || !key) return json({ error: "The batch system link is not configured yet" }, 503, origin);
   const batch = createClient(url, key, { auth: { persistSession: false } });
   const { data, error } = await batch.from(Deno.env.get("BATCH_VIEW") ?? "epdms_approved_batches").select("batch_ref,product,qc_status,qty").order("batch_ref", { ascending: false }).limit(100);
   if (error) return json({ error: "Could not read the batch system" }, 502, origin);
+  // Keep a copy of QC facts in EPDMS so challans show batch code and QC status to partners too. Only approved batches exist in the view.
+  const admin = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
+  if (data && data.length) {
+    const { error: e2 } = await admin.from("batch_qc_cache").upsert(data.map((r: Record<string, unknown>) => ({ batch_ref: r.batch_ref, product: r.product, qc_status: r.qc_status, qty: r.qty, fetched_at: new Date().toISOString() })), { onConflict: "batch_ref" });
+    if (e2) return json({ error: "Could not store the batch data" }, 500, origin);
+  }
   return json({ batches: data ?? [] }, 200, origin);
 });

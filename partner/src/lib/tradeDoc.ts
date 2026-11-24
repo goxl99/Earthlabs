@@ -1,10 +1,13 @@
 /** Helpers for the printable Tax Invoice and Purchase Order. */
-export type Co = Record<string, string>;
+export type DocKind = "invoice" | "po" | "challan" | "proforma";
+export type Co = Record<string, unknown>;
+export type Brand = { legal_name?: string; address?: string; state?: string; state_code?: string; gstin?: string; pan?: string; email?: string; logo?: string | null; bank?: { account_name?: string; bank?: string; account_no?: string; ifsc?: string } };
 export type Doc = {
-  kind: "invoice" | "po"; company: Co; credit_days: number;
+  kind: DocKind; company: Co; credit_days: number;
+  partner_brand?: Brand; qc?: { batch_ref: string; product: string | null; qc_status: string | null; qty: number | null; fetched_at: string } | null;
   partner: { id: string; type: string; name: string; contact: string | null; phone: string | null; email: string | null; gstin: string | null; address: string | null; state: string | null; district: string | null };
   doc: Record<string, string | number | null | { name?: string; amount?: number }[]>;
-  lines: { sku: string; name: string; units: number; unit_price: number; amount: number; cartons?: number }[];
+  lines: { sku: string; name: string; hsn?: string; units: number; unit_price: number; amount: number; cartons?: number }[];
 };
 const ONES = ["", "One", "Two", "Three", "Four", "Five", "Six", "Seven", "Eight", "Nine", "Ten", "Eleven", "Twelve", "Thirteen", "Fourteen", "Fifteen", "Sixteen", "Seventeen", "Eighteen", "Nineteen"];
 const TENS = ["", "", "Twenty", "Thirty", "Forty", "Fifty", "Sixty", "Seventy", "Eighty", "Ninety"];
@@ -21,4 +24,8 @@ export function rupeesInWords(amount: number): string {
 }
 /** Intra-state supply (company state equals place of supply) splits GST into CGST and SGST; inter-state is IGST. */
 export const isIntra = (companyState: string, supply: string) => companyState.trim().toLowerCase() === supply.trim().toLowerCase();
-export const docTitle = (k: "invoice" | "po") => (k === "invoice" ? "Tax Invoice" : "Purchase Order");
+export const docTitle = (k: DocKind) => ({ invoice: "Invoice", po: "Purchase Order", challan: "Delivery Challan", proforma: "Proforma Invoice" })[k];
+/** GST rate in percent, worked out from the document totals (never typed in). */
+export const gstPct = (taxable: number, tax: number) => (taxable > 0 ? Math.round((tax / taxable) * 1000) / 10 : 0);
+/** Constant frame: only the issuer changes. Invoice, challan and proforma are issued by EarthLabs; a purchase order by the partner. */
+export const issuerIsPartner = (k: DocKind) => k === "po";

@@ -112,3 +112,20 @@ select pg_temp.fails($q$select partner_dashboard()$q$, 'permission denied');
 reset role;
 delete from vendor_invoices; delete from ro_events where ro_id like 'RO-T-%'; delete from release_orders where id like 'RO-T-%';
 \echo BUILD 11 VENDOR PORTAL TESTS PASSED
+
+-- ===================== C. AI DEFER =====================
+reset role;
+insert into ai_recommendations(kind,title,reasons,target_kind,target_id,payload) values ('lead_time','Lead time test','["r"]','rm',(select id from raw_materials limit 1),'{"lead_days":9}') returning id as air \gset
+select set_config('t.air', :'air', false);
+select pg_temp.as_user('00000000-0000-0000-0000-000000000002'); set role authenticated;
+select pg_temp.fails($q$select defer_ai_recommendation(current_setting('t.air')::bigint)$q$, 'Only Super Admin');
+reset role;
+select pg_temp.as_user('00000000-0000-0000-0000-000000000001'); set role authenticated;
+select defer_ai_recommendation(:air, 'wait for next month');
+do $$ begin assert (select status from ai_recommendations where title='Lead time test')='Deferred', 'deferred'; end $$;
+select pg_temp.fails($q$select defer_ai_recommendation((select id from ai_recommendations where title='Lead time test'))$q$, 'pending');
+select decide_ai_recommendation(:air, true, null);
+do $$ begin assert (select status from ai_recommendations where title='Lead time test')='Approved', 'a deferred item can still be approved'; assert (select lead_days from raw_materials where id=(select target_id from ai_recommendations where title='Lead time test'))=9, 'approval applied'; end $$;
+reset role;
+delete from ai_recommendations where title='Lead time test';
+\echo BUILD 11 AI DEFER TESTS PASSED

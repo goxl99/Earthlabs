@@ -738,6 +738,9 @@ export async function accountsPage(el) {
       pv.innerHTML = '<p class="muted">Calculating…</p>';
       try {
         const [lines, exps] = await Promise.all([get(sb.from("v_sale_lines").select("*").gte("dc_date", df).lte("dc_date", dt)), get(sb.from("expenses").select("*").gte("exp_date", df).lte("exp_date", dt))]);
+        const oids = [...new Set(lines.map(l => l.order_id))];
+        const det = oids.length ? ((await sb.rpc("order_cost_detail", { p_orders: oids })).data || []) : [];
+        const detBy = {}; det.forEach(d => (detBy[d.order_id] ||= []).push(d));
         const n = x => Number(x) || 0, dcOrder = {}; lines.forEach(l => { dcOrder[l.challan_id] = l.order_id; });
         const ops = exps.filter(e => e.category !== "raw_material" && e.category !== "packaging" && e.category !== "asset");
         const dep = Number((await sb.rpc("asset_dep_between", { p_from: df, p_to: dt })).data) || 0;
@@ -745,22 +748,41 @@ export async function accountsPage(el) {
         const keyOf = { order: l => l.order_id, delivery: l => l.challan_id, customer: l => l.customer_id, site: l => l.facility_id || "none" }[by];
         const nameOf = { order: l => `${l.order_no} · ${l.customer}`, delivery: l => `${l.dc_no}${l.invoice_no ? " / " + l.invoice_no : ""} · ${l.customer}`, customer: l => l.customer, site: l => l.facility }[by];
         const g = {};
-        lines.forEach(l => { const k = keyOf(l); (g[k] ||= { name: nameOf(l), rev: 0, cogs: 0, exp: 0 }); g[k].rev += n(l.revenue); g[k].cogs += n(l.cogs); });
+        lines.forEach(l => { const k = keyOf(l); (g[k] ||= { key: k, name: nameOf(l), rev: 0, cogs: 0, exp: 0, oids: new Set() }); g[k].oids.add(l.order_id); g[k].rev += n(l.revenue); g[k].cogs += n(l.cogs); });
         const ordCust = {}; lines.forEach(l => { ordCust[l.order_id] = l.customer_id; });
         let linked = 0;
         ops.forEach(e => {
           const oid = e.order_id || dcOrder[e.challan_id], k = by === "delivery" ? e.challan_id : by === "order" ? oid : by === "customer" ? ordCust[oid] : null;
           if (k && g[k]) { g[k].exp += n(e.amount) - n(e.gst_amount); linked += n(e.amount) - n(e.gst_amount); }
         });
-        const rows = Object.values(g).map(r => ({ ...r, gp: r.rev - r.cogs, np: r.rev - r.cogs - r.exp })).sort((a, b) => b.np - a.np);
-        const noCost = lines.filter(l => n(l.cogs) === 0).length;
+        const rows = Object.values(g).map(r => { const it = [...r.oids].flatMap(o => detBy[o] || []); return { ...r, gp: r.rev - r.cogs, np: r.rev - r.cogs - r.exp, miss: it.filter(i => i.basis === "missing"), est: it.filter(i => i.basis === "estimate") }; }).sort((a, b) => b.np - a.np);
+        const allIt = det, missAll = [...new Set(allIt.filter(i => i.basis === "missing").map(i => i.item))], estAll = [...new Set(allIt.filter(i => i.basis === "estimate").map(i => i.item))];
         pv.innerHTML = `<div class="stats">${stat("Sales (before GST)", R(rev))}${stat("Material & packing cost", R(cogs), "Batch materials + packaging at last purchase rates")}${stat("Gross profit", R(rev - cogs), rev ? ((rev - cogs) / rev * 100).toFixed(1) + "% margin" : "", rev - cogs >= 0 ? "good" : "bad")}
           ${stat("Operating expenses (before GST)", R(opx), "Marketing, transport, utilities, salary, rent, other")}${stat("Depreciation on assets", R(dep), "Machinery, drums etc. spread over their life")}${stat("Net profit", R(rev - cogs - opx - dep), "After expenses and depreciation", rev - cogs - opx - dep >= 0 ? "good" : "bad")}</div>
-          ${noCost ? `<div class="notice">${noCost} delivered line(s) show zero material cost because the raw materials used have no purchase bill yet. Upload supplier bills (Stock → Bills) to get true margins.</div>` : ""}
+          ${missAll.length ? `<div class="notice">⚠ Cost is incomplete: no rate yet for <b>${missAll.map(esc).join(", ")}</b>. Profit below is overstated until you upload their bills or open an order's <b>Cost details</b> and enter an estimated rate.</div>` : ""}${estAll.length ? `<div class="notice">≈ Includes your estimated rates for ${estAll.map(esc).join(", ")}. They are replaced automatically once a purchase bill is added.</div>` : ""}
           ${!lines.length ? '<div class="notice">No deliveries in this period yet. Profit is counted when a challan is issued.</div>' : ""}
           <div class="card"><h3>${{ order: "Profit by order", delivery: "Profit by delivery", customer: "Profit by customer", site: "Profit by site / plant" }[by]}</h3>
-          ${table([{ h: by === "site" ? "Site" : by === "customer" ? "Customer" : by === "order" ? "Order" : "Delivery", v: r => r.name }, { h: "Sales", v: r => R(r.rev) }, { h: "Material & pack cost", v: r => R(r.cogs) }, { h: "Gross profit", v: r => R(r.gp) }, ...(by === "site" ? [] : [{ h: "Linked expenses", v: r => R(r.exp) }, { h: "Profit after expenses", v: r => R(r.np) }])], rows, { empty: "Nothing to show" })}
+          ${table([{ h: by === "site" ? "Site" : by === "customer" ? "Customer" : by === "order" ? "Order" : "Delivery", v: r => r.name }, { h: "Sales", v: r => R(r.rev) }, { h: "Material & pack cost", v: r => R(r.cogs) }, { h: "Gross profit", v: r => R(r.gp) }, ...(by === "site" ? [] : [{ h: "Linked expenses", v: r => R(r.exp) }, { h: "Profit after expenses", v: r => R(r.np) }, { h: "Margin", v: r => r.rev ? (r.np / r.rev * 100).toFixed(1) + "%" : "–" }]), ...(by === "order" || by === "customer" ? [{ h: "Cost check", html: r => r.miss.length ? `<span class="dev">⚠ ${r.miss.length} rate${r.miss.length > 1 ? "s" : ""} missing</span>` : r.est.length ? "≈ Estimated" : "✓ Complete" }] : []), ...(by === "order" ? [{ h: "", html: r => `<button class="btn ghost sm ocd" data-k="${esc(String(r.key))}">Cost details</button>` }] : [])], rows, { empty: "Nothing to show" })}
           ${by === "site" ? '<p class="muted small">Site means the plant / facility where the delivered batch was made. Expenses are not split by site; see the overall net profit above.</p>' : `<p class="muted small">Linked expenses are those you tagged to an order or delivery. Other operating expenses (${R(opx - linked)}) are overheads, counted in the overall net profit only.</p>`}</div>`;
+        const openCost = r => {
+          const items = [...r.oids].flatMap(o => detBy[o] || []), ex = ops.filter(e => r.oids.has(e.order_id || dcOrder[e.challan_id]));
+          const bas = { bill: "Purchase bill", estimate: "Your estimate", missing: "No rate yet" }, q3 = v => (+v).toLocaleString("en-IN", { maximumFractionDigits: 3 });
+          const sec = (title, arr) => arr.length ? `<h4>${title}</h4><table><thead><tr><th>Item</th><th>Used</th><th>Rate (₹ per unit)</th><th>Cost</th><th>Source</th></tr></thead><tbody>${arr.map(i => `<tr><td>${esc(i.item)}</td><td>${q3(i.qty)} ${esc(i.unit)}</td><td>${i.basis === "bill" ? R(i.rate) : `<input type="number" step="0.01" min="0" class="er" data-id="${i.rm_id}" data-o="${i.basis === "estimate" ? i.rate : ""}" value="${i.basis === "estimate" ? i.rate : ""}" placeholder="₹ per ${esc(i.unit)}" style="width:100px">`}</td><td>${R(i.cost)}</td><td>${bas[i.basis]}</td></tr>`).join("")}</tbody></table>` : "";
+          const mc = items.filter(i => i.kind === "material").reduce((s, i) => s + n(i.cost), 0), pc = items.filter(i => i.kind === "packing").reduce((s, i) => s + n(i.cost), 0), xe = ex.reduce((s, e) => s + n(e.amount) - n(e.gst_amount), 0);
+          const prof = r.rev - mc - pc - xe;
+          modal("Cost details · " + r.name, `<div class="stats">${stat("Sales (before GST)", R(r.rev))}${stat("Material cost", R(mc))}${stat("Packing cost", R(pc))}${stat("Linked expenses", R(xe))}${stat("Profit", R(prof), r.rev ? (prof / r.rev * 100).toFixed(1) + "% margin" : "", prof >= 0 ? "good" : "bad")}</div>
+            ${r.miss.length ? `<div class="notice">⚠ ${r.miss.length} item(s) have no rate, so their cost shows ₹0. Type an estimated rate below (use 0 for water), or upload the supplier bill.</div>` : ""}
+            ${sec("Raw materials", items.filter(i => i.kind === "material"))}${sec("Packing", items.filter(i => i.kind === "packing"))}
+            ${ex.length ? `<h4>Expenses tagged to this order</h4><table><thead><tr><th>Date</th><th>Label</th><th>Details</th><th>Amount</th></tr></thead><tbody>${ex.map(e => `<tr><td>${dfmt(e.exp_date)}</td><td>${esc(CAT[e.category] || e.category)}</td><td>${esc(e.description || "")}</td><td>${R(n(e.amount) - n(e.gst_amount))}</td></tr>`).join("")}</tbody></table>` : '<p class="muted small">No expenses are tagged to this order. Tag lunches, samples or travel to an order from the Expenses tab to include them here.</p>'}
+            <div class="row end" style="gap:8px;margin-top:12px"><button class="btn" id="saveEst">Save estimated rates</button></div>`, { onMount: (m, close) => {
+          $("#saveEst", m).onclick = async () => {
+            const ch = $$(".er", m).filter(i => i.value !== i.dataset.o); if (!ch.length) { toast("No changes to save"); return; }
+            for (const i of ch) { const ok = await run(sb.rpc("set_est_rate", { p_rm: i.dataset.id, p_rate: i.value === "" ? null : Number(i.value) })); if (ok == null) return; }
+            toast("Rates saved"); close(); go();
+          };
+        } });
+        };
+        $$(".ocd", pv).forEach(b => b.onclick = () => openCost(rows.find(x => String(x.key) === b.dataset.k)));
       } catch (e) { pv.innerHTML = `<p class="dev">Could not calculate: ${esc(e.message)}</p>`; }
     };
     $$("input,select", $(".toolbar", av)).forEach(x => x.onchange = go); go();

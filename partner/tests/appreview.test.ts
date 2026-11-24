@@ -38,8 +38,11 @@ describe("application review", () => {
   });
   it("reports missing documents only once documents are tracked", () => {
     expect(reviewApplication(base, [], []).miss).toEqual([]);
-    const r = reviewApplication({ ...base, answers: { ...base.answers, _docs: { "PAN card": true } } }, [], []);
+    const d = (kind: string, status = "Uploaded") => ({ id: kind, kind, status, file_name: "f.pdf", file_path: "x", note: null, not_applicable: false, is_current: true, uploaded_at: "2026-11-10" });
+    expect(reviewApplication({ ...base, status: "Submitted" }, [], [], []).miss).toEqual([]);
+    const r = reviewApplication({ ...base, status: "Documents submitted" }, [], [], [d("PAN card"), d("Address proof of business", "Rejected")]);
     expect(r.miss.length).toBe(4);
+    expect(r.miss).toContain("Address proof of business");
     expect(r.comp).toBeLessThan(100);
   });
 });

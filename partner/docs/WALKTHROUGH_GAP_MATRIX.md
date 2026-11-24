@@ -10,7 +10,7 @@ Classes: A exact, B partial, C incorrect, D missing, E broken. **Class is from c
 | Review guide | none (prototype-only, not to ship) | n/a | Intentionally not built | Closed |
 | Dashboard | /dashboard | B | Missing charts (invoiced vs collected, target vs achieved), top/bottom 5, promotion eligibility, operations watch, territory performance, category and cluster filters | Pending |
 | Approvals | /approvals | B | Tabs All/Procurement/Credit/Schemes/Catalogue/Other; reject now uses a modal. Performance decisions not in queue | In progress |
-| Applications | /applications | A* | Rebuilt: filters with counts, category filter, ID/Complete/Flags columns, right-hand review drawer (AI review, completeness, suggested category, joining criteria, answers, documents, field-verification record, history), status-specific actions, Approve modal (category, territory, exclusivity, template, term, target) backed by migration 017. *Documents list shows required items only until the five-step registration stores uploads | Built, not yet click-tested against a live DB |
+| Applications | /applications | A* | Rebuilt on the live staged flow (Submitted → Documents requested/submitted → Field verification → Approve → Agreement pending → MOU signed): filters with counts, review drawer (AI review, completeness, joining criteria, answers, live documents with view/accept/reject, field record, history), Approve modal (category, territory, exclusivity, template, term, target). *The walkthrough's separate Management Review stage is not used: live goes from verification straight to Super Admin approval | Built; migration 017 not yet applied live; not click-tested |
 | Territory Explorer | /territory | A* | Rebuilt as the drawn Gujarat map: drill-down (master circle, circle, cluster, district, local market), category/status/colour filters, vendor layer, per-status markers, zoom, side panel, allocation modal, hierarchy modal. *Cluster/circle editing is read-only (no DB model) | Built, not yet click-tested against a live DB |
 | Partners | /partners, /partners/view | B | Profile drawer tabs (Overview, Agreement, Orders, Ledger, Performance, History), suspend, export directory. Territory assignment now a modal | In progress |
 | Agreements & Certificates | /agreements | B | MOU preview and certificate layout, edit commercial terms, submit for management review | Pending |
@@ -41,3 +41,6 @@ F1 B, F2 B (Approve modal with six fields, agreement stages, partner-signs step)
 
 ## Done on this branch
 - Replaced all 28 browser prompt/confirm/alert calls with validated modals (`src/lib/dialog.ts`, `DialogHost.tsx`), 4 new tests.
+
+## Note on the live database
+The live project (earthlabs-partner-platform) is ahead of the repo: it carries staged onboarding, application documents, MOU wallet and certificate migrations that are not yet committed here. Migration 017 is written to be additive and idempotent against both. Next step is to commit the live-only migrations so the repo and live schemas match.

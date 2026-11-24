@@ -7,24 +7,26 @@ import { supabase } from "@/lib/supabase";
 import { Badge, Msg, when } from "@/components/ui";
 import { askForm, askReason, notify } from "@/lib/dialog";
 import { CATS, GJ } from "@/lib/geo";
-import { REG_Q, REG_DOCS, answer, docsReceived, reviewApplication, type AppRow, type PartnerLite } from "@/lib/appreview";
+import { REG_Q, REG_DOCS, answer, docsReceived, reviewApplication, type AppRow, type PartnerLite, type DocRow } from "@/lib/appreview";
 
-type App = AppRow & { contact_name: string; phone: string; email: string; reason: string | null; partner_id: string | null; created_at: string; field_note: string | null; history: { at: string; status: string; note: string | null; by: string }[] };
-const kind = (s: string) => (s === "Approved" ? "good" : s === "Rejected" ? "crit" : s === "Management Review" ? "warn" : s === "More info needed" ? "ser" : "info") as "good" | "crit" | "warn" | "ser" | "info";
-const ref = (a: App) => "APP-" + a.id.slice(0, 8).toUpperCase();
+type App = AppRow & { ref_no: string | null; contact_name: string; phone: string; email: string; reason: string | null; partner_id: string | null; created_at: string; field_note: string | null; history: { at: string; status: string; note: string | null; by: string }[] };
+const kind = (s: string) => (["Approved", "MOU signed"].includes(s) ? "good" : s === "Rejected" ? "crit" : s === "Documents submitted" ? "warn" : s === "Agreement pending" ? "gold" : s === "More info needed" ? "ser" : "info") as "good" | "crit" | "warn" | "ser" | "info" | "gold";
+const ref = (a: App) => a.ref_no ?? "APP-" + a.id.slice(0, 8).toUpperCase();
 const Chip = ({ c }: { c: string }) => <span className="chip" style={{ background: CATS[c]?.col }}>{(CATS[c]?.s ?? c).toUpperCase()}</span>;
 
 function Inner({ role }: { role: string }) {
   const canVerify = ["super_admin", "sales"].includes(role), canApprove = role === "super_admin";
   const [rows, setRows] = useState<App[]>([]); const [partners, setPartners] = useState<PartnerLite[]>([]); const [flt, setFlt] = useState("all"); const [cat, setCat] = useState("all");
-  const [open, setOpen] = useState<string | null>(null); const [msg, setMsg] = useState<{ ok: boolean; t: string } | null>(null); const [err, setErr] = useState("");
+  const [docs, setDocs] = useState<Record<string, DocRow[]>>({}); const [open, setOpen] = useState<string | null>(null); const [msg, setMsg] = useState<{ ok: boolean; t: string } | null>(null); const [err, setErr] = useState("");
   const load = useCallback(async () => {
     const [a, p] = await Promise.all([supabase.from("applications").select("*").order("created_at", { ascending: false }).limit(500), supabase.from("partners").select("id,name,type_code,status,district,exclusive").limit(2000)]);
     if (a.error) setErr(a.error.message); else setRows((a.data as App[]) ?? []);
     setPartners((p.data as PartnerLite[]) ?? []);
+    const d = await supabase.from("application_documents").select("id,application_id,kind,status,file_name,file_path,note,not_applicable,is_current,uploaded_at").eq("is_current", true).limit(5000);
+    const m: Record<string, DocRow[]> = {}; ((d.data as (DocRow & { application_id: string })[]) ?? []).forEach((x) => (m[x.application_id] ??= []).push(x)); setDocs(m);
   }, []);
   useEffect(() => { load(); }, [load]);
-  const reviews = useMemo(() => new Map(rows.map((a) => [a.id, reviewApplication(a, rows.filter((x) => x.id !== a.id && x.district === a.district && x.status !== "Rejected" && !x.partner_id), partners)])), [rows, partners]);
+  const reviews = useMemo(() => new Map(rows.map((a) => [a.id, reviewApplication(a, rows.filter((x) => x.id !== a.id && x.district === a.district && x.status !== "Rejected" && !x.partner_id), partners, docs[a.id] ?? [])])), [rows, partners, docs]);
   const used = [...new Set(rows.map((a) => a.status))];
   const list = rows.filter((a) => (flt === "all" || a.status === flt) && (cat === "all" || a.type_code === cat));
   const cur = rows.find((a) => a.id === open) ?? null;
@@ -40,9 +42,11 @@ function Inner({ role }: { role: string }) {
     const f = await askForm("Field verification result", [
       { name: "rep", label: "Market reputation (from at least two trade references)", type: "select", options: ["Weak (0.3)", "Fair (0.5)", "Good (0.7)", "Strong (0.9)"], value: "Good (0.7)" },
       { name: "reg", label: "Registration verified with the registrar?", type: "select", options: ["Yes", "No"], value: a.reg_verified ? "Yes" : "No" },
-      { name: "note", label: "Field note", type: "textarea" }], { ok: "Save and send to management" });
+      { name: "note", label: "Field note", type: "textarea" }], { ok: "Save result" });
     if (!f) return;
-    await step(a, "Management Review", { reputation: Number(/\(([\d.]+)\)/.exec(f.rep)?.[1]), reg_verified: f.reg === "Yes", field_note: f.note?.trim() || null }, "Field result saved and sent to management review");
+    const { error } = await supabase.from("applications").update({ reputation: Number(/\(([\d.]+)\)/.exec(f.rep)?.[1]), reg_verified: f.reg === "Yes", field_note: f.note?.trim() || null }).eq("id", a.id);
+    if (error) { await notify("Could not save", error.message); return; }
+    setMsg({ ok: true, t: "Field verification result saved. It now counts in the joining score." }); await load();
   }
   async function approve(a: App) {
     const r = reviews.get(a.id)!;
@@ -69,22 +73,42 @@ function Inner({ role }: { role: string }) {
     setMsg({ ok: true, t: `Approved. Partner ID ${data} issued${tpl ? " and the agreement draft generated" : ""}.` }); await load();
   }
 
+  async function schedule(a: App) {
+    const f = await askForm("Schedule field verification", [{ name: "note", label: "Visit details (the applicant sees this)", type: "textarea", required: true, hint: "For example: visit on Friday, please keep your registration originals ready" }], { ok: "Schedule visit" });
+    if (f) await step(a, "Field verification", { reason: f.note.trim() }, "Field verification scheduled");
+  }
+  async function review(d: DocRow, st: "Accepted" | "Rejected") {
+    let note: string | null = null;
+    if (st === "Rejected") { note = await askReason("Reject document", `What is wrong with “${d.kind}”?`, "Reject document", true); if (!note) return; }
+    const { error } = await supabase.rpc("review_document", { doc: d.id, st, note });
+    if (error) { await notify("Could not review", error.message); return; }
+    setMsg({ ok: true, t: `${d.kind}: ${st}` }); await load();
+  }
+  async function view(d: DocRow) {
+    if (!d.file_path) return;
+    const { data, error } = await supabase.storage.from("application-docs").createSignedUrl(d.file_path, 120);
+    if (error || !data) { await notify("Could not open the file", error?.message ?? "No link returned"); return; }
+    window.open(data.signedUrl, "_blank", "noopener");
+  }
   const foot = (a: App) => {
-    const s = a.status; if (!canVerify || ["Approved", "Rejected"].includes(s)) return null;
+    const s = a.status; if (!canVerify || ["Approved", "Rejected", "Agreement pending", "MOU signed"].includes(s)) return null;
     return (<>
-      {s === "Submitted" && <button className="btn pri" onClick={() => step(a, "Under Verification", {}, "Moved to Under Verification")}>Start verification</button>}
-      {s === "Under Verification" && <><button className="btn" onClick={() => askInfo(a)}>Request more information</button><button className="btn" onClick={() => step(a, "Field verification", {}, "Field verification scheduled")}>Schedule field verification</button><button className="btn pri" onClick={() => step(a, "Management Review", {}, "Sent to management review")}>Send to management review</button></>}
-      {s === "More info needed" && <button className="btn pri" onClick={() => step(a, "Under Verification", {}, "Back in verification")}>Information received → back to verification</button>}
-      {s === "Field verification" && <button className="btn pri" onClick={() => fieldDone(a)}>Record field verification result</button>}
-      {s === "Management Review" && <>{canApprove && <button className="btn pri" onClick={() => approve(a)}>Approve…</button>}<button className="btn" onClick={() => askInfo(a)}>Request more information</button><button className="btn red" onClick={() => reject(a)}>Reject…</button></>}
+      {s === "Submitted" && <button className="btn pri" onClick={() => step(a, "Documents requested", {}, "Documents requested from the applicant")}>Request documents</button>}
+      {s === "More info needed" && <button className="btn pri" onClick={() => step(a, "Documents submitted", {}, "Information received, back in review")}>Information received → back to review</button>}
+      {["Documents submitted", "Field verification"].includes(s) && <button className="btn" onClick={() => fieldDone(a)}>Record field verification result</button>}
+      {s === "Documents submitted" && <button className="btn" onClick={() => schedule(a)}>Schedule field verification</button>}
+      {["Documents submitted", "Field verification"].includes(s) && canApprove && <button className="btn pri" onClick={() => approve(a)}>Approve…</button>}
+      {s !== "More info needed" && <button className="btn" onClick={() => askInfo(a)}>Request more information</button>}
+      <button className="btn red" onClick={() => reject(a)}>Reject…</button>
     </>);
   };
 
   const body = (a: App) => {
-    const r = reviews.get(a.id)!, qs = REG_Q[a.type_code] ?? [], docs = docsReceived(a), req = REG_DOCS[a.type_code] ?? [];
+    const r = reviews.get(a.id)!, qs = REG_Q[a.type_code] ?? [], mine = docs[a.id] ?? [], tracked = docsReceived(a, mine) != null, req = REG_DOCS[a.type_code] ?? [];
     return (<>
       <div className="row"><Badge kind={kind(a.status)}>{a.status}</Badge><Chip c={a.type_code} />{a.partner_id && <Badge kind="good">Partner ID {a.partner_id}</Badge>}</div>
-      {a.status === "Management Review" && !canApprove && <div className="note">Final approval stays with authorised EarthLabs management. Your role ({role.replace("_", " ")}) can verify and recommend, not approve.</div>}
+      {["Documents submitted", "Field verification"].includes(a.status) && !canApprove && <div className="note">Final approval stays with authorised EarthLabs management. Your role ({role.replace("_", " ")}) can verify and recommend, not approve.</div>}
+      {["Agreement pending", "MOU signed"].includes(a.status) && <div className="note">Approved. The rest happens on Agreements &amp; Certificates: prepare and send the MOU, then approve the signed copy to activate the partner.</div>}
       <div className="note ai"><b>✦ AI application review</b> <span className="mini">(rule-based on the answers below; the recommendation never approves anything)</span><p style={{ margin: "6px 0 0" }}>{r.summary}</p></div>
       <div className="grid g2">
         <div className="card flat"><h3>Completeness</h3><div style={{ fontSize: 22, fontWeight: 700 }}>{r.comp}%</div><div className="bar"><i className={r.comp === 100 ? "g" : "w"} style={{ width: `${r.comp}%` }} /></div>
@@ -98,7 +122,10 @@ function Inner({ role }: { role: string }) {
       <h3 style={{ marginTop: 12 }}>Their answers</h3>
       <div className="tw"><table className="t"><thead><tr><th>Question</th><th>Answer</th></tr></thead><tbody>{qs.map((q) => <tr key={q.key}><td>{q.label}</td><td>{answer(a, q) ?? "—"}</td></tr>)}</tbody></table></div>
       <h3 style={{ marginTop: 12 }}>Documents</h3>
-      {docs ? req.map((d) => <div className="check" key={d}><span>{docs[d] ? "✅" : "⬜"}</span><div>{d}</div></div>) : <><div className="mini">Documents are asked for after the first review, from the applicant’s tracking page. Required for a {CATS[a.type_code]?.s}:</div>{req.map((d) => <div className="check" key={d}><span>⬜</span><div>{d}</div></div>)}</>}
+      {tracked ? req.map((k) => { const d = mine.find((x) => x.kind === k); return (<div className="check" key={k}><span>{!d ? "⬜" : d.not_applicable ? "➖" : d.status === "Accepted" ? "✅" : d.status === "Rejected" ? "⛔" : "📎"}</span>
+        <div style={{ flex: 1 }}>{k}{d && !d.not_applicable && <div className="mini">{d.file_name} · {d.status}{d.note ? ` · ${d.note}` : ""}</div>}{d?.not_applicable && <div className="mini">Marked not applicable</div>}{!d && <div className="mini">Not uploaded yet</div>}</div>
+        {d && !d.not_applicable && <><button className="btn sm" onClick={() => view(d)}>View</button>{canVerify && d.status !== "Accepted" && <button className="btn sm" onClick={() => review(d, "Accepted")}>Accept</button>}{canVerify && d.status !== "Rejected" && <button className="btn sm red" onClick={() => review(d, "Rejected")}>Reject</button>}</>}</div>); })
+        : <><div className="mini">Documents are requested after the first review and uploaded by the applicant from the tracking page. Required for a {CATS[a.type_code]?.s}:</div>{req.map((k) => <div className="check" key={k}><span>⬜</span><div>{k}</div></div>)}</>}
       {(a.reputation != null || a.reg_verified != null || a.field_note) && <><h3 style={{ marginTop: 12 }}>Field verification record</h3><table className="t"><tbody><tr><td>Registration verified</td><td>{a.reg_verified == null ? "—" : a.reg_verified ? "Yes" : "No"}</td></tr><tr><td>Market reputation</td><td>{a.reputation ?? "—"}</td></tr><tr><td>Field note</td><td>{a.field_note ?? "—"}</td></tr></tbody></table></>}
       <h3 style={{ marginTop: 12 }}>History</h3>
       <div className="tl">{(a.history ?? []).map((h, i) => <div key={i}><b>{h.status}</b>{h.note ? `: ${h.note}` : ""}<br /><small>{when(h.at)} · {h.by}</small></div>)}<div><b>Application submitted</b><br /><small>{when(a.created_at)} · {a.contact_name}</small></div></div>

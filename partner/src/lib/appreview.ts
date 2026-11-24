@@ -24,8 +24,14 @@ export const answer = (a: AppRow, q: Question): string | null => {
   const v = (a.answers ?? {})[q.key] ?? (q.alt ? (a.answers ?? {})[q.alt] : undefined);
   return v == null || String(v).trim() === "" ? null : String(v);
 };
-/** Documents the applicant has uploaded, kept in answers._docs as { "<name>": true }. */
-export const docsReceived = (a: AppRow): Record<string, boolean> | null => { const d = (a.answers ?? {})._docs; return d && typeof d === "object" ? (d as Record<string, boolean>) : null; };
+export type DocRow = { id: string; kind: string; status: string; file_name: string | null; file_path: string | null; note: string | null; not_applicable: boolean; is_current: boolean; uploaded_at: string };
+/** Documents count as received once uploaded (not rejected) or marked not applicable. Before documents are requested nothing is tracked yet. */
+export const docsReceived = (a: AppRow, docs?: DocRow[]): Record<string, boolean> | null => {
+  if (!docs || a.status === "Submitted") return null;
+  const m: Record<string, boolean> = {};
+  docs.filter((d) => d.is_current).forEach((d) => { m[d.kind] = d.not_applicable || d.status !== "Rejected"; });
+  return m;
+};
 
 /** Joining criteria for a new dealer (Performance Matrix, step 0 to 1): weight, scale low, scale high, minimum. */
 export const JOIN: { n: string; w: number; lo: number; hi: number; min: number; unit: string }[] = [
@@ -49,10 +55,10 @@ export function joinEval(actuals: (number | null)[]): { rows: JoinRow[]; weighte
 
 export type Review = { comp: number; miss: string[]; unanswered: string[]; risks: ["crit" | "warn", string][]; checks: string[]; suit: number | null; join: ReturnType<typeof joinEval> | null; rec: string; recT: string; crit: boolean; summary: string; defCat: string };
 
-export function reviewApplication(a: AppRow, peers: AppRow[], partners: PartnerLite[]): Review {
+export function reviewApplication(a: AppRow, peers: AppRow[], partners: PartnerLite[], docList?: DocRow[]): Review {
   const qs = REG_Q[a.type_code] ?? [];
   const unanswered = qs.filter((q) => answer(a, q) == null).map((q) => q.label);
-  const docs = docsReceived(a), req = REG_DOCS[a.type_code] ?? [];
+  const docs = docsReceived(a, docList), req = REG_DOCS[a.type_code] ?? [];
   const miss = docs ? req.filter((d) => !docs[d]) : [];
   const total = qs.length + (docs ? req.length : 0), done = qs.length - unanswered.length + (docs ? req.length - miss.length : 0);
   const comp = total ? Math.round((done / total) * 100) : 0;

@@ -83,8 +83,27 @@ function StaffDashboard({ role }: { role: Role }) {
     <div className="note ai" style={{ marginTop: 14 }}><b>This month’s AI recommendations:</b> {o.ai_pending} waiting for a decision. <Link className="lk" href="/ai/">Open AI Intelligence</Link></div>
   </>);
 }
+function VendorDashboard({ name }: { name: string }) {
+  const [d, setD] = useState<Record<string, any> | null>(null); const [err, setErr] = useState("");
+  useEffect(() => { supabase.rpc("vendor_dashboard").then(({ data, error }) => { if (error) setErr(error.message); else setD(data as Record<string, any>); }); }, []);
+  if (err) return <div className="note bad">{err}</div>;
+  if (!d) return <p className="mini">Loading…</p>;
+  const first = (name || "").split(" ")[0] || "Vendor";
+  return (<><h1>Welcome, {first}</h1><p className="sub">Vendor. You only see your own business here.</p>
+    <div className="grid g4"><Tile label="Open purchase orders" value={Number(d.open_pos)} note="approved or on the way" href="/vendor/orders/" /><Tile label="Open quotation requests" value={Number(d.open_rfqs)} note="waiting for your quote" href="/vendor/quotes/" />
+      <Tile label="Performance score" value={d.score ?? "—"} href="/vendor/performance/" /><Tile label="Payments due" value={inr(Number(d.payments_due))} note="invoices not yet paid" href="/vendor/invoices/" /></div>
+    <div className="card" style={{ marginTop: 14 }}><h3>Quick actions</h3><div className="row" style={{ marginTop: 8 }}><Link className="btn pri" href="/vendor/orders/">Purchase orders</Link><Link className="btn" href="/vendor/invoices/">Upload an invoice</Link><Link className="btn" href="/vendor/">Send stock report</Link></div></div></>);
+}
+function PartnerNext() {
+  const [d, setD] = useState<Record<string, any> | null>(null);
+  useEffect(() => { supabase.rpc("partner_dashboard").then(({ data }) => setD((data as Record<string, any>) ?? null)); }, []);
+  if (!d) return null;
+  return <div className="grid g4" style={{ marginTop: 14 }}><Tile label="Sales this month" value={inr(Number(d.sales_month))} /><Tile label="Performance score" value={d.score ?? "—"} href="/performance/" />
+    <Tile label="Outstanding" value={inr(Number(d.outstanding))} href="/invoices/" /><Tile label="Next step" value={d.next_step} href={d.next_href} /></div>;
+}
 function Inner({ role, name }: { role: Role; name: string }) {
   if (isStaff(role)) return <StaffDashboard role={role} />;
+  if (role === "vendor") return <VendorDashboard name={name} />;
   const [s, setS] = useState<Stats | null>(null); const [err, setErr] = useState("");
   useEffect(() => { supabase.rpc("dashboard_stats").then(({ data, error }) => { if (error) setErr(error.message); else setS((data as Stats) ?? {}); }); }, []);
   if (err) return <div className="note bad">{err}</div>;
@@ -93,6 +112,7 @@ function Inner({ role, name }: { role: Role; name: string }) {
   return (<><h1>Welcome, {first}</h1>
     <p className="sub">{ROLE_LABEL[role]}. You only see your own business here.</p>
     <div className="grid g4"><Tile label="Open orders" value={Number(s.orders_open ?? 0)} note="in the pipeline" href="/orders/" /><Tile label="Waiting for your payment" value={Number(s.orders_to_pay ?? 0)} note="approved orders" href="/orders/" /><Tile label="Orders so far" value={Number(s.orders_total ?? 0)} /><Tile label="Ordered value" value={inr(Number(s.ordered_value ?? 0))} note="incl. GST" href="/invoices/" /></div>
+    <PartnerNext />
     <div className="grid g2" style={{ marginTop: 14 }}><div className="card"><h3>Quick actions</h3><div className="row" style={{ marginTop: 8 }}>
       <Link className="btn pri" href="/orders/#place">Place an order</Link><Link className="btn" href="/invoices/">Pay an invoice</Link><Link className="btn" href="/agreements/">Agreement &amp; certificate</Link></div>
       <div className="mini" style={{ marginTop: 12 }}>{role === "dealer" ? "Dealers report monthly sales to outlets so your secondary sales count towards your score." : "Distributors can see their authorised dealer network."}</div></div>

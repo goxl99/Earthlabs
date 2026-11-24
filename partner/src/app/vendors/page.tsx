@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import Shell from "@/components/Shell";
 import { callFn } from "@/lib/fn";
@@ -24,7 +25,7 @@ function Inner({ role }: { role: Role }) {
     if (!error && fn === "set_vendor_status" && args.st === "Active") { const r = await callFn("provision-login", { vendor_id: args.vid }); t = r.ok ? (r.data?.created === false ? String(r.data?.note ?? "Vendor activated.") : "Vendor activated. Login ID and password e-mailed.") : "Activated, but the login could not be created: " + r.error; }
     setMsg({ ok: !error, t }); load();
   }
-  return (<><h1>Vendors</h1><p className="sub">Suppliers have their own identity, portal and performance matrix, kept apart from sales-channel partners.</p><p>Suppliers have their own identity and portal, kept apart from sales-channel partners. Only Super Admin adds or approves a vendor.</p>
+  return (<><h1>Vendors</h1>{(role === "super_admin" || role === "accounts") && <p><Link className="lk" href="/vendors/invoices/">Vendor invoices &amp; payments →</Link></p>}<p className="sub">Suppliers have their own identity, portal and performance matrix, kept apart from sales-channel partners.</p><p>Suppliers have their own identity and portal, kept apart from sales-channel partners. Only Super Admin adds or approves a vendor.</p>
     {msg && <Msg kind={msg.ok ? "ok" : "bad"}>{msg.t}</Msg>}
     <div className="card"><table><thead><tr><th>ID</th><th>Name</th><th>Supplies</th><th>District</th><th>Status</th><th>Credit level</th><th></th></tr></thead><tbody>
       {v.map((x) => <tr key={x.id}><td>{x.id}</td><td>{x.name}<div style={{ fontSize: 12 }}>{x.person}</div></td><td>{x.supplies}</td><td>{x.district}</td><td>{x.status}</td><td>{x.credit_level === 0 ? "Pay & carry" : `Level ${x.credit_level}`}</td>

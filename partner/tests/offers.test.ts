@@ -33,3 +33,16 @@ describe("credit summary", () => {
     expect(s.next).toBeNull(); expect(s.scoreGap).toBeNull();
   });
 });
+
+import { navFor } from "../src/lib/roles";
+import { VENDOR_TABS } from "../src/lib/vendorTabs";
+describe("vendor portal navigation", () => {
+  it("shows the vendor the five walkthrough pages and every tab has a menu entry or tab link", () => {
+    const hrefs = navFor("vendor").map((n) => n.href);
+    for (const h of ["/dashboard/", "/vendor/", "/vendor/orders/", "/vendor/quotes/", "/vendor/invoices/", "/vendor/performance/", "/notifications/"]) expect(hrefs).toContain(h);
+    expect(VENDOR_TABS.map((t) => t.href)).toEqual(["/vendor/", "/vendor/orders/", "/vendor/quotes/", "/vendor/invoices/", "/vendor/performance/"]);
+  });
+  it("keeps vendor pages away from partners and staff menus", () => {
+    for (const r of ["dealer", "distributor", "sales"] as const) expect(navFor(r).map((n) => n.href)).not.toContain("/vendor/invoices/");
+  });
+});

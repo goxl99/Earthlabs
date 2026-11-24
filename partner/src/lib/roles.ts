@@ -49,7 +49,10 @@ export const NAV: NavItem[] = [
   // Vendor portal
   { key: "vdash", href: "/dashboard/", label: "My dashboard", icon: "▦", roles: ["vendor"] },
   { key: "vstock", href: "/vendor/", label: "Stock report", icon: "▣", roles: ["vendor"] },
-  { key: "vro", href: "/vendor/#release", label: "Release orders", icon: "✉", roles: ["vendor"] },
+  { key: "vro", href: "/vendor/orders/", label: "Purchase orders", icon: "✉", roles: ["vendor"] },
+  { key: "vquote", href: "/vendor/quotes/", label: "Quotations", icon: "❝", roles: ["vendor"] },
+  { key: "vinv", href: "/vendor/invoices/", label: "Invoices & payments", icon: "₹", roles: ["vendor"] },
+  { key: "vperf", href: "/vendor/performance/", label: "My performance", icon: "★", roles: ["vendor"] },
   { key: "vnotif", href: "/notifications/", label: "Notifications", icon: "✉", roles: ["vendor"] },
 ];
 

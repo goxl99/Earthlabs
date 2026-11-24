@@ -2,3 +2,5 @@
 -- raw_materials.est_rate (optional estimated rate used until a purchase bill exists),
 -- rm_rate_value() falls back to est_rate, set_est_rate(rm, rate) admin RPC,
 -- order_cost_detail(order_ids[]) admin RPC returning materials/packing per order with source (bill / estimate / missing).
+-- Also applied: order_cost_detail now flags delivered pack types with no packing recipe (basis 'nopack');
+-- save_pack_recipe(product, pack_type, size_ml, items jsonb) admin RPC to set packing items.

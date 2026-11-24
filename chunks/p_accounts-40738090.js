@@ -752,8 +752,8 @@ export async function accountsPage(el) {
         const rows = orders.map(o => {
           const lines = ol.filter(l => l.order_id === o.id).map(l => ({ ...l, given: given[l.id] || 0 }));
           const val = lines.reduce((s, l) => s + n(l.qty) * n(l.rate) * (1 + n(l.gst_pct) / 100), 0), dval = lines.reduce((s, l) => s + l.given * n(l.rate), 0);
-          const s = sl.filter(x => x.order_id === o.id), cogs = s.reduce((a, x) => a + n(x.cogs), 0), ex = exps.filter(e => e.order_id === o.id && e.category !== "asset");
-          const exp = ex.reduce((a, e) => a + n(e.amount) - n(e.gst_amount), 0), it = detBy[o.id] || [];
+          const it = detBy[o.id] || [], cogs = it.reduce((a, x) => a + n(x.cost), 0), ex = exps.filter(e => e.order_id === o.id && e.category !== "asset");
+          const exp = ex.reduce((a, e) => a + n(e.amount) - n(e.gst_amount), 0);
           return { o, name: `${o.order_no} · ${o.customers?.name || ""}`, lines, val, dval, cogs, ex, exp, earn: dval - cogs - exp, it, miss: it.filter(i => i.basis === "missing" || i.basis === "nopack"), est: it.filter(i => i.basis === "estimate") };
         });
         const missAll = [...new Set(det.filter(i => i.basis === "missing" || i.basis === "nopack").map(i => i.item))], estAll = [...new Set(det.filter(i => i.basis === "estimate").map(i => i.item))];
@@ -774,19 +774,22 @@ export async function accountsPage(el) {
           <p class="muted small">Cost = raw material at the latest bill rate (or your estimate) + packing + expenses you tagged to the order. Rent, salary and other overheads are not included here. They are in the overall profit on the Accounting dashboard. An indicative figure, not an exact one.</p></div>`;
         const openCost = r => {
           const items = r.it, bas = { bill: "Purchase bill", estimate: "Your estimate", missing: "No rate yet" };
-          const sec = (title, arr) => arr.length ? `<h4>${title}</h4><table><thead><tr><th>Item</th><th>Used</th><th>Rate (₹ per unit)</th><th>Cost</th><th>Source</th></tr></thead><tbody>${arr.map(i => `<tr><td>${esc(i.item)}</td><td>${i.basis === "nopack" ? "" : q3(i.qty) + " " + esc(i.unit)}</td><td>${i.basis === "nopack" ? `<button class="btn ghost sm spk" data-p="${i.product_id}" data-t="${esc(i.pack_type)}" data-s="${i.size_ml}">Set packing</button>` : i.basis === "bill" ? R(i.rate) : `<input type="number" step="0.01" min="0" class="er" data-id="${i.rm_id}" data-o="${i.basis === "estimate" ? i.rate : ""}" value="${i.basis === "estimate" ? i.rate : ""}" placeholder="₹ per ${esc(i.unit)}" style="width:100px">`}</td><td>${R(i.cost)}</td><td>${i.basis === "nopack" ? "Packing not set" : bas[i.basis]}</td></tr>`).join("")}</tbody></table>` : "";
+          const sec = (title, arr) => arr.length ? `<h4>${title}</h4><table><thead><tr><th>Item</th><th>Used (edit if wrong)</th><th>Rate (₹ per unit)</th><th>Cost</th><th>Source</th></tr></thead><tbody>${arr.map(i => `<tr><td>${esc(i.item)}</td><td>${i.basis === "nopack" ? "" : `<input type="number" step="any" min="0" class="eq" data-id="${i.rm_id}" data-o="${i.qty}" value="${i.qty}" style="width:90px"> ${esc(i.unit)}${i.edited ? ` <span class="muted small">edited (was ${q3(i.auto_qty)}) <a href="#" class="rq" data-id="${i.rm_id}">reset</a></span>` : ""}`}</td><td>${i.basis === "nopack" ? `<button class="btn ghost sm spk" data-p="${i.product_id}" data-t="${esc(i.pack_type)}" data-s="${i.size_ml}">Set packing</button>` : i.basis === "bill" ? R(i.rate) : `<input type="number" step="0.01" min="0" class="er" data-id="${i.rm_id}" data-o="${i.basis === "estimate" ? i.rate : ""}" value="${i.basis === "estimate" ? i.rate : ""}" placeholder="₹ per ${esc(i.unit)}" style="width:100px">`}</td><td>${R(i.cost)}</td><td>${i.basis === "nopack" ? "Packing not set" : bas[i.basis]}</td></tr>`).join("")}</tbody></table>` : "";
           const mc = items.filter(i => i.kind === "material").reduce((s, i) => s + n(i.cost), 0), pc = items.filter(i => i.kind === "packing").reduce((s, i) => s + n(i.cost), 0), earn = r.dval - mc - pc - r.exp;
           modal("Order · " + r.name, `<div class="stats">${stat("Order value (with GST)", R(r.val), r.o.customer_po_no ? "Customer PO " + esc(r.o.customer_po_no) : "")}${stat("Delivered (before GST)", R(r.dval))}${stat("Material cost", R(mc))}${stat("Packing cost", R(pc))}${stat("Tagged expenses", R(r.exp))}${stat("We earn", R(earn), r.dval ? (earn / r.dval * 100).toFixed(1) + "% margin" : "", earn >= 0 ? "good" : "bad")}</div>
             <h4>What was ordered and given</h4><table><thead><tr><th>Item</th><th>Ordered</th><th>Given</th><th>Rate</th><th>Delivered value</th></tr></thead><tbody>${r.lines.map(l => `<tr><td>${esc(l.description)}</td><td>${q3(l.qty)}</td><td>${q3(l.given)}</td><td>${R(l.rate)}</td><td>${R(l.given * n(l.rate))}</td></tr>`).join("")}</tbody></table>
             ${r.miss.length ? `<div class="notice">⚠ ${r.miss.length} item(s) have no rate or no packing set, so their cost shows ₹0. Type an estimated rate below (use 0 for water), set the packing, or upload the supplier bill.</div>` : ""}
             ${sec("Raw materials", items.filter(i => i.kind === "material"))}${sec("Packing", items.filter(i => i.kind === "packing"))}
             ${r.ex.length ? `<h4>Expenses tagged to this order</h4><table><thead><tr><th>Date</th><th>Label</th><th>Details</th><th>Amount</th></tr></thead><tbody>${r.ex.map(e => `<tr><td>${dfmt(e.exp_date)}</td><td>${esc(CAT[e.category] || e.category)}</td><td>${esc(e.description || "")}</td><td>${R(n(e.amount) - n(e.gst_amount))}</td></tr>`).join("")}</tbody></table>` : '<p class="muted small">No expenses are tagged to this order. Tag lunches, samples or travel to an order from the Expenses tab to include them.</p>'}
-            <div class="row end" style="gap:8px;margin-top:12px"><button class="btn" id="saveEst">Save estimated rates</button></div>`, { onMount: (m, close) => {
+            <div class="row end" style="gap:8px;margin-top:12px"><button class="btn" id="saveEst">Save changes</button></div>`, { onMount: (m, close) => {
           $$(".spk", m).forEach(b => b.onclick = () => { close(); openPack(b); });
+          $$(".rq", m).forEach(a => a.onclick = async e => { e.preventDefault(); if (await run(sb.rpc("set_order_cost_qty", { p_order: r.o.id, p_rm: a.dataset.id, p_qty: null }))) { toast("Reset to the calculated quantity"); close(); go(); } });
           $("#saveEst", m).onclick = async () => {
-            const ch = $$(".er", m).filter(i => i.value !== i.dataset.o); if (!ch.length) { toast("No changes to save"); return; }
+            const qc = $$(".eq", m).filter(i => i.value !== i.dataset.o && i.value !== "" && Number(i.value) >= 0), ch = $$(".er", m).filter(i => i.value !== i.dataset.o);
+            if (!ch.length && !qc.length) { toast("No changes to save"); return; }
+            for (const i of qc) { const ok = await run(sb.rpc("set_order_cost_qty", { p_order: r.o.id, p_rm: i.dataset.id, p_qty: Number(i.value) })); if (ok == null) return; }
             for (const i of ch) { const ok = await run(sb.rpc("set_est_rate", { p_rm: i.dataset.id, p_rate: i.value === "" ? null : Number(i.value) })); if (ok == null) return; }
-            toast("Rates saved"); close(); go();
+            toast("Saved"); close(); go();
           };
         } });
         };

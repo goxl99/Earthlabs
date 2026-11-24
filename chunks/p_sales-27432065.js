@@ -6,6 +6,35 @@ const CO_KEYS = [["co_legal_name","Company name"],["co_address","Address"],["co_
 const INR = n => new Intl.NumberFormat("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(n) || 0);
 const Q = n => String(+Number(n).toFixed(3));
 const wa = text => window.open("https://wa.me/?text=" + encodeURIComponent(text), "_blank", "noopener");
+// ---------- send an invoice / challan by WhatsApp or email ----------
+export const phoneOf = p => { let d = String(p || "").replace(/\D/g, ""); if (d.length === 11 && d[0] === "0") d = d.slice(1); if (d.length === 10) d = "91" + d; return d.length >= 11 && d.length <= 15 ? d : ""; };
+const askTo = (channel, name) => new Promise(res => {
+  const wa_ = channel === "wa"; let done = false;
+  modal(wa_ ? "WhatsApp number" : "Email address", `<p class="muted">${esc(name || "This customer")} has no ${wa_ ? "phone number" : "email"} saved. Enter one to send now. To save it for next time, add it under Customers.</p><label class="full">${wa_ ? "WhatsApp number (with or without +91)" : "Email address"}<input id="sto" ${wa_ ? 'type="tel" placeholder="98765 43210"' : 'type="email" placeholder="name@company.com"'}></label><div class="row end" style="margin-top:12px"><button class="btn" id="stgo">${wa_ ? "Open WhatsApp" : "Open email"}</button></div>`,
+    { onMount: (m, close) => { $("#stgo", m).onclick = () => { const v = $("#sto", m).value.trim(), ok = wa_ ? phoneOf(v) : /^\S+@\S+\.\S+$/.test(v) && v; if (!ok) { toast(wa_ ? "Enter a valid mobile number" : "Enter a valid email", "err"); return; } done = true; close(); res(ok); }; const obs = new MutationObserver(() => { if (!document.body.contains(m) && !done) { done = true; res(""); obs.disconnect(); } }); obs.observe(document.body, { childList: true }); } });
+});
+export const docMessage = (kind, d, meta, link) => {
+  const t = d.totals || {}, lines = (d.lines || []).map(l => `• ${l.desc || l.description}: ${Q(l.qty)}${kind === "invoice" && l.rate != null ? " × ₹" + INR(l.rate) : ""}`);
+  const head = kind === "invoice" ? `Tax invoice ${meta.no} dated ${dfmt(meta.date)}` : `Delivery challan ${meta.no} dated ${dfmt(meta.date)}`;
+  const extra = kind === "invoice" ? [`Taxable ₹${INR(t.taxable)} + GST ₹${INR((t.cgst || 0) + (t.sgst || 0) + (t.igst || 0))}`, `*Total ₹${INR(t.total)}*`, d.bank?.account_no ? `Bank: ${d.bank.bank} A/c ${d.bank.account_no} IFSC ${d.bank.ifsc}` : ""] : [meta.vehicle ? `Vehicle: ${meta.vehicle}` : "", meta.transporter ? `Transporter: ${meta.transporter}` : "", meta.lr_no ? `LR no: ${meta.lr_no}` : ""];
+  return [`Dear ${d.buyer?.name || "Sir/Madam"},`, "", `Please find your ${head} from ${d.seller?.name || "EarthLabs"}.`, ...lines, ...extra.filter(Boolean), "", `Download the PDF: ${link}`, "(Link works for 60 days)", "", `Thank you,`, d.seller?.name || ""].join("\n");
+};
+export const sendDoc = async (channel, kind, d, meta, cust) => {
+  let to = channel === "wa" ? phoneOf(cust?.phone || d.buyer?.phone) : String(cust?.email || d.buyer?.email || "").trim();
+  if (!to) { to = await askTo(channel, cust?.name); if (!to) return; }
+  const w = channel === "wa" ? window.open("", "_blank") : null;
+  try {
+    const r = await makePdf(kind, d, { ...meta, asBlob: true });
+    const path = `${kind}/${r.name.replace(/\.pdf$/, "")}-${Date.now()}.pdf`;
+    const up = await sb.storage.from("sent-docs").upload(path, r.blob, { contentType: "application/pdf" });
+    if (up.error) throw up.error;
+    const su = await sb.storage.from("sent-docs").createSignedUrl(path, 60 * 24 * 3600);
+    if (su.error) throw su.error;
+    const text = docMessage(kind, d, meta, su.data.signedUrl);
+    if (channel === "wa") { const url = "https://wa.me/" + to + "?text=" + encodeURIComponent(text); if (w) w.location.href = url; else window.open(url, "_blank"); }
+    else location.href = `mailto:${to}?subject=${encodeURIComponent((kind === "invoice" ? "Tax invoice " : "Delivery challan ") + meta.no + " – " + (d.seller?.name || "EarthLabs"))}&body=${encodeURIComponent(text)}`;
+  } catch (e) { if (w) w.close(); toast("Could not prepare the document: " + (e.message || e), "err"); }
+};
 const STATUS = { open: "Open", part_delivered: "Part delivered", delivered: "Delivered", cancelled: "Cancelled" };
 let TAB = "orders";
 
@@ -149,7 +178,9 @@ export async function makePdf(kind, d, meta) {
     doc.text(`${meta.no}  |  Computer generated document, no signature required`, M, H - 20);
     doc.text(`Page ${i} of ${n}`, W - M, H - 20, { align: "right" });
   }
-  doc.save(meta.no.replace(/[\\/]/g, "-") + ".pdf");
+  const fname = meta.no.replace(/[\\/]/g, "-") + ".pdf";
+  if (meta.asBlob) return { blob: doc.output("blob"), name: fname };
+  doc.save(fname);
 }
 
 // ---------- page ----------
@@ -359,8 +390,8 @@ export async function salesPage(el) {
         ${pi ? `<button class="btn ghost sm" data-a="pi">Proforma ${esc(pi.pi_no)} – PDF</button>` : (live && canWrite ? '<button class="btn ghost sm" data-a="mkpi">Make proforma (optional)</button>' : "")}
         ${live && left > 0 ? '<button class="btn sm" data-a="mkdc">Create delivery challan</button>' : ""}
       </div>
-      ${D.length ? `<table class="tbl"><thead><tr><th>Challan</th><th>Date</th><th>Tax invoice</th></tr></thead><tbody>${D.map(c => { const inv = I.find(i => i.challan_id === c.id); return `<tr><td>${esc(c.dc_no)} <button class="btn ghost sm" data-a="dc" data-id="${c.id}">PDF</button></td><td>${dfmt(c.dc_date)}</td>
-        <td>${inv ? `${esc(inv.invoice_no)} · ₹${INR(inv.total)} <button class="btn ghost sm" data-a="inv" data-id="${inv.id}">PDF</button> <button class="btn ghost sm" data-a="wa" data-id="${inv.id}">WhatsApp</button>` : `<button class="btn sm" data-a="mkinv" data-id="${c.id}">Make tax invoice</button>`}</td></tr>`; }).join("")}</tbody></table>` : '<p class="muted small">No challan yet. A challan is needed before a tax invoice.</p>'}
+      ${D.length ? `<table class="tbl"><thead><tr><th>Challan</th><th>Date</th><th>Tax invoice</th></tr></thead><tbody>${D.map(c => { const inv = I.find(i => i.challan_id === c.id); return `<tr><td>${esc(c.dc_no)} <button class="btn ghost sm" data-a="dc" data-id="${c.id}">PDF</button> <button class="btn ghost sm" data-a="dcwa" data-id="${c.id}">WhatsApp</button> <button class="btn ghost sm" data-a="dcem" data-id="${c.id}">Email</button></td><td>${dfmt(c.dc_date)}</td>
+        <td>${inv ? `${esc(inv.invoice_no)} · ₹${INR(inv.total)} <button class="btn ghost sm" data-a="inv" data-id="${inv.id}">PDF</button> <button class="btn ghost sm" data-a="wa" data-id="${inv.id}">WhatsApp</button> <button class="btn ghost sm" data-a="em" data-id="${inv.id}">Email</button>` : `<button class="btn sm" data-a="mkinv" data-id="${c.id}">Make tax invoice</button>`}</td></tr>`; }).join("")}</tbody></table>` : '<p class="muted small">No challan yet. A challan is needed before a tax invoice.</p>'}
       ${live && !D.length ? '<div class="row end"><button class="btn ghost sm" data-a="cancel">Cancel order</button></div>' : ""}`, {
       wide: true,
       onMount: (m, close) => {
@@ -370,7 +401,9 @@ export async function salesPage(el) {
           if (a === "pi") return makePdf("proforma", pi.data, { no: pi.pi_no, date: pi.pi_date });
           if (a === "dc") { const c = D.find(x => x.id === id); return makePdf("challan", c.data, { no: c.dc_no, date: c.dc_date, vehicle: c.vehicle, transporter: c.transporter, lr_no: c.lr_no }); }
           if (a === "inv") { const i = I.find(x => x.id === id); return makePdf("invoice", i.data, { no: i.invoice_no, date: i.invoice_date }); }
-          if (a === "wa") return wa(invText(I.find(x => x.id === id)));
+          const cu = customers.find(x => x.id === o.customer_id), dm = c => ({ no: c.dc_no, date: c.dc_date, vehicle: c.vehicle, transporter: c.transporter, lr_no: c.lr_no });
+          if (a === "wa" || a === "em") { const i = I.find(x => x.id === id); return sendDoc(a, "invoice", i.data, { no: i.invoice_no, date: i.invoice_date }, cu); }
+          if (a === "dcwa" || a === "dcem") { const c = D.find(x => x.id === id); return sendDoc(a === "dcwa" ? "wa" : "em", "challan", c.data, dm(c), cu); }
           if (a === "mkpi") { if (await run(sb.rpc("create_proforma", { p_order: o.id }), "Proforma created")) { close(); reload("orders"); } }
           if (a === "mkdc") { close(); openChallan(o); }
           if (a === "mkinv") { if (await run(sb.rpc("create_tax_invoice", { p_challan: id }), "Tax invoice created")) { close(); reload("orders"); } }
@@ -426,17 +459,18 @@ export async function salesPage(el) {
     draw(); $("#q").oninput = draw; $("#ch").onchange = draw; $("#nc").onclick = () => openCustomer();
   } else if (TAB === "docs") {
     const rows = [
-      ...invs.map(i => ({ t: "Tax invoice", no: i.invoice_no, date: i.invoice_date, o: i.order_id, amt: i.total, pdf: () => makePdf("invoice", i.data, { no: i.invoice_no, date: i.invoice_date }) })),
-      ...dcs.map(c => ({ t: "Challan", no: c.dc_no, date: c.dc_date, o: c.order_id, amt: null, pdf: () => makePdf("challan", c.data, { no: c.dc_no, date: c.dc_date, vehicle: c.vehicle, transporter: c.transporter, lr_no: c.lr_no }) })),
+      ...invs.map(i => ({ t: "Tax invoice", no: i.invoice_no, date: i.invoice_date, o: i.order_id, amt: i.total, pdf: () => makePdf("invoice", i.data, { no: i.invoice_no, date: i.invoice_date }), send: ch => sendDoc(ch, "invoice", i.data, { no: i.invoice_no, date: i.invoice_date }, customers.find(x => x.id === orders.find(o => o.id === i.order_id)?.customer_id)) })),
+      ...dcs.map(c => ({ t: "Challan", no: c.dc_no, date: c.dc_date, o: c.order_id, amt: null, pdf: () => makePdf("challan", c.data, { no: c.dc_no, date: c.dc_date, vehicle: c.vehicle, transporter: c.transporter, lr_no: c.lr_no }), send: ch => sendDoc(ch, "challan", c.data, { no: c.dc_no, date: c.dc_date, vehicle: c.vehicle, transporter: c.transporter, lr_no: c.lr_no }, customers.find(x => x.id === orders.find(o => o.id === c.order_id)?.customer_id)) })),
       ...pis.map(p => ({ t: "Proforma", no: p.pi_no, date: p.pi_date, o: p.order_id, amt: p.data.totals.total, pdf: () => makePdf("proforma", p.data, { no: p.pi_no, date: p.pi_date }) })),
     ].sort((a, b) => String(b.date).localeCompare(String(a.date)));
     sv.innerHTML = '<div id="tb"></div>';
     $("#tb").innerHTML = table([
       { h: "Type", v: r => r.t }, { h: "Number", v: r => r.no }, { h: "Date", v: r => dfmt(r.date) },
       { h: "Customer", v: r => orders.find(o => o.id === r.o)?.customers?.name || "" }, { h: "Amount", v: r => r.amt == null ? "–" : "₹" + INR(r.amt) },
-      { h: "", html: r => `<button class="btn ghost sm pd" data-no="${esc(r.no)}">PDF</button>` },
+      { h: "", html: r => `<button class="btn ghost sm pd" data-no="${esc(r.no)}">PDF</button>${r.send ? ` <button class="btn ghost sm sd" data-ch="wa" data-no="${esc(r.no)}">WhatsApp</button> <button class="btn ghost sm sd" data-ch="em" data-no="${esc(r.no)}">Email</button>` : ""}` },
     ], rows, { empty: "No documents yet." });
     $$(".pd", sv).forEach(b => b.onclick = () => rows.find(r => r.no === b.dataset.no).pdf());
+    $$(".sd", sv).forEach(b => b.onclick = () => rows.find(r => r.no === b.dataset.no).send(b.dataset.ch));
   } else {
     const { data: st } = await sb.from("app_settings").select("*").like("key", "co_%");
     const cur = Object.fromEntries((st || []).map(r => [r.key, r.value]));

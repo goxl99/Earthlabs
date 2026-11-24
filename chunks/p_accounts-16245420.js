@@ -851,7 +851,7 @@ export async function accountsPage(el) {
     const N = { sachet: "Sachet 5 ml", bottle: "Bottle 250 ml" }, PCT = new Set(["gst", "retailer", "distributor", "scheme", "returns", "overfill", "loss", "wastage", "commission", "marketing", "baddebt", "interest", "target_cm"]);
     av.innerHTML = `<div class="toolbar"><h3 style="margin:0">Unit economics</h3><span class="grow"></span><button class="btn ghost" id="uef">Fill from my data</button><button class="btn" id="ues">Save</button></div>
       <p class="muted small">What one sachet and one bottle earn after every cost, step by step, based on your spreadsheet. Type the assumptions below, or press <b>Fill from my data</b> to pull costs, packing, units sold and fixed-cost share from your batches, bills, orders and expenses. Figures are indicative.</p>
-      <div id="uenotes"></div><div class="card" id="ueres"></div><div id="ueai"></div>
+      <div id="uenotes"></div><div class="card" id="ueres"></div><div id="uewhat"></div><div id="ueaskai"></div><div id="ueai"></div>
       <div class="card"><h3>Assumptions</h3><div style="overflow:auto"><table><thead><tr><th>Item</th><th>${N.sachet}</th><th>${N.bottle}</th><th></th></tr></thead><tbody>${UE.map(([sec, fs]) => `<tr><td colspan="4"><b>${esc(sec)}</b></td></tr>` + fs.map(([k, l, u]) => `<tr><td>${esc(l)}</td>${["sachet", "bottle"].map(p => `<td><input type="number" step="any" class="uei" data-p="${p}" data-k="${k}" value="${A[p][k] ?? ""}" style="width:110px"></td>`).join("")}<td class="muted small">${u}</td></tr>`).join("")).join("")}</tbody></table></div></div>`;
     const read = () => { $$(".uei", av).forEach(i => { A[i.dataset.p][i.dataset.k] = i.value === "" ? "" : Number(i.value); }); };
     const f2 = v => v == null || !isFinite(v) ? "n/a" : "₹" + INR(v), pc = v => v == null || !isFinite(v) ? "n/a" : (v * 100).toFixed(1) + "%";
@@ -881,7 +881,49 @@ export async function accountsPage(el) {
       read(); const p = {}; ["sachet", "bottle"].forEach(k => { p[k] = {}; UE.forEach(([, fs]) => fs.forEach(([key]) => { const v = A[k][key]; p[k][key] = v === "" || v == null ? null : v; })); });
       if (await run(sb.rpc("save_unit_econ", { p }), "Saved")) { /* keep screen */ }
     };
-    aiPanel($("#ueai", av), "unit_economics", async () => { read(); const snap = (await sb.rpc("business_snapshot")).data || {}; return { unit_economics: Object.fromEntries(["sachet", "bottle"].map(k => [N[k], { assumptions: A[k], result: Object.fromEntries(Object.entries(ueModel(A[k])).filter(([, v]) => typeof v === "number" && isFinite(v)).map(([a, b]) => [a, Math.round(b * 10000) / 10000])) }])), business: snap }; });
+    // ---- What-if simulator (instant, no AI needed) ----
+    const askAI = prompt => window.dispatchEvent(new CustomEvent("ask-ai", { detail: { prompt } }));
+    const wi = () => {
+      $("#uewhat", av).innerHTML = `<div class="card"><h3>What if…? <span class="muted small">Try a change and see the effect straight away</span></h3>
+        <div class="form-grid"><label>Product<select id="wp"><option value="sachet">${N.sachet}</option><option value="bottle">${N.bottle}</option></select></label>
+        <label>New MRP, incl. GST (₹)<input type="number" step="any" id="w_mrp" placeholder="same as now"></label>
+        <label>Bulk liquid cost change (%)<input type="number" step="any" id="w_liq" value="0"></label>
+        <label>Packaging cost change (%)<input type="number" step="any" id="w_pack" value="0"></label>
+        <label>Units sold per month change (%)<input type="number" step="any" id="w_vol" value="0"></label>
+        <label>Retailer + distributor margin change (points)<input type="number" step="any" id="w_tm" value="0"></label></div>
+        <div class="tbl-wrap" id="w_out" style="margin-top:10px"></div>
+        <div class="row"><button class="btn ghost" id="w_ai">Ask AI to explain this scenario</button><button class="btn ghost" id="w_reset">Reset</button></div></div>`;
+      const calc = () => {
+        read(); const k = $("#wp", av).value, base = { ...A[k] }, n = id => Number($("#" + id, av).value) || 0, mrpIn = $("#w_mrp", av).value;
+        const mod = { ...base }, up = (key, pct) => { if (mod[key] !== "" && mod[key] != null) mod[key] = Number(mod[key]) * (1 + pct / 100); };
+        if (mrpIn !== "") mod.mrp = Number(mrpIn);
+        up("bulk_kg", n("w_liq")); ["primary", "closure", "label", "inner", "carton", "tape"].forEach(x => up(x, n("w_pack"))); up("monthly_units", n("w_vol"));
+        mod.retailer = (Number(base.retailer) || 0) + n("w_tm") / 2; mod.distributor = (Number(base.distributor) || 0) + n("w_tm") / 2;
+        const b = ueModel(base), m = ueModel(mod), mu0 = Number(base.monthly_units) || 0, mu1 = Number(mod.monthly_units) || 0;
+        const r = (l, x, y, f = f2) => `<tr><td>${l}</td><td style="text-align:right">${f(x)}</td><td style="text-align:right"><b>${f(y)}</b></td><td style="text-align:right" class="${y - x >= 0 ? "okc" : "dev"}">${x == null || y == null || !isFinite(x) || !isFinite(y) ? "" : (y - x >= 0 ? "+" : "−") + (f === pc ? (Math.abs(y - x) * 100).toFixed(1) + " pts" : "₹" + INR(Math.abs(y - x)))}</td></tr>`;
+        $("#w_out", av).innerHTML = `<table class="tbl keep"><thead><tr><th>Per unit</th><th style="text-align:right">Now</th><th style="text-align:right">After change</th><th style="text-align:right">Difference</th></tr></thead><tbody>
+          ${r("Net revenue", b.net, m.net)}${r("COGS", b.cogs, m.cogs)}${r("Contribution", b.contrib, m.contrib)}${r("Profit per unit", b.profit, m.profit)}${r("Profit margin (of net revenue)", b.profitPct, m.profitPct, pc)}
+          ${mu0 || mu1 ? r("Monthly profit (profit × units)", b.profit * mu0, m.profit * mu1) : ""}${r("MRP needed for target margin", b.mrpR, m.mrpR)}</tbody></table>`;
+        return { k, base: b, mod: m, mu0, mu1 };
+      };
+      $$("#uewhat input,#uewhat select", av).forEach(x => x.oninput = calc); calc();
+      $("#w_reset", av).onclick = () => { ["w_mrp"].forEach(id => $("#" + id, av).value = ""); ["w_liq", "w_pack", "w_vol", "w_tm"].forEach(id => $("#" + id, av).value = 0); calc(); };
+      $("#w_ai", av).onclick = () => {
+        const c = calc(), q = id => $("#" + id, av).value;
+        askAI(`Explain this what-if for ${N[c.k]} in plain English and say whether I should do it. Changes: new MRP ${q("w_mrp") || "unchanged"}; bulk liquid cost ${q("w_liq")}%; packaging cost ${q("w_pack")}%; units per month ${q("w_vol")}%; retailer+distributor margin ${q("w_tm")} points. Result per unit: profit now ₹${c.base.profit.toFixed(2)} → ₹${c.mod.profit.toFixed(2)}; margin ${(c.base.profitPct * 100).toFixed(1)}% → ${(c.mod.profitPct * 100).toFixed(1)}%. Monthly profit ₹${Math.round(c.base.profit * c.mu0)} → ₹${Math.round(c.mod.profit * c.mu1)}. Mention risks (will customers accept the price?) and what else to check.`);
+      };
+    };
+    wi();
+    const UQ = [
+      ["Which cost hurts my margin most?", "Using my unit economics for sachet and bottle, which single cost line hurts my margin most, and what is the cheapest way to fix it?"],
+      ["What MRP should I charge?", "What MRP should I set for the 5 ml sachet and the 250 ml bottle to reach my target margin? Show current MRP, needed MRP and the gap in a table."],
+      ["Compare plan vs real costs", "Compare my unit economics assumptions with the real numbers from my batches, bills and orders. Where are my assumptions wrong? Table please."],
+      ["Quote for a bulk order", "A customer wants a bulk order. Using my unit economics, what is the lowest price per unit I can quote for sachets and for bottles while still earning my target margin? Show a table with 3 discount levels."],
+      ["Build a unit economics report", "Build a complete unit economics report for both products: price waterfall, cost, margins, fixed-cost absorption, and 5 recommendations. Use tables."],
+    ];
+    $("#ueaskai", av).innerHTML = `<div class="card"><h3>Ask the AI about your unit economics</h3><p class="muted small">Opens the AI chat, which can read your saved assumptions, real costs and orders. Press <b>Save</b> first so it sees your latest numbers.</p><div class="aic-chips">${UQ.map(([l], i) => `<button class="chip" data-q="${i}">${esc(l)}</button>`).join("")}</div></div>`;
+    $$("#ueaskai [data-q]", av).forEach(b => b.onclick = () => askAI(UQ[+b.dataset.q][1]));
+    aiPanel($("#ueai", av), "unit_economics", async () => { read(); const snap = (await sb.rpc("business_snapshot")).data || {}, act = (await sb.rpc("unit_econ_actuals")).data || null; return { actuals_from_real_data: act, unit_economics: Object.fromEntries(["sachet", "bottle"].map(k => [N[k], { assumptions: A[k], result: Object.fromEntries(Object.entries(ueModel(A[k])).filter(([, v]) => typeof v === "number" && isFinite(v)).map(([a, b]) => [a, Math.round(b * 10000) / 10000])) }])), business: snap }; });
   };
 
   try { await ({ overview, account, ledger, expenses, assets, earlier, bank, profit, unit: unitecon }[TAB])(); } catch (e) { fail(e); }

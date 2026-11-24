@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
+import PublicShell from "@/components/PublicShell";
 import { Field, Msg, when } from "@/components/ui";
 
 type V = { valid: boolean; partner_id: string; partner_name: string; type_name: string; district: string; issued_at: string };
@@ -9,10 +10,13 @@ export default function Verify() {
   const [code, setCode] = useState(""); const [r, setR] = useState<V | null | undefined>(undefined); const [err, setErr] = useState("");
   async function go(c: string) { setErr(""); const { data, error } = await supabase.rpc("verify_certificate", { c }); if (error) { setErr("Could not check right now. Try again."); setR(undefined); } else setR((data as V[])[0] ?? null); }
   useEffect(() => { const c = new URLSearchParams(location.search).get("code"); if (c) { setCode(c); go(c); } }, []);
-  return (<main style={{ maxWidth: 520, margin: "8vh auto", padding: 16 }}><h1>Verify a partner certificate</h1>
-    <div className="card"><Field label="Certificate code"><input value={code} onChange={(e) => setCode(e.target.value)} /></Field><button className="btn" onClick={() => go(code)}>Verify</button>
-      {err && <div style={{ marginTop: 12 }}><Msg kind="bad">{err}</Msg></div>}
-      {r === null && <div style={{ marginTop: 12 }}><Msg kind="bad">No certificate found with this code.</Msg></div>}
-      {r && <div style={{ marginTop: 12 }}><Msg kind={r.valid ? "ok" : "bad"}><b>{r.valid ? "Valid EarthLabs partner" : "Not valid (revoked or partner not active)"}</b><br />{r.partner_name} · {r.type_name} · {r.district}<br />Partner ID {r.partner_id} · issued {when(r.issued_at)}</Msg></div>}
-    </div><p><a href="../">Home</a></p></main>);
+  return (<PublicShell page="verify"><h1>Verify a certificate</h1>
+    <p className="sub">Confirm that a partner is authorised by EarthLabs. Enter the certificate number or scan its QR code.</p>
+    <div className="row" style={{ marginBottom: 12, alignItems: "flex-end" }}><div style={{ flex: "1 1 260px", maxWidth: 360 }}><Field label="Certificate number"><input value={code} onChange={(e) => setCode(e.target.value)} aria-label="Certificate number" /></Field></div><div className="field"><button className="btn pri" onClick={() => go(code)}>Verify</button></div></div>
+    {err && <Msg kind="bad">{err}</Msg>}
+    {r === null && <Msg kind="bad"><b>Not found.</b> This certificate number is not in the EarthLabs register. Treat the certificate as unverified and contact EarthLabs.</Msg>}
+    {r && <div className="card"><div className="row"><span style={{ fontSize: 30 }}>{r.valid ? "✅" : "⚠️"}</span><div><h2>{r.valid ? "Authentic EarthLabs partner certificate" : "Certificate found, not valid (revoked or partner not active)"}</h2></div></div>
+      <table className="t" style={{ marginTop: 8 }}><tbody><tr><td>Business</td><td><b>{r.partner_name}</b></td></tr><tr><td>Authorised as</td><td>{r.type_name}</td></tr><tr><td>Territory</td><td>{r.district}, Gujarat</td></tr><tr><td>Partner ID</td><td>{r.partner_id}</td></tr><tr><td>Issued</td><td>{when(r.issued_at)}</td></tr></tbody></table>
+      <p className="mini">Contact details, prices and agreement terms are never shown on this page.</p></div>}
+  </PublicShell>);
 }

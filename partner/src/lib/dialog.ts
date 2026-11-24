@@ -1,7 +1,7 @@
 /** Promise-based dialogs that replace the browser's prompt(), confirm() and alert().
  *  The visual part lives in components/DialogHost.tsx; this file holds the request queue and the field checks so they can be unit tested. */
 export type FieldDef = {
-  name: string; label: string; type?: "text" | "number" | "textarea" | "select" | "date";
+  name: string; label: string; type?: "text" | "number" | "textarea" | "select" | "date" | "file";
   required?: boolean; value?: string | number; hint?: string; options?: string[]; min?: number; max?: number;
 };
 export type DialogReq =
@@ -13,6 +13,10 @@ let listener: Listener | null = null;
 const pending: DialogReq[] = [];
 export function subscribe(l: Listener) { listener = l; while (pending.length) l(pending.shift()!); return () => { if (listener === l) listener = null; }; }
 function push(r: DialogReq) { if (listener) listener(r); else pending.push(r); }
+
+/** Files chosen in a "file" field, by field name. Read right after askForm resolves. */
+export const dialogFiles: Record<string, File | null> = {};
+export const MAX_FILE = 5_000_000;
 
 /** Returns the checked values, or an error text for the first wrong field. */
 export function checkFields(fields: FieldDef[], values: Record<string, string>): string | null {

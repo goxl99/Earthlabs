@@ -7,7 +7,9 @@ import { Msg, when } from "@/components/ui";
 import { canSubmitProof } from "@/lib/money";
 import { actionsFor, inr, STATUS_HELP, type OrderAction, type OrderStatus, type Quote } from "@/lib/orders";
 import { isStaff, type Role } from "@/lib/roles";
-import { askForm, askConfirm, askReason, notify } from "@/lib/dialog";
+import { askForm, askConfirm, askReason, notify, dialogFiles } from "@/lib/dialog";
+
+const PAY_MODES = ["Bank transfer (NEFT / RTGS / IMPS)", "UPI", "Cheque / demand draft", "Gateway"];
 
 type Order = { id: string; partner_id: string; status: OrderStatus; total: number; discount: number; lead_days: number | null; eta_from: string | null; eta_to: string | null; hold_reason: string | null; cancel_reason: string | null; created_at: string; applied: { name: string; amt: number }[] };
 type Line = { order_id: string; sku: string; cartons: number; unit_price: number; amount: number; short_cartons: number };
@@ -65,11 +67,22 @@ function Inner({ role }: { role: Role }) {
     const { error } = await supabase.rpc(fn, args); setMsg({ ok: !error, t: error ? error.message : "Done" }); load(); if (open === o.id) { setOpen(null); }
   }
   async function sendProof(o: Order) {
-    const f0 = await askForm("Add payment details", [{ name: "utr", label: "UTR / reference number", required: true, hint: `Order total ${inr(o.total)}` }, { name: "amt", label: "Amount you paid (₹)", type: "number", required: true, min: 1, value: o.total }], { ok: "Continue" }); if (!f0) return; const utr = f0.utr.trim(), amt = f0.amt;
-    const f = await pickFile(); let path: string | null = null;
-    if (f) { path = `${o.partner_id}/${o.id}-${Date.now()}-${f.name.replace(/[^A-Za-z0-9._-]/g, "_")}`; const up = await supabase.storage.from("payment-proofs").upload(path, f); if (up.error) { setMsg({ ok: false, t: up.error.message }); return; } }
-    const { error } = await supabase.rpc("submit_payment_proof", { oid: o.id, utr, amt: Number(amt), path, note: null });
-    setMsg({ ok: !error, t: error ? error.message : "Payment details sent. EarthLabs Accounts will confirm and your order will move on." });
+    // As in the walkthrough: pay first, then add the details here.
+    const f = await askForm("Add payment details", [
+      { name: "amt", label: "Amount paid (₹)", type: "number", required: true, min: 1, value: o.total },
+      { name: "how", label: "How did you pay?", type: "select", options: PAY_MODES },
+      { name: "utr", label: "UTR / reference number", required: true, hint: "e.g. UTR4830125 or cheque no." },
+      { name: "bank", label: "Paid from bank (optional)" },
+      { name: "paid", label: "Date paid", type: "date", required: true, value: new Date().toISOString().slice(0, 10) },
+      { name: "note", label: "Note (optional)" },
+      { name: "advice", label: "Payment advice: screenshot or PDF from your bank (optional)", type: "file" },
+    ], { ok: "Submit payment details", intro: `Pay by bank transfer, UPI or cheque first. Then enter the UTR / reference and attach the payment advice (screenshot or PDF from your bank). EarthLabs accounts confirm it, and your order moves to processing. Amount payable ${inr(o.total)}.` });
+    if (!f) return;
+    const file = dialogFiles.advice; let path: string | null = null;
+    if (file) { path = `${o.partner_id}/${o.id}-${Date.now()}-${file.name.replace(/[^A-Za-z0-9._-]/g, "_")}`; const up = await supabase.storage.from("payment-proofs").upload(path, file); if (up.error) { setMsg({ ok: false, t: up.error.message }); return; } }
+    const { error } = await supabase.rpc("submit_payment_proof", { oid: o.id, utr: f.utr.trim(), amt: Number(f.amt), path, note: f.note.trim() || null, how: f.how, paid: f.paid, pay_bank: f.bank.trim() || null });
+    if (error) { setMsg({ ok: false, t: error.message }); return; }
+    setMsg(null); await notify("Submitted", "Thank you. EarthLabs accounts will confirm your payment. Your order moves on as soon as it is confirmed. Track it under Invoices & ledger → My payments."); load();
   }
   const [refresh, setRefresh] = useState(0);
   return (<><h1>{staff ? "Orders" : "My orders"}</h1><p className="sub">Partners order through their own login. Every status change records who, when and why.</p>{msg && <Msg kind={msg.ok ? "ok" : "bad"}>{msg.t}</Msg>}

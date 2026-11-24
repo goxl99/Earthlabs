@@ -12,7 +12,7 @@ import { askForm, askConfirm, askReason, notify } from "@/lib/dialog";
 type Inv = { id: string; order_id: string; partner_id: string; issued_on: string; supply_state: string; taxable: number; cgst: number; sgst: number; igst: number; total: number };
 type Cn = { id: string; invoice_id: string; partner_id: string; amount: number; reason: string; issued_on: string };
 type Led = { id: number; at: string; kind: string; ref: string; debit: number; credit: number; narration: string | null; partner_id: string };
-type Proof = { id: number; partner_id: string; order_id: string; utr: string; amount: number; file_path: string | null; note: string | null; status: string; reason: string | null; submitted_at: string };
+type Proof = { id: number; partner_id: string; order_id: string; utr: string; amount: number; file_path: string | null; note: string | null; mode?: string | null; bank?: string | null; paid_on?: string | null; status: string; reason: string | null; submitted_at: string };
 type Line = { sku: string; name: string; units: number; unit_price: number; amount: number };
 
 function Inner({ role }: { role: Role }) {
@@ -43,7 +43,7 @@ function Inner({ role }: { role: Role }) {
     {tab === "payments" && money && <>
       <h2>Payment proofs to check ({proofs.length})</h2>
       <div className="card"><table><thead><tr><th>Partner</th><th>Order</th><th>UTR</th><th>Amount</th><th>Note</th><th></th></tr></thead><tbody>
-        {proofs.map((p) => (<tr key={p.id}><td>{p.partner_id}</td><td>{p.order_id}</td><td>{p.utr}</td><td>{inr(p.amount)}</td><td>{p.note}{p.file_path && <> · <a href="#" onClick={(e) => { e.preventDefault(); proofFile(p); }}>advice</a></>}</td>
+        {proofs.map((p) => (<tr key={p.id}><td>{p.partner_id}</td><td>{p.order_id}</td><td>{p.utr}</td><td>{inr(p.amount)}</td><td>{[p.mode, p.bank, p.paid_on ? `paid ${p.paid_on}` : "", p.note].filter(Boolean).join(" · ")}{p.file_path && <> · <a href="#" onClick={(e) => { e.preventDefault(); proofFile(p); }}>advice</a></>}</td>
           <td style={{ whiteSpace: "nowrap" }}><button className="btn sm" style={{ marginRight: 6 }} disabled={!canReviewProof(role)} onClick={async () => (await askConfirm("Review payment", `Confirm ${inr(p.amount)} with UTR ${p.utr}? Check the bank statement first.`, "Confirm received")) && call("confirm_payment_proof", { proof_id: p.id })}>Confirm received</button>
             <button className="btn sm red" onClick={async () => { const why = await askReason("Reject payment proof", "Reason (the partner sees this)", "Reject", true); if (why) call("reject_payment_proof", { proof_id: p.id, why }); }}>Reject</button></td></tr>))}
         {proofs.length === 0 && <tr><td colSpan={6}>No payment proofs waiting.</td></tr>}</tbody></table></div>

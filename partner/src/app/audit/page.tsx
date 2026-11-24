@@ -16,7 +16,7 @@ function Inner() {
     const d = ((await q).data as Row[]) ?? []; setMore(d.length > PAGE); setRows(d.slice(0, PAGE));
   }, [table, key, page]);
   useEffect(() => { load(); }, [load]);
-  return (<><h1>Audit trail</h1><p>Every change to partners, orders, payments, prices and settings. Entries cannot be edited or deleted.</p>
+  return (<><h1>Audit trail</h1><p className="sub">Every important change is recorded with who, when, what and the detail. Entries cannot be edited.</p><p>Every change to partners, orders, payments, prices and settings. Entries cannot be edited or deleted.</p>
     <p><input aria-label="Table" placeholder="Table, e.g. orders" value={table} onChange={(e) => { setTable(e.target.value.trim()); setPage(0); }} style={{ maxWidth: 220, marginRight: 8 }} />
       <input aria-label="Record" placeholder="Record, e.g. ORD-000001" value={key} onChange={(e) => { setKey(e.target.value.trim()); setPage(0); }} style={{ maxWidth: 220 }} /></p>
     <div className="card"><table><thead><tr><th>When</th><th>By</th><th>Action</th><th>Table</th><th>Record</th><th>Changed</th></tr></thead><tbody>

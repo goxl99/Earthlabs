@@ -36,13 +36,13 @@ function Inner({ role }: { role: Role }) {
   async function call(fn: string, args: Record<string, unknown>) { const { error } = await supabase.rpc(fn, args); setMsg({ ok: !error, t: error ? error.message : "Done" }); load(); }
   async function show(id: string) { if (open === id) { setOpen(null); return; } setOpen(id); setLines(((await supabase.from("invoice_lines").select("sku,name,units,unit_price,amount").eq("invoice_id", id)).data as Line[]) ?? []); }
   async function proofFile(p: Proof) { if (!p.file_path) return; const { data } = await supabase.storage.from("payment-proofs").createSignedUrl(p.file_path, 300); if (data?.signedUrl) window.open(data.signedUrl, "_blank", "noopener"); }
-  return (<><h1>{money ? "Invoices, payments & ledger" : "My invoices & ledger"}</h1>{msg && <Msg kind={msg.ok ? "ok" : "bad"}>{msg.t}</Msg>}
+  return (<><h1>{money ? "Invoices, payments & ledger" : "My invoices & ledger"}</h1><p className="sub">GST invoices, payment verification and partner ledgers. Entries are never edited; corrections use credit and debit notes.</p>{msg && <Msg kind={msg.ok ? "ok" : "bad"}>{msg.t}</Msg>}
     {money && <>
       <h2>Payment proofs to check ({proofs.length})</h2>
       <div className="card"><table><thead><tr><th>Partner</th><th>Order</th><th>UTR</th><th>Amount</th><th>Note</th><th></th></tr></thead><tbody>
         {proofs.map((p) => (<tr key={p.id}><td>{p.partner_id}</td><td>{p.order_id}</td><td>{p.utr}</td><td>{inr(p.amount)}</td><td>{p.note}{p.file_path && <> · <a href="#" onClick={(e) => { e.preventDefault(); proofFile(p); }}>advice</a></>}</td>
-          <td style={{ whiteSpace: "nowrap" }}><button className="btn" style={{ marginRight: 6 }} disabled={!canReviewProof(role)} onClick={() => confirm(`Confirm ${inr(p.amount)} with UTR ${p.utr}? Check the bank statement first.`) && call("confirm_payment_proof", { proof_id: p.id })}>Confirm received</button>
-            <button className="btn" onClick={() => { const why = prompt("Reason (the partner sees this)"); if (why) call("reject_payment_proof", { proof_id: p.id, why }); }}>Reject</button></td></tr>))}
+          <td style={{ whiteSpace: "nowrap" }}><button className="btn sm" style={{ marginRight: 6 }} disabled={!canReviewProof(role)} onClick={() => confirm(`Confirm ${inr(p.amount)} with UTR ${p.utr}? Check the bank statement first.`) && call("confirm_payment_proof", { proof_id: p.id })}>Confirm received</button>
+            <button className="btn sm red" onClick={() => { const why = prompt("Reason (the partner sees this)"); if (why) call("reject_payment_proof", { proof_id: p.id, why }); }}>Reject</button></td></tr>))}
         {proofs.length === 0 && <tr><td colSpan={6}>No payment proofs waiting.</td></tr>}</tbody></table></div>
       <h2>Paid orders without an invoice ({toInvoice.length})</h2>
       <div className="card"><table><tbody>{toInvoice.map((o) => <tr key={o.id}><td>{o.id}</td><td>{o.partner_id}</td><td>{inr(o.total)}</td><td><button className="btn" onClick={() => call("issue_invoice", { oid: o.id })}>Issue invoice</button></td></tr>)}

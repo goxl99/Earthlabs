@@ -39,8 +39,8 @@ function Inner({ role }: { role: Role }) {
   const addAccess = async () => done((await supabase.from("sku_access").insert({ sku: ac.sku, partner_id: ac.pid.trim() })).error, "Partner can now see this SKU");
   const rmAccess = async (a: Access) => done((await supabase.from("sku_access").delete().eq("sku", a.sku).eq("partner_id", a.partner_id)).error, "Access removed");
 
-  return (<><h1>Products &amp; pricing</h1>
-    <div role="tablist" style={{ display: "flex", gap: 8, margin: "12px 0" }}>{(["products", "prices", "margins"] as const).map((t) => <button key={t} role="tab" aria-selected={tab === t} className="btn" style={{ opacity: tab === t ? 1 : 0.55 }} onClick={() => setTab(t)}>{t === "products" ? "Products" : t === "prices" ? "Price list" : "Margin slabs"}</button>)}</div>
+  return (<><h1>Products &amp; pricing</h1><p className="sub">The one commercial master. Partners see only the price for their own tier and agreement. Every change is written to the audit trail.</p>
+    <div className="tabs" role="tablist">{(["products", "prices", "margins"] as const).map((t) => <button key={t} role="tab" aria-selected={tab === t} onClick={() => setTab(t)}>{t === "products" ? "Products" : t === "prices" ? "Price list" : "Margin slabs"}</button>)}</div>
     {msg && <Msg kind={msg.ok ? "ok" : "bad"}>{msg.t}</Msg>}
     {tab === "products" && <>
       <div className="card"><table><thead><tr><th>SKU</th><th>Product</th><th>MRP incl. GST</th><th>Pack</th><th>Min cartons</th><th>Status</th><th>Visibility</th>{boss && <th></th>}</tr></thead><tbody>

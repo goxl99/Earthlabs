@@ -24,7 +24,7 @@ function Inner({ role }: { role: Role }) {
     {msg && <Msg kind={msg.ok ? "ok" : "bad"}>{msg.t}</Msg>}
     <p><button className="btn" disabled={busy} onClick={run}>{busy ? "Thinking…" : "Generate recommendations"}</button></p>
     {recs.map((r) => <div className="card" key={r.id} style={{ marginBottom: 10 }}><b>{r.kind}</b> · {r.status} · {when(r.created_at)}<div style={{ margin: "4px 0" }}><b>{r.title}</b></div><ul>{r.reasons.map((x, i) => <li key={i}>{x}</li>)}</ul>
-      {boss && r.status === "Pending" && <><button className="btn" style={{ marginRight: 6 }} onClick={() => decide(r.id, true)}>Approve</button><button className="btn" onClick={() => decide(r.id, false)}>Dismiss</button></>}</div>)}
+      {boss && r.status === "Pending" && <><button className="btn sm pri" style={{ marginRight: 6 }} onClick={() => decide(r.id, true)}>Approve</button><button className="btn sm red" onClick={() => decide(r.id, false)}>Dismiss</button></>}</div>)}
     {recs.length === 0 && <div className="card">No recommendations yet.</div>}</>);
 }
 export default function Page() { return <Shell page="ai">{(p) => <Inner role={p.role} />}</Shell>; }

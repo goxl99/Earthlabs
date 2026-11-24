@@ -2,7 +2,7 @@
 import { useCallback, useEffect, useState } from "react";
 import Shell from "@/components/Shell";
 import { supabase } from "@/lib/supabase";
-import { Msg, when } from "@/components/ui";
+import { Badge, Msg, when } from "@/components/ui";
 
 type App = { id: string; type_code: string; business_name: string; contact_name: string; phone: string; email: string; district: string; gstin: string | null; status: string; reason: string | null; partner_id: string | null; created_at: string };
 const FILTERS = ["Submitted", "More info needed", "Field verification", "Approved", "Rejected"];
@@ -23,16 +23,17 @@ function Inner({ canApprove }: { canApprove: boolean }) {
   }
   return (<>
     <h1>Applications</h1>
-    <p>{FILTERS.map((s) => <button key={s} className="btn" style={{ marginRight: 6, opacity: s === flt ? 1 : 0.55 }} onClick={() => setFlt(s)}>{s}</button>)}</p>
+    <p className="sub">Everyone who registers lands here. Registration never authorises trading: each application is verified and then approved by management.</p>
+    <div className="row" style={{ marginBottom: 10 }}>{FILTERS.map((s) => <button key={s} className="btn sm" aria-pressed={s === flt} onClick={() => setFlt(s)}>{s}</button>)}</div>
     {msg && <Msg>{msg}</Msg>}
-    <div className="card"><table><thead><tr><th>Business</th><th>Type</th><th>District</th><th>Contact</th><th>Received</th><th></th></tr></thead>
-      <tbody>{rows.map((a) => (<tr key={a.id}><td><b>{a.business_name}</b><div style={{ fontSize: 12 }}>{a.gstin ?? "no GSTIN"}</div></td><td>{a.type_code}</td><td>{a.district}</td><td>{a.contact_name}<div style={{ fontSize: 12 }}>{a.phone} · {a.email}</div></td><td>{when(a.created_at)}</td>
+    <div className="tw"><table className="t"><thead><tr><th>Applicant</th><th>Category</th><th>District</th><th>Contact</th><th>Submitted</th><th>Status</th><th></th></tr></thead>
+      <tbody>{rows.map((a) => (<tr key={a.id}><td><b>{a.business_name}</b><div style={{ fontSize: 12 }}>{a.gstin ?? "no GSTIN"}</div></td><td><span className="chip">{a.type_code}</span></td><td>{a.district}</td><td>{a.contact_name}<div style={{ fontSize: 12 }}>{a.phone} · {a.email}</div></td><td>{when(a.created_at)}</td><td><Badge kind={a.status === "Rejected" ? "crit" : a.status === "Approved" ? "good" : a.status === "More info needed" ? "warn" : "info"}>{a.status}</Badge></td>
         <td>{!["Approved", "Rejected"].includes(a.status) && <>
-          <button className="btn" onClick={() => setStatus(a, "More info needed", true)}>Ask info</button>{" "}
-          {a.status !== "Field verification" && <><button className="btn" onClick={() => setStatus(a, "Field verification", false)}>Field visit</button>{" "}</>}
-          {canApprove && <><button className="btn" onClick={() => approve(a)}>Approve</button>{" "}</>}
-          <button className="btn" style={{ background: "#9b3b2c" }} onClick={() => setStatus(a, "Rejected", true)}>Reject</button></>}
+          <button className="btn sm" onClick={() => setStatus(a, "More info needed", true)}>Ask info</button>{" "}
+          {a.status !== "Field verification" && <><button className="btn sm" onClick={() => setStatus(a, "Field verification", false)}>Field visit</button>{" "}</>}
+          {canApprove && <><button className="btn sm pri" onClick={() => approve(a)}>Approve</button>{" "}</>}
+          <button className="btn sm red" onClick={() => setStatus(a, "Rejected", true)}>Reject</button></>}
           {a.partner_id && <b>{a.partner_id}</b>}</td></tr>))}
-        {rows.length === 0 && <tr><td colSpan={6}>Nothing here.</td></tr>}</tbody></table></div></>);
+        {rows.length === 0 && <tr><td colSpan={7}>Nothing here.</td></tr>}</tbody></table></div></>);
 }
 export default function Page() { return <Shell page="applications">{(p) => <Inner canApprove={p.role === "super_admin"} />}</Shell>; }

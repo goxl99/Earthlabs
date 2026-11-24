@@ -18,7 +18,7 @@ function Inner({ role }: { role: Role }) {
   }, []);
   useEffect(() => { load(); }, [load]);
   async function call(fn: string, args: Record<string, unknown>) { const { error } = await supabase.rpc(fn, args); setMsg({ ok: !error, t: error ? error.message : "Done" }); load(); }
-  return (<><h1>Vendors</h1><p>Suppliers have their own identity and portal, kept apart from sales-channel partners. Only Super Admin adds or approves a vendor.</p>
+  return (<><h1>Vendors</h1><p className="sub">Suppliers have their own identity, portal and performance matrix, kept apart from sales-channel partners.</p><p>Suppliers have their own identity and portal, kept apart from sales-channel partners. Only Super Admin adds or approves a vendor.</p>
     {msg && <Msg kind={msg.ok ? "ok" : "bad"}>{msg.t}</Msg>}
     <div className="card"><table><thead><tr><th>ID</th><th>Name</th><th>Supplies</th><th>District</th><th>Status</th><th>Credit level</th><th></th></tr></thead><tbody>
       {v.map((x) => <tr key={x.id}><td>{x.id}</td><td>{x.name}<div style={{ fontSize: 12 }}>{x.person}</div></td><td>{x.supplies}</td><td>{x.district}</td><td>{x.status}</td><td>{x.credit_level === 0 ? "Pay & carry" : `Level ${x.credit_level}`}</td>

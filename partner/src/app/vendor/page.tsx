@@ -26,7 +26,7 @@ function Inner() {
   return (<><h1>Vendor portal</h1>{msg && <Msg kind={msg.ok ? "ok" : "bad"}>{msg.t}</Msg>}
     <h2>Release orders</h2><div className="card"><table><thead><tr><th>Order</th><th>Item</th><th>Qty</th><th>Value</th><th>Deliver by</th><th>Status</th><th>Payment</th><th></th></tr></thead><tbody>
       {ros.map((r) => <tr key={r.id}><td>{r.id}</td><td>{r.rm_id}</td><td>{r.qty}</td><td>{inr(r.total)}</td><td>{r.eta}</td><td>{r.status}</td><td>{r.pay_status}</td>
-        <td style={{ whiteSpace: "nowrap" }}>{roActions("vendor", r).map((a) => a === "acknowledge" ? <button key={a} className="btn" style={{ marginRight: 6 }} onClick={() => call("vendor_acknowledge_ro", { rid: r.id })}>Acknowledge</button> : a === "dispatch" ? <button key={a} className="btn" onClick={() => call("vendor_dispatch_ro", { rid: r.id })}>Dispatched</button> : null)}
+        <td style={{ whiteSpace: "nowrap" }}>{roActions("vendor", r).map((a) => a === "acknowledge" ? <button key={a} className="btn sm" style={{ marginRight: 6 }} onClick={() => call("vendor_acknowledge_ro", { rid: r.id })}>Acknowledge</button> : a === "dispatch" ? <button key={a} className="btn" onClick={() => call("vendor_dispatch_ro", { rid: r.id })}>Dispatched</button> : null)}
           {["Approved", "Acknowledged"].includes(r.status) && r.pay_status === "Unpaid" && <span style={{ fontSize: 12 }}>Waiting for payment before you dispatch</span>}</td></tr>)}
       {ros.length === 0 && <tr><td colSpan={8}>No release orders yet.</td></tr>}</tbody></table></div>
     <h2>Stock report</h2><div className="card"><p style={{ marginTop: 0 }}>Tell EarthLabs what you can supply. A report counts only after Super Admin approves it.</p>

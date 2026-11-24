@@ -24,7 +24,7 @@ function Inner() {
     const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = `${run.title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.csv`; a.click(); URL.revokeObjectURL(a.href);
   }
   const cols = run && run.rows.length ? Object.keys(run.rows[0]) : [];
-  return (<><h1>Reports &amp; exports</h1>
+  return (<><h1>Reports &amp; exports</h1><p className="sub">Every export follows the viewer’s role: you only see reports for modules you can open.</p>
     <p className="no-print">You see only the reports your role may run. Every run is written to the audit trail. A run returns at most 5,000 rows. Download as CSV (opens in Excel) or print to PDF.</p>
     {msg && <Msg kind="bad">{msg}</Msg>}
     <div className="card no-print"><label>From<input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></label> <label>To<input type="date" value={to} onChange={(e) => setTo(e.target.value)} /></label>

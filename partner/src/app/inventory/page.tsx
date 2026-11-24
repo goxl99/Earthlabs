@@ -27,7 +27,7 @@ function Inner({ role }: { role: Role }) {
     const { data, error } = await supabase.functions.invoke("batch-qc", { body: {} });
     if (error) setMsg({ ok: false, t: "Batch system not reachable yet: " + error.message }); else setBatches((data?.batches as Batch[]) ?? []);
   }
-  return (<><h1>Inventory &amp; dispatch</h1>{msg && <Msg kind={msg.ok ? "ok" : "bad"}>{msg.t}</Msg>}
+  return (<><h1>Inventory &amp; dispatch</h1><p className="sub">Stock by SKU, linked to manufacturing batches from your Batch Management &amp; QA/QC system, so every dispatch can be traced back to its batch.</p>{msg && <Msg kind={msg.ok ? "ok" : "bad"}>{msg.t}</Msg>}
     <div className="card"><table><thead><tr><th>SKU</th><th>In stock (cartons)</th><th>Reserved</th><th>Free</th><th>Reorder level</th><th></th></tr></thead><tbody>
       {st.map((s) => { const free = s.available - s.reserved; return (<tr key={s.sku}><td>{s.sku}</td><td>{s.available}</td><td>{s.reserved}</td><td style={{ color: free <= s.reorder_level ? "#b3261e" : undefined }}>{free}{free <= s.reorder_level ? " (low)" : ""}</td><td>{s.reorder_level}</td><td>{canAdjust && <button className="btn" onClick={() => adjust(s.sku)}>Adjust</button>}</td></tr>); })}
       {st.length === 0 && <tr><td colSpan={6}>No stock records yet.</td></tr>}</tbody></table></div>

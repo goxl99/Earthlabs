@@ -88,9 +88,9 @@ function Staff({ role }: { role: Role }) {
     <div className="card"><table><thead><tr><th>Partner</th><th>Quarter</th><th>Step</th><th>Weighted</th><th>Quarters</th><th></th></tr></thead><tbody>
       {pending.map((p) => <tr key={p.id}><td>{p.partner_id}</td><td>{p.quarter}</td><td>{p.from_type} to {p.to_type}</td><td>{p.weighted != null ? Math.round(p.weighted * 100) + "%" : ""}</td><td>{p.quarters_ok}</td>
         <td style={{ whiteSpace: "nowrap" }}>{boss ? <>
-          <button className="btn" style={{ marginRight: 6 }} onClick={() => call("decide_promotion", { aid: p.id, decision: "Approved", why: null })}>Approve</button>
-          <button className="btn" style={{ marginRight: 6 }} onClick={() => { const w = prompt("Reason for deferring"); if (w) call("decide_promotion", { aid: p.id, decision: "Deferred", why: w }); }}>Defer</button>
-          <button className="btn" onClick={() => { const w = prompt("Reason for rejecting"); if (w) call("decide_promotion", { aid: p.id, decision: "Rejected", why: w }); }}>Reject</button></> : <span className="mini">Only Super Admin decides</span>}</td></tr>)}
+          <button className="btn sm pri" style={{ marginRight: 6 }} onClick={() => call("decide_promotion", { aid: p.id, decision: "Approved", why: null })}>Approve</button>
+          <button className="btn sm" style={{ marginRight: 6 }} onClick={() => { const w = prompt("Reason for deferring"); if (w) call("decide_promotion", { aid: p.id, decision: "Deferred", why: w }); }}>Defer</button>
+          <button className="btn sm red" onClick={() => { const w = prompt("Reason for rejecting"); if (w) call("decide_promotion", { aid: p.id, decision: "Rejected", why: w }); }}>Reject</button></> : <span className="mini">Only Super Admin decides</span>}</td></tr>)}
       {pending.length === 0 && <tr><td colSpan={6}>Nothing is waiting.</td></tr>}</tbody></table></div>
     <h2>Score weights</h2>
     <div className="card"><table><thead><tr><th>Parameter</th><th>Weight</th></tr></thead><tbody>
@@ -103,6 +103,6 @@ function Staff({ role }: { role: Role }) {
 function Inner({ role }: { role: Role }) {
   const own = role === "dealer" || role === "distributor"; const [pf, setPf] = useState<Perf | null>(null); const [err, setErr] = useState("");
   useEffect(() => { if (own) supabase.rpc("partner_performance", {}).then(({ data, error }) => { if (error) setErr(error.message); else setPf(data as Perf); }); }, [own]);
-  return (<><h1>{own ? "My performance" : "Performance Matrix"}</h1>{own ? (err ? <Msg kind="bad">{err}</Msg> : pf ? <Partner pf={pf} /> : <p>Loading…</p>) : <Staff role={role} />}</>);
+  return (<><h1>{own ? "My performance" : "Performance Matrix"}</h1><p className="sub">Every partner has a measurable profile. Primary sales (stock bought from EarthLabs) and secondary sales (what the partner sells on) are kept apart. Missing data is shown as unverified, never as zero.</p>{own ? (err ? <Msg kind="bad">{err}</Msg> : pf ? <Partner pf={pf} /> : <p>Loading…</p>) : <Staff role={role} />}</>);
 }
 export default function Page() { return <Shell page="performance">{(p) => <Inner role={p.role} />}</Shell>; }

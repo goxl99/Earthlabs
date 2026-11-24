@@ -20,7 +20,7 @@ function Inner() {
   async function save(u: U, patch: Partial<U>) { const { error } = await supabase.from("profiles").update(patch).eq("id", u.id); setMsg(error ? error.message : "Saved"); load(); }
   async function link(u: U) { const pid = prompt("Partner ID to link (for example ELP-DLR-0001)"); if (!pid) return; const { error } = await supabase.rpc("link_user_to_partner", { uid: u.id, pid }); setMsg(error ? error.message : "Linked and activated"); load(); }
   async function sw(t: T) { const { error } = await supabase.from("partner_types").update({ registration_open: !t.registration_open }).eq("code", t.code); setMsg(error ? error.message : `${t.name} registration ${t.registration_open ? "closed" : "opened"}`); load(); }
-  return (<><h1>Users &amp; access</h1>{msg && <Msg>{msg}</Msg>}
+  return (<><h1>Users &amp; access</h1><p className="sub">Super Admin creates logins, assigns roles, departments and territories, and decides who sees which screen. The same rules are enforced by the API and database, not just the menu.</p>{msg && <Msg>{msg}</Msg>}
     <h2>Who can apply on the public site</h2>
     <div className="card">{ts.map((t) => <p key={t.code}><b>{t.name}</b> <button className="btn" onClick={() => sw(t)}>{t.registration_open ? "Open: click to hide" : "Hidden: click to show"}</button></p>)}</div>
     <h2>People</h2>

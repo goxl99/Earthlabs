@@ -71,7 +71,7 @@ function Inner({ role }: { role: Role }) {
     setMsg({ ok: !error, t: error ? error.message : "Payment details sent. EarthLabs Accounts will confirm and your order will move on." });
   }
   const [refresh, setRefresh] = useState(0);
-  return (<><h1>{staff ? "Orders" : "My orders"}</h1>{msg && <Msg kind={msg.ok ? "ok" : "bad"}>{msg.t}</Msg>}
+  return (<><h1>{staff ? "Orders" : "My orders"}</h1><p className="sub">Partners order through their own login. Every status change records who, when and why.</p>{msg && <Msg kind={msg.ok ? "ok" : "bad"}>{msg.t}</Msg>}
     {!staff && <Place onDone={() => { setRefresh(refresh + 1); load(); }} />}
     <h2>{staff ? "Order queue" : "Order history"}</h2>
     {staff && <p><select aria-label="Filter by status" value={filter} onChange={(e) => setFilter(e.target.value)}><option value="">All statuses</option>{["Pending Approval", "Approved", "Payment Confirmed", "Dispatched", "Delivered", "On hold", "Cancelled"].map((s) => <option key={s}>{s}</option>)}</select></p>}
@@ -79,7 +79,7 @@ function Inner({ role }: { role: Role }) {
       {orders.map((o) => (<><tr key={o.id}><td><a href="#" onClick={(e) => { e.preventDefault(); show(o.id); }}>{o.id}</a></td>{staff && <td>{o.partner_id}</td>}<td>{when(o.created_at)}</td><td>{inr(o.total)}</td>
         <td>{o.status}{!staff && <div style={{ fontSize: 12 }}>{STATUS_HELP[o.status]}</div>}{o.hold_reason && <div style={{ fontSize: 12 }}>Reason: {o.hold_reason}</div>}{o.cancel_reason && <div style={{ fontSize: 12 }}>Reason: {o.cancel_reason}</div>}</td>
         <td>{o.eta_from ? `${when(o.eta_from)} to ${when(o.eta_to)}` : ""}</td>
-        <td style={{ whiteSpace: "nowrap" }}>{canSubmitProof(role, o.status) && <button className="btn" style={{ marginRight: 6 }} onClick={() => sendProof(o)}>I have paid</button>}{actionsFor(role, o.status).map((a) => <button key={a} className="btn" style={{ marginRight: 6 }} onClick={() => act(o, a)}>{({ approve: "Approve", pay: "Confirm payment", dispatch: "Dispatch", deliver: "Mark delivered", hold: "Hold", resume: "Resume", cancel: "Cancel" } as const)[a]}</button>)}</td></tr>
+        <td style={{ whiteSpace: "nowrap" }}>{canSubmitProof(role, o.status) && <button className="btn sm" style={{ marginRight: 6 }} onClick={() => sendProof(o)}>I have paid</button>}{actionsFor(role, o.status).map((a) => <button key={a} className="btn sm" style={{ marginRight: 6 }} onClick={() => act(o, a)}>{({ approve: "Approve", pay: "Confirm payment", dispatch: "Dispatch", deliver: "Mark delivered", hold: "Hold", resume: "Resume", cancel: "Cancel" } as const)[a]}</button>)}</td></tr>
         {open === o.id && <tr key={o.id + "d"}><td colSpan={7}><table><tbody>{lines.map((l) => <tr key={l.sku}><td>{l.sku}</td><td>{l.cartons} cartons</td><td>{inr(l.unit_price)} / unit</td><td>{inr(l.amount)}</td><td>{l.short_cartons > 0 ? `${l.short_cartons} to be made` : ""}</td></tr>)}</tbody></table>
           {o.applied?.length > 0 && <p>Schemes applied: {o.applied.map((a) => a.name).join(", ")} (− {inr(o.discount)})</p>}
           <ul>{ev.map((e, i) => <li key={i}>{when(e.at)} · {e.status}{e.note ? ` · ${e.note}` : ""}</li>)}</ul></td></tr>}</>))}

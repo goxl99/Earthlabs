@@ -13,7 +13,7 @@ function Inner() {
   useEffect(() => { supabase.rpc("territory_map").then(({ data, error }) => { if (error) setErr(error.message); else setRows((data as MapRow[]) ?? []); }); }, []);
   async function check() { const { data, error } = await supabase.rpc("check_territory", { st: "Gujarat", dist: d, t: type }); if (error) setErr(error.message); else setRes((data as typeof res[])[0] ?? null); }
   const s = summary(rows, type);
-  return (<><h1>Territory Explorer</h1>{err && <Msg kind="bad">{err}</Msg>}
+  return (<><h1>Territory Explorer</h1><p className="sub">The single geographical source of truth for the network. Applicants appear the moment they register, but never look like authorised partners.</p>{err && <Msg kind="bad">{err}</Msg>}
     <p>{TYPES.map(([c, l]) => <button key={c} className="btn" aria-pressed={type === c} onClick={() => { setType(c); setRes(null); }} style={{ marginRight: 8, opacity: type === c ? 1 : 0.6 }}>{l}</button>)}</p>
     <p>{s.percentCovered}% of Gujarat districts covered · {s.exclusive} exclusive · {s.shared} shared · {s.open} white-space</p>
     <div className="card" style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill,minmax(150px,1fr))", gap: 8 }}>

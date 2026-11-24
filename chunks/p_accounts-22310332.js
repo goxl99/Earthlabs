@@ -3,16 +3,28 @@ import"./chunk-QHDNOTBI.js";
 
 const INR = n => new Intl.NumberFormat("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(Number(n) || 0);
 const R = n => "₹" + INR(n);
-const CATS = [["raw_material", "Raw material"], ["packaging", "Packaging"], ["marketing", "Marketing"], ["meals", "Client meals & hospitality"], ["gifts", "Gifts"], ["travel", "Travel for visits"], ["samples", "Free samples & demos"], ["transport", "Transport"], ["utilities", "Utilities"], ["salary", "Salary"], ["rent", "Rent"], ["asset", "Asset / investment"], ["other", "Other"]];
+const CATS = [["raw_material", "Raw material"], ["packaging", "Packaging"], ["marketing", "Marketing"], ["business_dev", "Business development"], ["transport", "Transport"], ["utilities", "Utilities"], ["salary", "Salary"], ["rent", "Rent"], ["asset", "Asset / investment"], ["other", "Other"]];
 const CAT = Object.fromEntries(CATS);
 const EARLY_NOTE = "Before the system (not added to stock)";
 const EARLY_HELP = "Read from the bill. Bought before the system: this is for your accounts only and does <b>not</b> add to stock.";
-const BIZ = ["marketing", "meals", "gifts", "travel", "samples"];
-CAT.bizdev = "Business development (all)";
+export const SUBS = {
+  business_dev: ["Travel", "Meals & hospitality", "Gifts", "Free samples & demos", "Events & meetings", "Other"],
+  marketing: ["Social media", "Paid promotion (ads)", "Influencers & creators", "Content, photos & design", "Printing & branding", "Events & sponsorship", "Website & SEO", "Other"],
+  transport: ["Raw material inward", "Delivery to customers", "Local / courier", "Other"],
+  utilities: ["Electricity", "Water", "Internet & phone", "Fuel", "Other"],
+};
+export const guessSub = (cat, text) => {
+  const t = String(text || "").toLowerCase();
+  if (cat === "business_dev") return /sample|\bdemo\b|trial pack/.test(t) ? "Free samples & demos" : /lunch|dinner|breakfast|\bmeals?\b|restaurant|\bhotel\b|cafe|snacks?|hospitality|\btea\b/.test(t) ? "Meals & hospitality" : /\bgifts?\b|hamper|sweets|bouquet|memento/.test(t) ? "Gifts" : /travel|\btaxi\b|\bcab\b|\btrain\b|flight|bus fare|\btoll\b|\bticket|petrol|\bvisit/.test(t) ? "Travel" : /meeting|conference|expo|event/.test(t) ? "Events & meetings" : "";
+  if (cat === "marketing") return /\bads?\b|advert|boost|paid|google|meta|campaign|promot/.test(t) ? "Paid promotion (ads)" : /influenc|creator|blogger/.test(t) ? "Influencers & creators" : /design|photo|video|content|shoot|logo|creative/.test(t) ? "Content, photos & design" : /print|flex|banner|brochure|visiting card|standee|pamphlet|label design|branding/.test(t) ? "Printing & branding" : /sponsor|stall|exhibition|\bevent/.test(t) ? "Events & sponsorship" : /website|seo|domain|hosting/.test(t) ? "Website & SEO" : /instagram|facebook|linkedin|youtube|social|whatsapp|\breel|post/.test(t) ? "Social media" : "";
+  if (cat === "transport") return /inward|raw|supplier|pickup/.test(t) ? "Raw material inward" : /deliver|customer|dispatch|outward/.test(t) ? "Delivery to customers" : /courier|local|auto|tempo/.test(t) ? "Local / courier" : "";
+  if (cat === "utilities") return /electric|power|\bbill\b.*light|mseb|torrent/.test(t) ? "Electricity" : /water/.test(t) ? "Water" : /internet|phone|mobile|broadband|wifi/.test(t) ? "Internet & phone" : /fuel|diesel|petrol|gas/.test(t) ? "Fuel" : "";
+  return "";
+};
 const MODES = [["bank", "Bank transfer"], ["upi", "UPI"], ["cash", "Cash"], ["cheque", "Cheque"], ["other", "Other"]];
 const MODE = Object.fromEntries(MODES);
 const PAYERS = ["Company", "Gaurang", "Viraj"];
-let TAB = "overview", SUB = "all";
+let TAB = "overview", SUB = "all", SUB2 = "all";
 const UNITS = /^(kg|kgs|kilo|kilogram|kilograms|g|gm|gms|gram|grams|l|ltr|ltrs|lt|litre|litres|liter|liters|ml|millilitre|milliliter|pcs|pc|nos|no|piece|pieces|unit|units|each)$/i;
 const ASSET_TYPES = [["machinery", "Machinery", 10], ["drums_containers", "Drums & containers", 10], ["vehicle", "Vehicle", 15], ["furniture", "Furniture & fittings", 10], ["computer", "Computers & electronics", 30], ["tools", "Tools & equipment", 15], ["building", "Building / civil", 5], ["other", "Other", 0]];
 const ATYPE = Object.fromEntries(ASSET_TYPES.map(a => [a[0], a[1]])), ADEP = Object.fromEntries(ASSET_TYPES.map(a => [a[0], a[2]]));
@@ -44,10 +56,7 @@ export const toNum = v => { if (typeof v === "number") return v; const s = Strin
 export const normCat = v => {
   const s = String(v || "").toLowerCase();
   if (/asset|machin|equipment|capex|drum|vehicle|computer|laptop|furniture|compressor|mixer|boiler|reactor|stirrer|\bpump\b|investment/.test(s)) return "asset";
-  if (/sample|\bdemo\b|trial pack/.test(s)) return "samples";
-  if (/lunch|dinner|breakfast|\bmeals?\b|restaurant|\bhotel\b|cafe|snacks?|hospitality|\btea\b/.test(s)) return "meals";
-  if (/\bgifts?\b|hamper|sweets|bouquet|memento/.test(s)) return "gifts";
-  if (/travel|\btaxi\b|\bcab\b|\btrain\b|flight|bus fare|\btoll\b|\bticket|petrol|\bvisit/.test(s)) return "travel";
+  if (/sample|\bdemo\b|trial pack|lunch|dinner|breakfast|\bmeals?\b|restaurant|\bhotel\b|cafe|snacks?|hospitality|\btea\b|\bgifts?\b|hamper|sweets|bouquet|memento|travel|\btaxi\b|\bcab\b|\btrain\b|flight|bus fare|\btoll\b|\bticket|petrol|\bvisit|business dev|\bbd\b/.test(s)) return "business_dev";
   if (/raw|material|chemical/.test(s)) return "raw_material"; if (/pack|bottle|carton|label|box/.test(s)) return "packaging";
   if (/market|advert|promo|\bads?\b|brand|social/.test(s)) return "marketing"; if (/transport|freight|logistic|tempo|truck|courier|cartage|delivery/.test(s)) return "transport";
   if (/electric|water|utilit|power|fuel|internet|phone|diesel/.test(s)) return "utilities"; if (/salary|wage|payroll|labou?r/.test(s)) return "salary"; if (/rent|lease/.test(s)) return "rent";
@@ -61,7 +70,7 @@ export const parseExpenseRows = (rows, force = "auto") => {
   const filled = r => r.some(x => String(x).trim() !== "");
   const hi = rows.findIndex(r => r.some(c => /amount|total|value|\brs\b|₹|rate|price|qty|quantity/i.test(String(c))) && r.some(c => /date/i.test(String(c))));
   const hasHdr = hi >= 0, h = hasHdr ? rows[hi].map(x => String(x).toLowerCase().trim()) : [];
-  const c = { date: findCol(h, [/^date/, /date/]), vendor: findCol(h, [/vendor|party|payee|supplier|paid to|name/]), desc: findCol(h, [/desc|particular|narration|detail|item|material/]), cat: findCol(h, [/categ|type|head|label/]),
+  const c = { date: findCol(h, [/^date/, /date/]), vendor: findCol(h, [/vendor|party|payee|supplier|paid to|name/]), desc: findCol(h, [/desc|particular|narration|detail|item|material/]), cat: findCol(h, [/^(?!.*sub).*(categ|type|head|label)/]), sub: findCol(h, [/sub.?categ|sub.?label|sub.?head|sub.?type|sub.?cat/]),
     amt: findCol(h, [/^amount/, /amount|total|value|\brs\b|₹/]), gst: findCol(h, [/gst|tax/]), by: findCol(h, [/paid by|by whom|payer|paid_by|\bby\b/]), mode: findCol(h, [/mode|method/]), notes: findCol(h, [/note|remark/]),
     qty: findCol(h, [/qty|quantity/]), rate: findCol(h, [/rate|price/]), unit: findCol(h, [/^unit|uom/]), bill: findCol(h, [/bill|invoice|inv\b|challan/]) };
   const start = hasHdr ? hi + 1 : 0;
@@ -70,7 +79,7 @@ export const parseExpenseRows = (rows, force = "auto") => {
     const sample = rows.slice(start).filter(filled).slice(0, 15), nc = Math.max(0, ...sample.map(r => r.length));
     const share = (j, f) => { const v = sample.map(r => r[j]).filter(x => String(x ?? "").trim() !== ""); return v.length ? v.filter(f).length / v.length : 0; };
     if (c.date < 0) c.date = [...Array(nc).keys()].find(j => share(j, x => !!toISO(x)) >= 0.6) ?? -1;
-    const known = new Set([c.qty, c.rate, c.unit, c.gst, c.cat, c.by, c.mode, c.notes, c.bill].filter(j => j >= 0)), qr = c.qty >= 0 && c.rate >= 0;
+    const known = new Set([c.qty, c.rate, c.unit, c.gst, c.cat, c.sub, c.by, c.mode, c.notes, c.bill].filter(j => j >= 0)), qr = c.qty >= 0 && c.rate >= 0;
     const nums = [...Array(nc).keys()].filter(j => j !== c.date && !known.has(j) && share(j, x => typeof x === "number" || /^[\s₹Rs.,\d-]+$/.test(String(x))) >= 0.6 && sample.some(r => toNum(r[j]) > 0));
     if (c.amt < 0 && !qr && nums.length) c.amt = nums.map(j => [j, sample.reduce((t, r) => t + toNum(r[j]), 0)]).sort((x, y) => y[1] - x[1])[0][0];
     const txt = [...Array(nc).keys()].filter(j => j !== c.date && j !== c.amt && !known.has(j) && !nums.includes(j));
@@ -84,10 +93,10 @@ export const parseExpenseRows = (rows, force = "auto") => {
     const g = k => (c[k] >= 0 ? r[c[k]] : "");
     const date = toISO(g("date")), by = String(g("by") || "").trim(), gst = toNum(g("gst")), qty = toNum(g("qty")), rate = toNum(g("rate"));
     let amount = toNum(g("amt")); if (!(amount > 0) && qty > 0 && rate > 0) amount = Math.round((qty * rate + gst) * 100) / 100;
-    const unit = String(g("unit") || "").trim(), base = String(g("desc") || "").trim();
+    const unit = String(g("unit") || "").trim(), base = String(g("desc") || "").trim(), ccat = force && force !== "auto" ? force : normCat(g("cat") || g("desc") || g("vendor"));
     const err = !date ? "Date not understood" : !(amount > 0) ? "Amount missing" : "";
     out.push({ line: ri + 1, err, row: { exp_date: date, vendor: String(g("vendor") || "").trim(), description: base, bill_no: String(g("bill") || "").trim(), qty, unit, rate,
-      category: force && force !== "auto" ? force : normCat(g("cat") || g("desc") || g("vendor")), amount, gst_amount: gst, paid_by: by || "Company", payment_mode: normMode(g("mode")), notes: String(g("notes") || "").trim() } });
+      category: ccat, subcategory: String(g("sub") || "").trim() || guessSub(ccat, [g("desc"), g("vendor")].join(" ")), amount, gst_amount: gst, paid_by: by || "Company", payment_mode: normMode(g("mode")), notes: String(g("notes") || "").trim() } });
   });
   return { out, missing: ["date", "amt"].filter(k => c[k] < 0 && !(k === "amt" && c.qty >= 0 && c.rate >= 0)) };
 };
@@ -140,7 +149,8 @@ export async function accountsPage(el) {
     modal(x.id ? "Edit expense" : "Add expense", `<form id="ef" class="form-grid">
       ${o.note ? `<div class="notice full">${o.note}</div>` : ""}
       <label>Date<input type="date" name="exp_date" required value="${esc(x.exp_date || today())}"></label>
-      <label>Category (label)${sel("category", CATS, x.category || "other")}</label>
+      <label>Main category${sel("category", CATS, x.category || "other")}</label>
+      <label>Sub-category <span class="muted small">pick or type</span><input name="subcategory" list="subl" value="${esc(x.subcategory || "")}" placeholder="e.g. Travel"><datalist id="subl">${(SUBS[x.category || "other"] || []).map(v => `<option value="${esc(v)}">`).join("")}</datalist></label>
       <label>Vendor / paid to<input name="vendor" value="${esc(x.vendor || "")}"></label>
       <label>Amount paid (₹, incl. GST)<input type="number" step="0.01" min="0.01" name="amount" required value="${x.amount ?? ""}"></label>
       <label>of which GST (₹)<input type="number" step="0.01" min="0" name="gst_amount" value="${x.gst_amount ?? 0}"></label>
@@ -159,6 +169,7 @@ export async function accountsPage(el) {
       onMount: (m, close) => {
         const cs = $("[name=category]", m), at = $("[name=asset_type]", m), dr = $("[name=dep_rate]", m);
         if (cs && $("#afx", m)) cs.onchange = () => { $("#afx", m).style.display = cs.value === "asset" ? "grid" : "none"; };
+        if (cs) cs.addEventListener("change", () => { const dl = $("#subl", m); if (dl) dl.innerHTML = (SUBS[cs.value] || []).map(v => `<option value="${esc(v)}">`).join(""); });
         if (at && dr) at.onchange = () => { dr.value = ADEP[at.value] ?? 0; };
         $("#ef", m).onsubmit = async e => {
           e.preventDefault();
@@ -166,7 +177,7 @@ export async function accountsPage(el) {
           $("#es", m).disabled = true;
           const r = await run(sb.rpc("save_expense", { p: { ...f, id: x.id || null, file_path: x.file_path || null, source: x.source || "manual", bank_txn_id: o.bank_txn_id || null, supplier_invoice_id: x.supplier_invoice_id || null } }), "Expense saved");
           $("#es", m).disabled = false;
-          if (r) { const eid = x.id || (typeof r === "string" ? r : null); if (eid && (f.prospect || x.prospect)) await run(sb.rpc("set_expense_prospect", { p_id: eid, p_text: f.prospect || "" }), ""); close(); reload(); }
+          if (r) { close(); reload(); }
         };
       },
     });
@@ -218,6 +229,7 @@ export async function accountsPage(el) {
   };
 
   // ---------- scan a bill ----------
+  const scanCat = ex => (ex.suggested_category && ex.suggested_category !== "other") ? ex.suggested_category : normCat([ex.description, ex.vendor].join(" "));
   const openScan = (opt = {}) => modal("Scan a bill or receipt", `<p class="muted">Take a photo or upload a PDF of any expense bill or purchase invoice. The details are read automatically. You then choose the label (raw material, packaging, marketing, transport…) and save.</p>
     <div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn" id="spick">Choose photo / PDF</button><button class="btn ghost" id="scam">Take photo</button></div>
     <input id="sf" type="file" accept="application/pdf,image/*" hidden><input id="sc" type="file" accept="image/*" capture="environment" hidden><p id="sst" class="muted small"></p>`, {
@@ -241,7 +253,7 @@ export async function accountsPage(el) {
         }
         close();
         if (!opt.earlier && ["raw_material", "packaging"].includes(ex.suggested_category) && (ex.lines || []).length) return openPurchaseBill(ex, path);
-        openExpense({ exp_date: ex.bill_date || today(), vendor: ex.vendor || "", description: [ex.description, ex.bill_no ? "Bill " + ex.bill_no : ""].filter(Boolean).join(" · "), category: ex.suggested_category || "other",
+        openExpense({ exp_date: ex.bill_date || today(), vendor: ex.vendor || "", description: [ex.description, ex.bill_no ? "Bill " + ex.bill_no : ""].filter(Boolean).join(" · "), category: scanCat(ex), subcategory: guessSub(scanCat(ex), [ex.description, ex.vendor].join(" ")),
           amount: ex.total ?? "", gst_amount: ex.gst_amount ?? 0, payment_mode: ex.payment_mode || "bank", file_path: path, source: "scan", ...(opt.earlier ? { notes: EARLY_NOTE } : {}) },
           { note: opt.earlier ? EARLY_HELP : "Read from the bill. Check the amount, then choose the correct label and who paid before saving." });
       };
@@ -439,20 +451,24 @@ export async function accountsPage(el) {
   // =================== EXPENSES ===================
   const expenses = async () => {
     const list = await get(sb.from("expenses").select("*").order("exp_date", { ascending: false }).limit(2000));
-    if (SUB !== "all" && !CAT[SUB]) SUB = "all";
-    const payers = [...new Set(list.map(e => e.paid_by))], inSub = k => list.filter(e => k === "all" || (k === "bizdev" ? BIZ.includes(e.category) : e.category === k));
-    av.innerHTML = `<div class="tabs wrapt">${[["all", "All"], ["bizdev", "Business development (all)"], ...CATS].map(([k, t]) => `<button class="tab sm ${k === SUB ? "on" : ""}" data-s="${k}">${t} (${inSub(k).length})</button>`).join("")}</div>
-      <div class="toolbar"><button class="btn" id="sc">📷 Scan bill / photo</button><button class="btn ghost" id="ad">Add ${SUB === "all" ? "expense" : esc(CAT[SUB]).toLowerCase()}</button><button class="btn ghost" id="bx">Upload Excel</button><span class="grow"></span>
+    if (SUB !== "all" && !CAT[SUB]) SUB = "all"; if (SUB === "all") SUB2 = "all";
+    const payers = [...new Set(list.map(e => e.paid_by))], inMain = k => list.filter(e => k === "all" || e.category === k), inSub = k => inMain(k).filter(e => SUB2 === "all" || (e.subcategory || "Not specified") === SUB2);
+    av.innerHTML = `<div class="tabs wrapt">${[["all", "All"], ...CATS].map(([k, t]) => `<button class="tab sm ${k === SUB ? "on" : ""}" data-s="${k}">${t} (${inMain(k).length})</button>`).join("")}</div>
+      ${SUB !== "all" && (SUBS[SUB] || inMain(SUB).some(e => e.subcategory)) ? `<div class="tabs wrapt" id="sub2">${[["all", "All " + CAT[SUB].toLowerCase()], ...[...new Set([...(SUBS[SUB] || []), ...inMain(SUB).map(e => e.subcategory).filter(Boolean)])].map(v => [v, v]), ...(inMain(SUB).some(e => !e.subcategory) ? [["Not specified", "Not specified"]] : [])].map(([k, t]) => `<button class="tab sm ${k === SUB2 ? "on" : ""}" data-s2="${esc(k)}">${esc(t)} (${inMain(SUB).filter(e => k === "all" || (e.subcategory || "Not specified") === k).length})</button>`).join("")}</div>` : ""}
+      <div class="toolbar"><button class="btn" id="sc">📷 Scan bill / photo</button><button class="btn ghost" id="ad">Add ${SUB === "all" ? "expense" : esc(CAT[SUB]).toLowerCase()}${SUB2 !== "all" ? " · " + esc(SUB2).toLowerCase() : ""}</button><button class="btn ghost" id="bx">Upload Excel</button><span class="grow"></span>
       <select id="fp"><option value="">Paid by anyone</option>${payers.map(p => `<option>${esc(p)}</option>`).join("")}</select></div><div id="ss"></div><div id="tb"></div>`;
-    $$("[data-s]", av).forEach(b => b.onclick = () => { SUB = b.dataset.s; expenses(); });
+    $$("[data-s]", av).forEach(b => b.onclick = () => { SUB = b.dataset.s; SUB2 = "all"; expenses(); });
+    $$("[data-s2]", av).forEach(b => b.onclick = () => { SUB2 = b.dataset.s2; expenses(); });
     const draw = () => {
       const p = $("#fp", av).value, rows = inSub(SUB).filter(e => !p || e.paid_by === p), n = x => Number(x) || 0, tot = rows.reduce((s2, e) => s2 + n(e.amount), 0), mo = today().slice(0, 7);
       const vend = {}; rows.forEach(e => { const k = e.vendor || "(no vendor)"; vend[k] = (vend[k] || 0) + n(e.amount); });
+      const st2 = {}; rows.forEach(e => { const k = e.subcategory || "Not specified"; (st2[k] ||= [0, 0]); st2[k][0] += n(e.amount); st2[k][1]++; }); const subTot = Object.entries(st2).sort((a2, b2) => b2[1][0] - a2[1][0]);
       const top = Object.entries(vend).sort((a2, b2) => b2[1] - a2[1]).slice(0, 5);
       const owed = rows.filter(e => e.paid_by.toLowerCase() !== "company" && !e.reimbursed).reduce((s2, e) => s2 + n(e.amount), 0);
-      $("#ss", av).innerHTML = `<div class="stats">${stat(SUB === "all" ? "All expenses" : esc(CAT[SUB]), R(tot), `${rows.length} entries`)}${stat("This month", R(rows.filter(e => String(e.exp_date).startsWith(mo)).reduce((s2, e) => s2 + n(e.amount), 0)))}${stat("GST included", R(rows.reduce((s2, e) => s2 + n(e.gst_amount), 0)))}${stat("To pay back to partners", R(owed), "", owed ? "warn" : "")}</div>
+      $("#ss", av).innerHTML = `<div class="stats">${stat(SUB === "all" ? "All expenses" : esc(CAT[SUB]) + (SUB2 !== "all" ? " · " + esc(SUB2) : ""), R(tot), `${rows.length} entries`)}${stat("This month", R(rows.filter(e => String(e.exp_date).startsWith(mo)).reduce((s2, e) => s2 + n(e.amount), 0)))}${stat("GST included", R(rows.reduce((s2, e) => s2 + n(e.gst_amount), 0)))}${stat("To pay back to partners", R(owed), "", owed ? "warn" : "")}</div>
+        ${SUB !== "all" && SUB2 === "all" && subTot.length > 0 ? `<div class="card"><h3>${esc(CAT[SUB])} by sub-category</h3>${table([{ h: "Sub-category", v: r => r[0] }, { h: "Entries", v: r => r[1][1] }, { h: "Total", v: r => R(r[1][0]) }], subTot, { empty: "" })}</div>` : ""}
         ${top.length ? `<div class="card"><h3>Top vendors</h3>${table([{ h: "Vendor", v: r => r[0] }, { h: "Total", v: r => R(r[1]) }], top, { empty: "" })}</div>` : ""}`;
-      $("#tb", av).innerHTML = table([{ h: "Date", v: e => dfmt(e.exp_date) }, { h: "Vendor", v: e => e.vendor || "–" }, { h: "Details", v: e => e.description || "" }, ...(BIZ.includes(SUB) || SUB === "bizdev" ? [{ h: "For", v: e => e.prospect || "–" }] : []), ...(SUB === "all" || SUB === "bizdev" ? [{ h: "Label", v: e => CAT[e.category] }] : []),
+      $("#tb", av).innerHTML = table([{ h: "Date", v: e => dfmt(e.exp_date) }, { h: "Vendor", v: e => e.vendor || "–" }, { h: "Details", v: e => e.description || "" }, ...(SUB !== "all" && SUBS[SUB] ? [{ h: "Sub-category", v: e => e.subcategory || "–" }] : []), ...(SUB === "business_dev" || SUB === "marketing" ? [{ h: "For", v: e => e.prospect || "–" }] : []), ...(SUB === "all" ? [{ h: "Label", v: e => CAT[e.category] + (e.subcategory ? " · " + e.subcategory : "") }] : []),
         { h: "Amount", v: e => R(e.amount) }, { h: "Paid by", v: e => e.paid_by.toLowerCase() === "company" ? "Company" : e.paid_by + (e.reimbursed ? " (paid back)" : " (to pay back)") },
         { h: "", html: e => `${e.file_path ? `<button class="btn ghost sm vf" data-id="${e.id}">Bill</button> ` : ""}${e.paid_by.toLowerCase() !== "company" ? `<button class="btn ghost sm rb" data-id="${e.id}">${e.reimbursed ? "Undo paid back" : "Mark paid back"}</button> ` : ""}<button class="btn ghost sm ed" data-id="${e.id}">Edit</button> <button class="btn ghost sm dl" data-id="${e.id}">Delete</button>` }], rows, { empty: "Nothing here yet. Scan a bill, add one, or upload an Excel." });
       $$(".vf", av).forEach(b => b.onclick = async () => { const x = list.find(e => e.id === b.dataset.id), { data } = await sb.storage.from("expense-files").createSignedUrl(x.file_path, 300); data ? window.open(data.signedUrl, "_blank", "noopener") : toast("Could not open the file", "err"); });
@@ -461,7 +477,7 @@ export async function accountsPage(el) {
       $$(".dl", av).forEach(b => b.onclick = async () => { if (!confirm("Delete this entry?")) return; if (await run(sb.rpc("delete_expense", { p_id: b.dataset.id }), "Deleted") !== null) reload(); });
     };
     draw(); $("#fp", av).onchange = draw;
-    $("#sc", av).onclick = openScan; $("#ad", av).onclick = () => openExpense(SUB === "all" ? {} : SUB === "bizdev" ? { category: "meals" } : { category: SUB }); $("#bx", av).onclick = () => openBulkExpenses(SUB === "all" || SUB === "bizdev" ? "auto" : SUB);
+    $("#sc", av).onclick = openScan; $("#ad", av).onclick = () => openExpense(SUB === "all" ? {} : { category: SUB, subcategory: SUB2 !== "all" && SUB2 !== "Not specified" ? SUB2 : "" }); $("#bx", av).onclick = () => openBulkExpenses(SUB === "all" ? "auto" : SUB);
   };
 
   // =================== OVERALL ACCOUNT ===================

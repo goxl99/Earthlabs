@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { Msg, when } from "@/components/ui";
 import { bandOf, computeScore, assess, quarterOf, type Weight, type Rule } from "@/lib/performance";
 import type { Role } from "@/lib/roles";
+import { askForm, askConfirm, askReason, notify } from "@/lib/dialog";
 
 type Row = { partner_id: string; name: string; type_code: string; status: string; month: string | null; score: number | null; band: string | null; prev_score: number | null; direction: string; unverified: number };
 type Hist = { month: string; score: number | null; band: string | null; params: (number | null)[]; weights: Weight[] };
@@ -88,9 +89,9 @@ function Staff({ role }: { role: Role }) {
     <div className="card"><table><thead><tr><th>Partner</th><th>Quarter</th><th>Step</th><th>Weighted</th><th>Quarters</th><th></th></tr></thead><tbody>
       {pending.map((p) => <tr key={p.id}><td>{p.partner_id}</td><td>{p.quarter}</td><td>{p.from_type} to {p.to_type}</td><td>{p.weighted != null ? Math.round(p.weighted * 100) + "%" : ""}</td><td>{p.quarters_ok}</td>
         <td style={{ whiteSpace: "nowrap" }}>{boss ? <>
-          <button className="btn sm pri" style={{ marginRight: 6 }} onClick={() => call("decide_promotion", { aid: p.id, decision: "Approved", why: null })}>Approve</button>
-          <button className="btn sm" style={{ marginRight: 6 }} onClick={() => { const w = prompt("Reason for deferring"); if (w) call("decide_promotion", { aid: p.id, decision: "Deferred", why: w }); }}>Defer</button>
-          <button className="btn sm red" onClick={() => { const w = prompt("Reason for rejecting"); if (w) call("decide_promotion", { aid: p.id, decision: "Rejected", why: w }); }}>Reject</button></> : <span className="mini">Only Super Admin decides</span>}</td></tr>)}
+          <button className="btn sm pri" style={{ marginRight: 6 }} onClick={async () => { if (await askConfirm("Promotion decision", `Approve ${p.partner_id} from ${p.from_type} to ${p.to_type}? The Partner ID stays the same.`, "Approve promotion")) call("decide_promotion", { aid: p.id, decision: "Approved", why: null }); }}>Approve</button>
+          <button className="btn sm" style={{ marginRight: 6 }} onClick={async () => { const w = await askReason("Defer promotion", "Reason for deferring", "Defer"); if (w) call("decide_promotion", { aid: p.id, decision: "Deferred", why: w }); }}>Defer</button>
+          <button className="btn sm red" onClick={async () => { const w = await askReason("Reject promotion", "Reason for rejecting", "Reject", true); if (w) call("decide_promotion", { aid: p.id, decision: "Rejected", why: w }); }}>Reject</button></> : <span className="mini">Only Super Admin decides</span>}</td></tr>)}
       {pending.length === 0 && <tr><td colSpan={6}>Nothing is waiting.</td></tr>}</tbody></table></div>
     <h2>Score weights</h2>
     <div className="card"><table><thead><tr><th>Parameter</th><th>Weight</th></tr></thead><tbody>

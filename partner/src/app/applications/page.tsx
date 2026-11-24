@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import Shell from "@/components/Shell";
 import { supabase } from "@/lib/supabase";
 import { Badge, Msg, when } from "@/components/ui";
+import { askForm, askConfirm, askReason, notify } from "@/lib/dialog";
 
 type App = { id: string; type_code: string; business_name: string; contact_name: string; phone: string; email: string; district: string; gstin: string | null; status: string; reason: string | null; partner_id: string | null; created_at: string };
 const FILTERS = ["Submitted", "More info needed", "Field verification", "Approved", "Rejected"];
@@ -12,7 +13,7 @@ function Inner({ canApprove }: { canApprove: boolean }) {
   const load = useCallback(async () => { const { data } = await supabase.from("applications").select("*").eq("status", flt).order("created_at", { ascending: false }).limit(50); setRows((data as App[]) ?? []); }, [flt]);
   useEffect(() => { load(); }, [load]);
   async function setStatus(a: App, status: string, needReason: boolean) {
-    const reason = needReason ? prompt("Reason (the applicant will see this)") ?? "" : null;
+    const reason = needReason ? (await askReason(status === "Rejected" ? "Reject application" : "Request more information", "Reason (the applicant will see this)", status === "Rejected" ? "Reject" : "Send request", status === "Rejected")) ?? "" : null;
     if (needReason && !(reason ?? "").trim()) return;
     const { error } = await supabase.from("applications").update({ status, reason }).eq("id", a.id);
     setMsg(error ? error.message : `${a.business_name}: ${status}`); load();

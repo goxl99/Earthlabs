@@ -6,6 +6,7 @@ import { Msg, when } from "@/components/ui";
 import { canSubmitProof } from "@/lib/money";
 import { actionsFor, inr, STATUS_HELP, type OrderAction, type OrderStatus, type Quote } from "@/lib/orders";
 import { isStaff, type Role } from "@/lib/roles";
+import { askForm, askConfirm, askReason, notify } from "@/lib/dialog";
 
 type Order = { id: string; partner_id: string; status: OrderStatus; total: number; discount: number; lead_days: number | null; eta_from: string | null; eta_to: string | null; hold_reason: string | null; cancel_reason: string | null; created_at: string; applied: { name: string; amt: number }[] };
 type Line = { order_id: string; sku: string; cartons: number; unit_price: number; amount: number; short_cartons: number };
@@ -21,7 +22,7 @@ function Place({ onDone }: { onDone: () => void }) {
     const t = setTimeout(async () => { const { data, error } = await supabase.rpc("quote_order", { items: lines }); if (error) { setErr(error.message); setQ(null); } else { setErr(""); setQ(data as Quote); } }, 300);
     return () => clearTimeout(t);
   }, [JSON.stringify(lines)]); // eslint-disable-line react-hooks/exhaustive-deps
-  async function place() { setBusy(true); const { data, error } = await supabase.rpc("place_order", { items: lines }); setBusy(false); if (error) setErr(error.message); else { setCart({}); setQ(null); setErr(""); alert(`Order ${data} placed. EarthLabs will approve it, then you can pay.`); onDone(); } }
+  async function place() { setBusy(true); const { data, error } = await supabase.rpc("place_order", { items: lines }); setBusy(false); if (error) setErr(error.message); else { setCart({}); setQ(null); setErr(""); await notify("Order placed", `Order ${data} placed. EarthLabs will approve it, then you can pay.`); onDone(); } }
   return (<><h2>Place an order</h2><div className="card"><table><thead><tr><th>Product</th><th>Your price / unit (ex GST)</th><th>Units / carton</th><th>Min cartons</th><th>Cartons</th></tr></thead><tbody>
     {items.map((i) => (<tr key={i.sku}><td>{i.name}<div style={{ fontSize: 12 }}>MRP {inr(i.mrp)}</div></td><td>{inr(i.price)}</td><td>{i.pack_size}</td><td>{i.moq}</td><td><input aria-label={`Cartons of ${i.name}`} style={{ width: 80, margin: 0 }} inputMode="numeric" value={cart[i.sku] ?? ""} onChange={(e) => setCart({ ...cart, [i.sku]: Math.max(0, Math.floor(Number(e.target.value) || 0)) })} /></td></tr>))}
     {items.length === 0 && <tr><td colSpan={5}>No products are available for you yet.</td></tr>}</tbody></table>
@@ -57,14 +58,13 @@ function Inner({ role }: { role: Role }) {
     if (a === "approve") fn = "approve_order";
     else if (a === "deliver") fn = "deliver_order";
     else if (a === "resume") fn = "resume_order";
-    else if (a === "hold" || a === "cancel") { const why = prompt(a === "hold" ? "Reason for holding (the partner sees this)" : "Reason for cancelling (the partner sees this)"); if (!why) return; fn = a === "hold" ? "hold_order" : "cancel_order"; args = { oid: o.id, why }; }
-    else if (a === "pay") { const utr = prompt(`UTR / reference number for ${inr(o.total)}`); if (!utr) return; const amt = prompt("Amount received (₹)", String(o.total)); if (!amt) return; fn = "confirm_order_payment"; args = { oid: o.id, utr, amt: Number(amt) }; }
-    else if (a === "dispatch") { const vehicle = prompt("Vehicle number"); if (vehicle === null) return; const lr = prompt("LR / docket number") ?? ""; const batch = prompt("QC-approved batch reference") ?? ""; fn = "dispatch_order"; args = { oid: o.id, vehicle, lr, batch }; }
+    else if (a === "hold" || a === "cancel") { const why = await askReason(a === "hold" ? "Put order on hold" : "Cancel order", "Reason (the partner sees this)", a === "hold" ? "Hold" : "Cancel order", a === "cancel"); if (!why) return; fn = a === "hold" ? "hold_order" : "cancel_order"; args = { oid: o.id, why }; }
+    else if (a === "pay") { const f = await askForm("Confirm payment received", [{ name: "utr", label: "UTR / reference number", required: true, hint: `Order total ${inr(o.total)}. Check the bank statement first.` }, { name: "amt", label: "Amount received (₹)", type: "number", required: true, min: 1, value: o.total }], { ok: "Confirm payment" }); if (!f) return; fn = "confirm_order_payment"; args = { oid: o.id, utr: f.utr.trim(), amt: Number(f.amt) }; }
+    else if (a === "dispatch") { const f = await askForm("Dispatch details", [{ name: "vehicle", label: "Vehicle number", required: true }, { name: "lr", label: "LR / docket number" }, { name: "batch", label: "QC-approved batch reference" }], { ok: "Dispatch" }); if (!f) return; fn = "dispatch_order"; args = { oid: o.id, vehicle: f.vehicle.trim(), lr: f.lr.trim(), batch: f.batch.trim() }; }
     const { error } = await supabase.rpc(fn, args); setMsg({ ok: !error, t: error ? error.message : "Done" }); load(); if (open === o.id) { setOpen(null); }
   }
   async function sendProof(o: Order) {
-    const utr = prompt(`UTR / reference number of your payment of ${inr(o.total)}`); if (!utr) return;
-    const amt = prompt("Amount you paid (₹)", String(o.total)); if (!amt) return;
+    const f0 = await askForm("Add payment details", [{ name: "utr", label: "UTR / reference number", required: true, hint: `Order total ${inr(o.total)}` }, { name: "amt", label: "Amount you paid (₹)", type: "number", required: true, min: 1, value: o.total }], { ok: "Continue" }); if (!f0) return; const utr = f0.utr.trim(), amt = f0.amt;
     const f = await pickFile(); let path: string | null = null;
     if (f) { path = `${o.partner_id}/${o.id}-${Date.now()}-${f.name.replace(/[^A-Za-z0-9._-]/g, "_")}`; const up = await supabase.storage.from("payment-proofs").upload(path, f); if (up.error) { setMsg({ ok: false, t: up.error.message }); return; } }
     const { error } = await supabase.rpc("submit_payment_proof", { oid: o.id, utr, amt: Number(amt), path, note: null });

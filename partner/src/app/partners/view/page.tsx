@@ -3,6 +3,8 @@ import { useEffect, useState } from "react";
 import Shell from "@/components/Shell";
 import { supabase } from "@/lib/supabase";
 import { Msg, when } from "@/components/ui";
+import { DISTRICTS } from "@/lib/districts";
+import { askForm, askConfirm, askReason, notify } from "@/lib/dialog";
 
 type P = { id: string; name: string; type_code: string; contact_name: string | null; phone: string | null; email: string | null; state: string; district: string; gstin: string | null; status: string; exclusive: boolean; credit_level: number; created_at: string };
 type C = { id: number; state: string; district: string; exclusive: boolean };
@@ -10,7 +12,7 @@ function Inner({ isSuper }: { isSuper: boolean }) {
   const [p, setP] = useState<P | null>(null); const [cl, setCl] = useState<C[]>([]); const [msg, setMsg] = useState(""); const [id] = useState(() => (typeof location !== "undefined" ? new URLSearchParams(location.search).get("id") ?? "" : ""));
   async function load() { const a = await supabase.from("partners").select("*").eq("id", id).maybeSingle(); setP(a.data as P | null); const b = await supabase.from("territory_claims").select("id,state,district,exclusive").eq("partner_id", id); setCl((b.data as C[]) ?? []); }
   useEffect(() => { if (id) load(); }, [id]); // eslint-disable-line react-hooks/exhaustive-deps
-  async function claim() { const d = prompt("District to assign"); if (!d) return; const ex = confirm("Make it exclusive for this partner type?"); const { error } = await supabase.from("territory_claims").insert({ partner_id: id, state: "Gujarat", district: d.trim(), exclusive: ex }); setMsg(error ? error.message : "Territory added"); load(); }
+  async function claim() { const f = await askForm("Assign territory", [{ name: "d", label: "District", type: "select", options: DISTRICTS, required: true }, { name: "ex", label: "Exclusivity", type: "select", options: ["Non-exclusive", "Exclusive"] }], { ok: "Assign" }); if (!f) return; const d = f.d, ex = f.ex === "Exclusive"; const { error } = await supabase.from("territory_claims").insert({ partner_id: id, state: "Gujarat", district: d.trim(), exclusive: ex }); setMsg(error ? error.message : "Territory added"); load(); }
   async function status(s: string) { const { error } = await supabase.from("partners").update({ status: s }).eq("id", id); setMsg(error ? error.message : `Status: ${s}`); load(); }
   if (!p) return <Msg>Partner not found.</Msg>;
   return (<><h1>{p.name}</h1><p><b>{p.id}</b> · {p.type_code} · since {when(p.created_at)}</p>{msg && <Msg>{msg}</Msg>}

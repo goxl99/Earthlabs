@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase";
 import { Msg, when } from "@/components/ui";
 import { inr } from "@/lib/orders";
 import { decideCall, screenFor, type QueueItem } from "@/lib/procurement";
+import { askForm, askConfirm, askReason, notify } from "@/lib/dialog";
 
 const TABS: [string, string][] = [["all", "All"], ["procurement", "Procurement"], ["credit", "Credit"], ["ai", "AI"], ["payments", "Payments"], ["orders", "Orders"], ["change", "Change requests"]];
 
@@ -14,7 +15,7 @@ function Inner() {
   useEffect(() => { load(); }, [load]);
   async function decide(it: QueueItem, approve: boolean) {
     let why = "";
-    if (!approve) { why = prompt("Reason (the requester sees this)") ?? ""; if (!why) return; }
+    if (!approve) { why = (await askReason("Reject request", "Reason (the requester sees this)", "Reject", true)) ?? ""; if (!why) return; } else if (!(await askConfirm("Approve request", "Approve this request? It will be recorded in the audit trail.", "Approve"))) return;
     const c = decideCall(it, approve, why); if (!c) return;
     const { error } = await supabase.rpc(c.fn, c.args); setMsg({ ok: !error, t: error ? error.message : approve ? "Approved" : "Rejected" }); load();
   }

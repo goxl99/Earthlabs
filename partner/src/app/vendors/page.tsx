@@ -4,6 +4,7 @@ import Shell from "@/components/Shell";
 import { supabase } from "@/lib/supabase";
 import { Msg, when } from "@/components/ui";
 import type { Role } from "@/lib/roles";
+import { askForm, askConfirm, askReason, notify } from "@/lib/dialog";
 
 type V = { id: string; name: string; person: string | null; email: string | null; supplies: string; district: string; status: string; credit_level: number; created_at: string };
 type Rep = { id: string; vendor_id: string; status: string; created_at: string };
@@ -22,7 +23,7 @@ function Inner({ role }: { role: Role }) {
     {msg && <Msg kind={msg.ok ? "ok" : "bad"}>{msg.t}</Msg>}
     <div className="card"><table><thead><tr><th>ID</th><th>Name</th><th>Supplies</th><th>District</th><th>Status</th><th>Credit level</th><th></th></tr></thead><tbody>
       {v.map((x) => <tr key={x.id}><td>{x.id}</td><td>{x.name}<div style={{ fontSize: 12 }}>{x.person}</div></td><td>{x.supplies}</td><td>{x.district}</td><td>{x.status}</td><td>{x.credit_level === 0 ? "Pay & carry" : `Level ${x.credit_level}`}</td>
-        <td>{boss && (x.status === "Active" ? <button className="btn" onClick={() => confirm("Suspend this vendor?") && call("set_vendor_status", { vid: x.id, st: "Suspended" })}>Suspend</button> : <button className="btn" onClick={() => call("set_vendor_status", { vid: x.id, st: "Active" })}>Approve / activate</button>)}</td></tr>)}
+        <td>{boss && (x.status === "Active" ? <button className="btn" onClick={async () => (await askConfirm("Suspend vendor", `Suspend ${x.id}? The vendor will lose access until you activate it again.`, "Suspend", true)) && call("set_vendor_status", { vid: x.id, st: "Suspended" })}>Suspend</button> : <button className="btn" onClick={() => call("set_vendor_status", { vid: x.id, st: "Active" })}>Approve / activate</button>)}</td></tr>)}
       {v.length === 0 && <tr><td colSpan={7}>No vendors yet.</td></tr>}</tbody></table></div>
     {boss && <><h2>Add a vendor</h2><div className="card">
       {([["nm", "Business name"], ["person", "Contact person"], ["mail", "E-mail"], ["ph", "Phone"], ["sup", "Supplies"], ["dist", "District"]] as const).map(([k, l]) => <p key={k} style={{ margin: "4px 0" }}><label>{l}<br /><input value={f[k]} onChange={(e) => setF({ ...f, [k]: e.target.value })} /></label></p>)}

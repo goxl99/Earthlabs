@@ -6,6 +6,7 @@ import { Msg, when } from "@/components/ui";
 import { inr } from "@/lib/orders";
 import { balanceText, canReviewProof } from "@/lib/money";
 import type { Role } from "@/lib/roles";
+import { askForm, askConfirm, askReason, notify } from "@/lib/dialog";
 
 type Inv = { id: string; order_id: string; partner_id: string; issued_on: string; supply_state: string; taxable: number; cgst: number; sgst: number; igst: number; total: number };
 type Cn = { id: string; invoice_id: string; partner_id: string; amount: number; reason: string; issued_on: string };
@@ -41,20 +42,20 @@ function Inner({ role }: { role: Role }) {
       <h2>Payment proofs to check ({proofs.length})</h2>
       <div className="card"><table><thead><tr><th>Partner</th><th>Order</th><th>UTR</th><th>Amount</th><th>Note</th><th></th></tr></thead><tbody>
         {proofs.map((p) => (<tr key={p.id}><td>{p.partner_id}</td><td>{p.order_id}</td><td>{p.utr}</td><td>{inr(p.amount)}</td><td>{p.note}{p.file_path && <> · <a href="#" onClick={(e) => { e.preventDefault(); proofFile(p); }}>advice</a></>}</td>
-          <td style={{ whiteSpace: "nowrap" }}><button className="btn sm" style={{ marginRight: 6 }} disabled={!canReviewProof(role)} onClick={() => confirm(`Confirm ${inr(p.amount)} with UTR ${p.utr}? Check the bank statement first.`) && call("confirm_payment_proof", { proof_id: p.id })}>Confirm received</button>
-            <button className="btn sm red" onClick={() => { const why = prompt("Reason (the partner sees this)"); if (why) call("reject_payment_proof", { proof_id: p.id, why }); }}>Reject</button></td></tr>))}
+          <td style={{ whiteSpace: "nowrap" }}><button className="btn sm" style={{ marginRight: 6 }} disabled={!canReviewProof(role)} onClick={async () => (await askConfirm("Review payment", `Confirm ${inr(p.amount)} with UTR ${p.utr}? Check the bank statement first.`, "Confirm received")) && call("confirm_payment_proof", { proof_id: p.id })}>Confirm received</button>
+            <button className="btn sm red" onClick={async () => { const why = await askReason("Reject payment proof", "Reason (the partner sees this)", "Reject", true); if (why) call("reject_payment_proof", { proof_id: p.id, why }); }}>Reject</button></td></tr>))}
         {proofs.length === 0 && <tr><td colSpan={6}>No payment proofs waiting.</td></tr>}</tbody></table></div>
       <h2>Paid orders without an invoice ({toInvoice.length})</h2>
       <div className="card"><table><tbody>{toInvoice.map((o) => <tr key={o.id}><td>{o.id}</td><td>{o.partner_id}</td><td>{inr(o.total)}</td><td><button className="btn" onClick={() => call("issue_invoice", { oid: o.id })}>Issue invoice</button></td></tr>)}
         {toInvoice.length === 0 && <tr><td>Every paid order has an invoice.</td></tr>}</tbody></table></div>
       <h2>Record a payment received</h2>
       <div className="card"><p style={{ margin: 0 }}>For money received outside an order (for example an advance). A UTR can be recorded once only.</p>
-        <button className="btn" style={{ marginTop: 8 }} onClick={() => { const p = prompt("Partner ID"); if (!p) return; const utr = prompt("UTR / reference number"); if (!utr) return; const amt = prompt("Amount received (₹)"); if (!amt) return; const note = prompt("Note (optional)") ?? ""; call("record_payment", { pid: p, utr, amt: Number(amt), mode: "Bank transfer", note }); }}>Record payment</button></div>
+        <button className="btn" style={{ marginTop: 8 }} onClick={async () => { const f = await askForm("Record a payment received", [{ name: "pid", label: "Partner ID", required: true, hint: "For example ELP-DLR-0001" }, { name: "utr", label: "UTR / reference number", required: true }, { name: "amt", label: "Amount received (₹)", type: "number", required: true, min: 1 }, { name: "note", label: "Note (optional)" }], { ok: "Record payment" }); if (!f) return; call("record_payment", { pid: f.pid.trim(), utr: f.utr.trim(), amt: Number(f.amt), mode: "Bank transfer", note: f.note.trim() }); }}>Record payment</button></div>
     </>}
     <h2>Invoices</h2>
     <div className="card"><table><thead><tr><th>Invoice</th>{money && <th>Partner</th>}<th>Order</th><th>Date</th><th>Taxable</th><th>CGST</th><th>SGST</th><th>IGST</th><th>Total</th><th></th></tr></thead><tbody>
       {inv.map((i) => (<><tr key={i.id}><td><a href="#" onClick={(e) => { e.preventDefault(); show(i.id); }}>{i.id}</a></td>{money && <td>{i.partner_id}</td>}<td>{i.order_id}</td><td>{when(i.issued_on)}</td><td>{inr(i.taxable)}</td><td>{inr(i.cgst)}</td><td>{inr(i.sgst)}</td><td>{inr(i.igst)}</td><td>{inr(i.total)}</td>
-        <td>{money && <button className="btn" onClick={() => { const a = prompt(`Credit note amount incl. GST (max ${inr(i.total)})`); if (!a) return; const why = prompt("Reason"); if (why) call("issue_credit_note", { inv_id: i.id, amt: Number(a), why }); }}>Credit note</button>}</td></tr>
+        <td>{money && <button className="btn" onClick={async () => { const f = await askForm(`Credit note against ${i.id}`, [{ name: "a", label: "Amount incl. GST (₹)", type: "number", required: true, min: 1, max: Number(i.total), hint: `Maximum ${inr(i.total)}` }, { name: "why", label: "Reason", type: "textarea", required: true }], { ok: "Issue credit note" }); if (f) call("issue_credit_note", { inv_id: i.id, amt: Number(f.a), why: f.why.trim() }); }}>Credit note</button>}</td></tr>
         {open === i.id && <tr key={i.id + "d"}><td colSpan={10}><table><tbody>{lines.map((l) => <tr key={l.sku}><td>{l.name}</td><td>{l.units} units</td><td>{inr(l.unit_price)} / unit</td><td>{inr(l.amount)}</td></tr>)}</tbody></table>
           <p style={{ margin: "8px 0 0" }}>Place of supply: {i.supply_state}</p></td></tr>}</>))}
       {inv.length === 0 && <tr><td colSpan={10}>No invoices yet.</td></tr>}</tbody></table></div>

@@ -4,6 +4,7 @@ import Shell from "@/components/Shell";
 import { supabase } from "@/lib/supabase";
 import { Msg, when } from "@/components/ui";
 import type { Role } from "@/lib/roles";
+import { askForm, askConfirm, askReason, notify } from "@/lib/dialog";
 
 type St = { sku: string; available: number; reserved: number; reorder_level: number };
 type Mv = { sku: string; delta: number; reason: string; order_id: string | null; at: string };
@@ -20,7 +21,7 @@ function Inner({ role }: { role: Role }) {
   }, []);
   useEffect(() => { load(); }, [load]);
   async function adjust(s: string) {
-    const d = Number(prompt(`Change in cartons for ${s} (use a minus sign to reduce)`)); if (!d) return; const why = prompt("Reason (stock take, goods received, damage …)"); if (!why) return;
+    const f = await askForm(`Adjust stock · ${s}`, [{ name: "d", label: "Change in cartons", type: "number", required: true, hint: "Use a minus sign to reduce" }, { name: "why", label: "Reason (stock take, goods received, damage …)", type: "textarea", required: true }], { ok: "Update stock" }); if (!f) return; const d = Number(f.d), why = f.why.trim(); if (!d) return;
     const { error } = await supabase.rpc("adjust_stock", { s, delta: Math.trunc(d), why }); setMsg({ ok: !error, t: error ? error.message : "Stock updated" }); load();
   }
   async function loadBatches() {

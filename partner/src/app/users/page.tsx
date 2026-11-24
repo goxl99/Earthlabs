@@ -4,6 +4,7 @@ import Shell from "@/components/Shell";
 import { supabase } from "@/lib/supabase";
 import { Msg } from "@/components/ui";
 import { ROLE_LABEL, type Role } from "@/lib/roles";
+import { askForm, askConfirm, askReason, notify } from "@/lib/dialog";
 
 type U = { id: string; role: Role; full_name: string; partner_id: string | null; active: boolean };
 type T = { code: string; name: string; registration_open: boolean };
@@ -18,7 +19,7 @@ function Inner() {
   }, []);
   useEffect(() => { load(); }, [load]);
   async function save(u: U, patch: Partial<U>) { const { error } = await supabase.from("profiles").update(patch).eq("id", u.id); setMsg(error ? error.message : "Saved"); load(); }
-  async function link(u: U) { const pid = prompt("Partner ID to link (for example ELP-DLR-0001)"); if (!pid) return; const { error } = await supabase.rpc("link_user_to_partner", { uid: u.id, pid }); setMsg(error ? error.message : "Linked and activated"); load(); }
+  async function link(u: U) { const f = await askForm("Link login to a partner", [{ name: "pid", label: "Partner ID", required: true, hint: "For example ELP-DLR-0001" }], { ok: "Link and activate" }); if (!f) return; const pid = f.pid.trim(); const { error } = await supabase.rpc("link_user_to_partner", { uid: u.id, pid }); setMsg(error ? error.message : "Linked and activated"); load(); }
   async function sw(t: T) { const { error } = await supabase.from("partner_types").update({ registration_open: !t.registration_open }).eq("code", t.code); setMsg(error ? error.message : `${t.name} registration ${t.registration_open ? "closed" : "opened"}`); load(); }
   return (<><h1>Users &amp; access</h1><p className="sub">Super Admin creates logins, assigns roles, departments and territories, and decides who sees which screen. The same rules are enforced by the API and database, not just the menu.</p>{msg && <Msg>{msg}</Msg>}
     <h2>Who can apply on the public site</h2>

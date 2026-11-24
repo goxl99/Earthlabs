@@ -115,7 +115,7 @@ const compress = async file => {
 
 export async function accountsPage(el) {
   if (!hasRole("admin")) { el.innerHTML = '<p class="muted">Accounts is for admin only.</p>'; return; }
-  const tabs = [["overview", "Overview"], ["account", "Overall account"], ["ledger", "Party ledger"], ["expenses", "Expenses"], ["assets", "Assets"], ["bank", "Bank statement"], ["profit", "Profitability"]];
+  const tabs = [["overview", "Overview"], ["account", "Overall account"], ["ledger", "Party ledger"], ["expenses", "Expenses"], ["assets", "Assets"], ["earlier", "Earlier records"], ["bank", "Bank statement"], ["profit", "Profitability"]];
   if (!tabs.some(([k]) => k === TAB)) TAB = "overview";
   el.innerHTML = `<div class="tabs wrapt">${tabs.map(([k, t]) => `<button class="tab ${k === TAB ? "on" : ""}" data-k="${k}">${t}</button>`).join("")}</div><div id="av"><p class="muted">Loading…</p></div>`;
   $$(".tab", el).forEach(b => b.onclick = () => { TAB = b.dataset.k; accountsPage(el); });
@@ -342,13 +342,13 @@ export async function accountsPage(el) {
 
   // =================== OVERVIEW ===================
   const overview = async () => {
-    const [rm, ols, invs, pays, exps, sinv, ast] = await Promise.all([
+    const [rm, ols, invs, pays, exps, sinv, ast, esl] = await Promise.all([
       get(sb.from("v_rm_value").select("*").order("name")), get(sb.from("v_sales_order_lines").select("order_id,qty,rate,gst_pct")), get(sb.from("tax_invoices").select("total").eq("status", "issued")),
-      get(sb.from("customer_payments").select("amount")), get(sb.from("expenses").select("amount,category,paid_by,reimbursed")), get(sb.from("supplier_invoices").select("total")), get(sb.from("v_assets").select("cost,book_value,status")),
+      get(sb.from("customer_payments").select("amount")), get(sb.from("expenses").select("amount,category,paid_by,reimbursed")), get(sb.from("supplier_invoices").select("total")), get(sb.from("v_assets").select("cost,book_value,status")), get(sb.from("earlier_sales").select("total")),
     ]);
     const sum = (a, f) => a.reduce((s, x) => s + (Number(f(x)) || 0), 0);
     const stock = sum(rm, r => r.value), noRate = rm.filter(r => r.no_rate && Number(r.on_hand) > 0).length;
-    const ordVal = sum(ols, l => l.qty * l.rate * (1 + l.gst_pct / 100)), billed = sum(invs, i => i.total), rec = sum(pays, p => p.amount);
+    const ordVal = sum(ols, l => l.qty * l.rate * (1 + l.gst_pct / 100)), billed = sum(invs, i => i.total) + sum(esl, e => e.total), rec = sum(pays, p => p.amount);
     const exTot = sum(exps, e => e.amount), byCat = Object.fromEntries(CATS.map(([k]) => [k, 0])); exps.forEach(e => byCat[e.category] += Number(e.amount));
     const byPayer = {}; exps.forEach(e => { byPayer[e.paid_by] = (byPayer[e.paid_by] || 0) + Number(e.amount); });
     const owed = {}; exps.filter(e => e.paid_by.toLowerCase() !== "company" && !e.reimbursed).forEach(e => { owed[e.paid_by] = (owed[e.paid_by] || 0) + Number(e.amount); });
@@ -384,9 +384,9 @@ export async function accountsPage(el) {
     $("#bpay", av).onclick = openBulkPayments;
   };
   const openLedger = async c => {
-    const [invs, pays] = await Promise.all([get(sb.from("v_invoice_balance").select("*").eq("customer_id", c.customer_id).order("invoice_date")), get(sb.from("customer_payments").select("*").eq("customer_id", c.customer_id).order("paid_on"))]);
+    const [invs, pays, esl] = await Promise.all([get(sb.from("v_invoice_balance").select("*").eq("customer_id", c.customer_id).order("invoice_date")), get(sb.from("customer_payments").select("*").eq("customer_id", c.customer_id).order("paid_on")), get(sb.from("earlier_sales").select("*").eq("customer_id", c.customer_id).order("sale_date"))]);
     const invNo = Object.fromEntries(invs.map(i => [i.id, i.invoice_no]));
-    const ev = [...invs.map(i => ({ d: i.invoice_date, t: "Invoice " + i.invoice_no, dr: Number(i.total), cr: 0 })), ...pays.map(p => ({ d: p.paid_on, t: `Payment received (${MODE[p.mode] || p.mode})${p.invoice_id ? " · " + (invNo[p.invoice_id] || "") : " · on account"}${p.ref ? " · " + p.ref : ""}`, dr: 0, cr: Number(p.amount), id: p.id }))].sort((a, b) => String(a.d).localeCompare(String(b.d)));
+    const ev = [...invs.map(i => ({ d: i.invoice_date, t: "Invoice " + i.invoice_no, dr: Number(i.total), cr: 0 })), ...esl.map(e => ({ d: e.sale_date, t: "Earlier sale (before the system): " + e.product, dr: Number(e.total), cr: 0 })), ...pays.map(p => ({ d: p.paid_on, t: `Payment received (${MODE[p.mode] || p.mode})${p.invoice_id ? " · " + (invNo[p.invoice_id] || "") : " · on account"}${p.ref ? " · " + p.ref : ""}`, dr: 0, cr: Number(p.amount), id: p.id }))].sort((a, b) => String(a.d).localeCompare(String(b.d)));
     let bal = 0; ev.forEach(e => { bal += e.dr - e.cr; e.bal = bal; });
     modal("Ledger · " + c.name, `<div class="stats">${stat("Billed", R(c.billed))}${stat("Received", R(c.received), "", "good")}${stat("Outstanding", R(Number(c.billed) - Number(c.received)), "", "warn")}</div>
       <h4>Invoices</h4>${table([{ h: "Invoice", v: i => i.invoice_no }, { h: "Date", v: i => dfmt(i.invoice_date) }, { h: "Amount", v: i => R(i.total) }, { h: "Paid", v: i => R(i.paid) }, { h: "Balance", v: i => Number(i.balance) > 0.005 ? R(i.balance) : "Paid ✓" },
@@ -545,6 +545,84 @@ export async function accountsPage(el) {
     onMount: (m, close) => { $("#df2", m).onsubmit = async e => { e.preventDefault(); const f = Object.fromEntries(new FormData(e.target)); const r = await run(sb.rpc("set_asset_status", { p_id: a.id, p_status: f.st, p_on: f.on, p_sale: f.st === "sold" && f.sale !== "" ? Number(f.sale) : null }), "Updated"); if (r !== null) { close(); reload(); } }; },
   });
 
+  // =================== EARLIER RECORDS ===================
+  const openEarlierSale = async () => {
+    let custs = []; try { custs = await get(sb.from("customers").select("id,name").order("name")); } catch (e) { return toast(e.message, "err"); }
+    modal("Add an earlier sale", `<form id="esf" class="form-grid">
+      <div class="notice full">A sale made before the system. It counts in sales, the party ledger and profit. It does <b>not</b> change stock.</div>
+      <label>Date of sale<input type="date" name="sale_date" required value="${today()}"></label>
+      <label>Type${sel("kind", [["company", "Company"], ["local", "Local"]], "company")}</label>
+      <label class="full">Customer (pick, or type a new name)<input name="customer_name" list="escl" required placeholder="Customer name"><datalist id="escl">${custs.map(c => `<option value="${esc(c.name)}">`).join("")}</datalist></label>
+      <label class="full">What was sold<input name="product" required placeholder="e.g. Herbal Hand Wash 500 mL"></label>
+      <label>Quantity<input type="number" step="0.001" min="0" name="qty"></label><label>Unit<input name="unit" placeholder="bottles, sachets, L"></label>
+      <label>Rate per unit (₹)<input type="number" step="0.01" min="0" name="rate"></label>
+      <label>Sale amount before GST (₹)<input type="number" step="0.01" min="0.01" name="amount" required></label>
+      <label>GST charged (₹, if any)<input type="number" step="0.01" min="0" name="gst_amount" value="0"></label>
+      <label>Amount already received (₹)<input type="number" step="0.01" min="0" name="received" value="0"></label>
+      <label>Received by${sel("mode", MODES, "cash")}</label>
+      <label>Cost of goods (₹, only if you know it)<input type="number" step="0.01" min="0" name="cogs" value="0"></label>
+      <label class="full">Notes<input name="notes"></label>
+      <div class="full row end"><button class="btn" id="ess">Save earlier sale</button></div></form>`, {
+      onMount: (m, close) => {
+        const q = $("[name=qty]", m), rt = $("[name=rate]", m), am = $("[name=amount]", m), calc = () => { if (q.value && rt.value) am.value = (Number(q.value) * Number(rt.value)).toFixed(2); };
+        q.oninput = calc; rt.oninput = calc;
+        $("#esf", m).onsubmit = async e => {
+          e.preventDefault(); const f = Object.fromEntries(new FormData(e.target)), hit = custs.find(c => c.name.toLowerCase() === String(f.customer_name).trim().toLowerCase());
+          $("#ess", m).disabled = true;
+          const r = await run(sb.rpc("save_earlier_sale", { p: { ...f, customer_id: hit ? hit.id : null } }), "Earlier sale saved");
+          $("#ess", m).disabled = false; if (r) { close(); reload(); }
+        };
+      },
+    });
+  };
+  const openEarlierProduction = async () => {
+    let prods = []; try { prods = await get(sb.from("products").select("id,name,variant").order("name")); } catch (e) { return toast(e.message, "err"); }
+    const lineRow = (t = "bottle", sz = "", f = "", sd = "") => `<div class="row epl" style="gap:6px;margin-bottom:6px;flex-wrap:wrap">${sel("pt", [["bottle", "Bottle"], ["sachet", "Sachet"], ["can", "Can / jar"]], t)}<input name="sz" type="number" step="0.1" min="0.1" placeholder="Size (mL)" value="${sz}" style="width:110px"><input name="fl" type="number" min="1" placeholder="Filled (nos)" value="${f}" style="width:120px"><input name="sd" type="number" min="0" placeholder="Already sold (nos)" value="${sd}" style="width:150px"><button type="button" class="btn ghost sm rml">✕</button></div>`;
+    modal("Add earlier production", `<form id="epf" class="form-grid">
+      <div class="notice full">Filled before the system. It counts in production totals. It does <b>not</b> use any raw material or packaging from current stock. Units you have already sold are taken off; the rest shows in Finished Goods Inventory.</div>
+      <label>Date made<input type="date" name="d" required value="${today()}"></label>
+      <label>Product<select name="p" required>${prods.map(p => `<option value="${p.id}">${esc(p.name)}${p.variant ? " · " + esc(p.variant) : ""}</option>`).join("")}</select></label>
+      <div class="full"><div class="muted small" style="margin-bottom:4px">What was filled (add a line for each pack size)</div><div id="epl">${lineRow("bottle", 500)}${lineRow("sachet", 10)}</div><button type="button" class="btn ghost sm" id="epa">+ Add pack line</button><div id="ept" class="muted small" style="margin-top:6px"></div></div>
+      <label class="full">Notes<input name="note" placeholder="e.g. trial batch for first customers"></label>
+      <div class="full row end"><button class="btn" id="eps">Save earlier production</button></div></form>`, {
+      onMount: (m, close) => {
+        const rows = () => $$(".epl", m).map(r => ({ pack_type: $("[name=pt]", r).value, size_ml: Number($("[name=sz]", r).value), filled: Number($("[name=fl]", r).value), sold: Number($("[name=sd]", r).value) || 0 })).filter(x => x.filled > 0 || x.size_ml > 0);
+        const upd = () => { const l = rows(), lit = l.reduce((s, x) => s + x.filled * x.size_ml / 1000, 0), sold = l.reduce((s, x) => s + x.sold, 0), tot = l.reduce((s, x) => s + x.filled, 0); $("#ept", m).textContent = l.length ? `Total ${lit.toFixed(1)} L filled · ${tot} units · ${sold} sold · ${tot - sold} in stock` : ""; };
+        const wire = () => { $$(".epl", m).forEach(r => { $$("input", r).forEach(i => i.oninput = upd); $(".rml", r).onclick = () => { r.remove(); upd(); }; }); };
+        $("#epa", m).onclick = () => { $("#epl", m).insertAdjacentHTML("beforeend", lineRow()); wire(); };
+        wire(); upd();
+        $("#epf", m).onsubmit = async e => {
+          e.preventDefault(); const f = Object.fromEntries(new FormData(e.target)), l = rows();
+          if (!l.length) return toast("Add at least one pack line", "err");
+          $("#eps", m).disabled = true;
+          const r = await run(sb.rpc("add_earlier_production", { p_product: f.p, p_date: f.d, p_lines: l, p_note: f.note || null }), "Earlier production saved");
+          $("#eps", m).disabled = false; if (r) { close(); reload(); }
+        };
+      },
+    });
+  };
+  const earlier = async () => {
+    const [es, pb, ex] = await Promise.all([get(sb.from("earlier_sales").select("*, customers(name)").order("sale_date", { ascending: false })),
+      get(sb.from("batches").select("id,batch_code,mfg_date,batch_size_l,observations,products(name,variant),filling_lines(pack_type,size_ml,filled,pre_sold)").like("batch_code", "PRE-%").order("mfg_date", { ascending: false })),
+      get(sb.from("expenses").select("*").like("notes", "Before the system%").order("exp_date", { ascending: false }))]);
+    const n = x => Number(x) || 0, sum = (a, f) => a.reduce((s2, x) => s2 + n(f(x)), 0);
+    av.innerHTML = `<div class="notice">Use this page for things that happened <b>before you started using the system</b>. They show in your accounts and totals, but never change today's stock.</div>
+      <div class="card"><div class="toolbar"><h3 style="margin:0">Earlier sales</h3><span class="grow"></span><button class="btn" id="aes">Add earlier sale</button></div>
+        <div class="stats">${stat("Sales (before GST)", R(sum(es, e => e.amount)))}${stat("Received", R(sum(es, e => e.received)), "", "good")}${stat("Still to receive", R(sum(es, e => e.total - e.received)), "", sum(es, e => e.total - e.received) > 0.005 ? "warn" : "")}</div>
+        ${table([{ h: "Date", v: e => dfmt(e.sale_date) }, { h: "Customer", v: e => e.customers?.name || "" }, { h: "Type", v: e => e.kind === "local" ? "Local" : "Company" }, { h: "Sold", v: e => e.product + (e.qty ? ` · ${n(e.qty)} ${e.unit || ""}` : "") },
+          { h: "Total", v: e => R(e.total) }, { h: "Received", v: e => R(e.received) }, { h: "", html: e => `<button class="btn ghost sm esd" data-id="${e.id}">Delete</button>` }], es, { empty: "No earlier sales added yet." })}</div>
+      <div class="card"><div class="toolbar"><h3 style="margin:0">Earlier production</h3><span class="grow"></span><button class="btn" id="aep">Add earlier production</button></div>
+        ${table([{ h: "Date", v: b => dfmt(b.mfg_date) }, { h: "Reference", v: b => b.batch_code }, { h: "Product", v: b => (b.products?.name || "") + (b.products?.variant ? " · " + b.products.variant : "") }, { h: "Litres", v: b => n(b.batch_size_l).toFixed(1) + " L" },
+          { h: "Filled", v: b => (b.filling_lines || []).map(l => `${n(l.filled)} × ${l.size_ml} mL ${l.pack_type}`).join(", ") }, { h: "Sold", v: b => sum(b.filling_lines || [], l => l.pre_sold) }, { h: "In stock", v: b => sum(b.filling_lines || [], l => l.filled - l.pre_sold) }], pb, { empty: "No earlier production added yet." })}</div>
+      <div class="card"><div class="toolbar"><h3 style="margin:0">Earlier purchases (bought before the company was set up)</h3><span class="grow"></span><button class="btn" id="aex">Add earlier purchase</button></div>
+        <p class="muted small">Counts in what you have spent. Does not add to raw material stock, so current stock stays as it is.</p>
+        ${table([{ h: "Date", v: e => dfmt(e.exp_date) }, { h: "Label", v: e => CAT[e.category] || e.category }, { h: "Paid to", v: e => e.vendor || "" }, { h: "Details", v: e => e.description || "" }, { h: "Amount", v: e => R(e.amount) }, { h: "Paid by", v: e => e.paid_by }], ex, { empty: "No earlier purchases added yet." })}
+        <p class="muted small">To fix or remove one, open it in the Expenses tab.</p></div>`;
+    $("#aes", av).onclick = openEarlierSale; $("#aep", av).onclick = openEarlierProduction;
+    $("#aex", av).onclick = () => openExpense({ notes: "Before the system (not added to stock)" }, { note: "Bought before the system. This is for your accounts only and does <b>not</b> add to stock." });
+    $$(".esd", av).forEach(b => b.onclick = async () => { if (!confirm("Delete this earlier sale and the payment recorded with it?")) return; if (await run(sb.rpc("delete_earlier_sale", { p_id: b.dataset.id }), "Deleted") !== null) reload(); });
+  };
+
   // =================== BANK ===================
   const bank = async () => {
     const [txns, ib, cb] = await Promise.all([get(sb.from("bank_txns").select("*").order("txn_date", { ascending: false }).order("created_at", { ascending: false }).limit(1500)), get(sb.from("v_invoice_balance").select("*")), get(sb.from("v_customer_balance").select("customer_id,name"))]);
@@ -633,5 +711,5 @@ export async function accountsPage(el) {
     $$("input,select", $(".toolbar", av)).forEach(x => x.onchange = go); go();
   };
 
-  try { await ({ overview, account, ledger, expenses, assets, bank, profit }[TAB])(); } catch (e) { fail(e); }
+  try { await ({ overview, account, ledger, expenses, assets, earlier, bank, profit }[TAB])(); } catch (e) { fail(e); }
 }

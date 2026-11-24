@@ -92,30 +92,30 @@ export async function accountingDashboardPage(el) {
   css(); el.innerHTML = '<p class="muted">Loading…</p>';
   let D;
   try {
-    const [inv, pay, exp, ib, cb, sl, rv, as, bt, dep] = await Promise.all([
+    const [inv, pay, exp, ib, cb, sl, rv, as, bt, es] = await Promise.all([
       get(sb.from("tax_invoices").select("id,invoice_no,invoice_date,taxable,tax,total,status").eq("status", "issued")),
       get(sb.from("customer_payments").select("paid_on,amount,customer_id")), get(sb.from("expenses").select("exp_date,amount,gst_amount,category,paid_by,reimbursed")),
       get(sb.from("v_invoice_balance").select("invoice_no,invoice_date,customer,total,paid,balance")), get(sb.from("v_customer_balance").select("customer_id,name,billed,received")),
       get(sb.from("v_sale_lines").select("dc_date,revenue,cogs,customer,order_no")), soft(sb.from("v_rm_value").select("name,value,no_rate,on_hand")), soft(sb.from("v_assets").select("cost,book_value,status")),
-      soft(sb.from("bank_txns").select("id,status")), Promise.resolve(null),
+      soft(sb.from("bank_txns").select("id,status")), soft(sb.from("earlier_sales").select("sale_date,amount,total,received,cogs")),
     ]);
-    D = { inv, pay, exp, ib, cb, sl, rv, as, bt };
+    D = { inv, pay, exp, ib, cb, sl, rv, as, bt, es };
   } catch (e) { el.innerHTML = `<p class="dev">Could not load: ${esc(e.message)}</p>`; return; }
   const draw = async () => {
-    const R = rangeFor(ARANGE), { inv, pay, exp, ib, cb, sl, rv, as, bt } = D;
+    const R = rangeFor(ARANGE), { inv, pay, exp, ib, cb, sl, rv, as, bt, es } = D;
     const depn = n0((await sb.rpc("asset_dep_between", { p_from: R.df === "0000-01-01" ? "2000-01-01" : R.df, p_to: R.dt })).data);
     const within = (a, f, from, to) => a.filter(x => inR(f(x), from, to));
     const cur = (a, f) => within(a, f, R.df, R.dt), prv = (a, f) => R.pf ? within(a, f, R.pf, R.pt) : null;
-    const sales = sum(cur(inv, i => i.invoice_date), i => i.taxable), salesP = prv(inv, i => i.invoice_date) && sum(prv(inv, i => i.invoice_date), i => i.taxable);
+    const sales = sum(cur(inv, i => i.invoice_date), i => i.taxable) + sum(cur(es, e => e.sale_date), e => e.amount), salesP = prv(inv, i => i.invoice_date) && sum(prv(inv, i => i.invoice_date), i => i.taxable) + sum(prv(es, e => e.sale_date), e => e.amount);
     const coll = sum(cur(pay, p => p.paid_on), p => p.amount), collP = prv(pay, p => p.paid_on) && sum(prv(pay, p => p.paid_on), p => p.amount);
     const spent = sum(cur(exp, e => e.exp_date), e => e.amount), spentP = prv(exp, e => e.exp_date) && sum(prv(exp, e => e.exp_date), e => e.amount);
     const opex = sum(cur(exp, e => e.exp_date).filter(e => !["raw_material", "packaging", "asset"].includes(e.category)), e => n0(e.amount) - n0(e.gst_amount));
-    const gp = sum(cur(sl, l => l.dc_date), l => l.revenue) - sum(cur(sl, l => l.dc_date), l => l.cogs), net = gp - opex - depn;
-    const outstanding = sum(ib, i => i.balance), today = iso(new Date()), days = d => Math.floor((new Date(today) - new Date(String(d).slice(0, 10))) / 864e5);
-    const open = ib.filter(i => n0(i.balance) > 0.005), age = [["0–30 days", 0, 30], ["31–60 days", 31, 60], ["61–90 days", 61, 90], ["Over 90 days", 91, 1e9]].map(([l, a, b]) => ({ label: l, value: sum(open.filter(i => days(i.invoice_date) >= a && days(i.invoice_date) <= b), i => i.balance), n: open.filter(i => days(i.invoice_date) >= a && days(i.invoice_date) <= b).length }));
+    const gp = sum(cur(sl, l => l.dc_date), l => l.revenue) - sum(cur(sl, l => l.dc_date), l => l.cogs) + sum(cur(es, e => e.sale_date), e => n0(e.amount) - n0(e.cogs)), net = gp - opex - depn;
+    const outstanding = sum(cb, c => n0(c.billed) - n0(c.received)), earlierDue = Math.max(0, outstanding - sum(ib, i => i.balance)), today = iso(new Date()), days = d => Math.floor((new Date(today) - new Date(String(d).slice(0, 10))) / 864e5);
+    const open = ib.filter(i => n0(i.balance) > 0.005), age = [["0–30 days", 0, 30], ["31–60 days", 31, 60], ["61–90 days", 61, 90], ["Over 90 days", 91, 1e9]].map(([l, a, b]) => ({ label: l, value: sum(open.filter(i => days(i.invoice_date) >= a && days(i.invoice_date) <= b), i => i.balance), n: open.filter(i => days(i.invoice_date) >= a && days(i.invoice_date) <= b).length })).concat(earlierDue > 0.005 ? [{ label: "Earlier sales (before system)", value: earlierDue, n: es.filter(e => n0(e.total) - n0(e.received) > 0.005).length }] : []);
     const overdue = open.filter(i => days(i.invoice_date) > 30), ms = monthsBack(6);
     const mi = ms.map(k => sum(pay.filter(p => mKey(p.paid_on) === k), p => p.amount)), mo = ms.map(k => sum(exp.filter(e => mKey(e.exp_date) === k), e => e.amount));
-    const mr = ms.map(k => sum(sl.filter(l => mKey(l.dc_date) === k), l => l.revenue)), mc = ms.map(k => sum(sl.filter(l => mKey(l.dc_date) === k), l => l.cogs));
+    const mr = ms.map(k => sum(sl.filter(l => mKey(l.dc_date) === k), l => l.revenue) + sum(es.filter(e => mKey(e.sale_date) === k), e => e.amount)), mc = ms.map(k => sum(sl.filter(l => mKey(l.dc_date) === k), l => l.cogs) + sum(es.filter(e => mKey(e.sale_date) === k), e => e.cogs));
     const byCat = {}; cur(exp, e => e.exp_date).forEach(e => { byCat[e.category] = (byCat[e.category] || 0) + n0(e.amount); });
     const CATN = { raw_material: "Raw material", packaging: "Packaging", marketing: "Marketing", transport: "Transport", utilities: "Utilities", salary: "Salary", rent: "Rent", asset: "Assets", other: "Other" };
     const catItems = Object.entries(byCat).sort((a, b) => b[1] - a[1]).map(([k, v]) => ({ label: CATN[k] || k, value: v, tip: `${CATN[k] || k} · ${inr(v)}` }));

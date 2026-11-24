@@ -111,13 +111,13 @@ export async function accountingDashboardPage(el) {
     const spent = sum(cur(exp, e => e.exp_date), e => e.amount), spentP = prv(exp, e => e.exp_date) && sum(prv(exp, e => e.exp_date), e => e.amount);
     const opex = sum(cur(exp, e => e.exp_date).filter(e => !["raw_material", "packaging", "asset"].includes(e.category)), e => n0(e.amount) - n0(e.gst_amount));
     const gp = sum(cur(sl, l => l.dc_date), l => l.revenue) - sum(cur(sl, l => l.dc_date), l => l.cogs) + sum(cur(es, e => e.sale_date), e => n0(e.amount) - n0(e.cogs)), net = gp - opex - depn;
-    const outstanding = sum(cb, c => n0(c.billed) - n0(c.received)), earlierDue = Math.max(0, outstanding - sum(ib, i => i.balance)), today = iso(new Date()), days = d => Math.floor((new Date(today) - new Date(String(d).slice(0, 10))) / 864e5);
+    const bizd = sum(cur(exp, e => e.exp_date).filter(e => ["marketing", "meals", "gifts", "travel", "samples"].includes(e.category)), e => e.amount), outstanding = sum(cb, c => n0(c.billed) - n0(c.received)), earlierDue = Math.max(0, outstanding - sum(ib, i => i.balance)), today = iso(new Date()), days = d => Math.floor((new Date(today) - new Date(String(d).slice(0, 10))) / 864e5);
     const open = ib.filter(i => n0(i.balance) > 0.005), age = [["0–30 days", 0, 30], ["31–60 days", 31, 60], ["61–90 days", 61, 90], ["Over 90 days", 91, 1e9]].map(([l, a, b]) => ({ label: l, value: sum(open.filter(i => days(i.invoice_date) >= a && days(i.invoice_date) <= b), i => i.balance), n: open.filter(i => days(i.invoice_date) >= a && days(i.invoice_date) <= b).length })).concat(earlierDue > 0.005 ? [{ label: "Earlier sales (before system)", value: earlierDue, n: es.filter(e => n0(e.total) - n0(e.received) > 0.005).length }] : []);
     const overdue = open.filter(i => days(i.invoice_date) > 30), ms = monthsBack(6);
     const mi = ms.map(k => sum(pay.filter(p => mKey(p.paid_on) === k), p => p.amount)), mo = ms.map(k => sum(exp.filter(e => mKey(e.exp_date) === k), e => e.amount));
     const mr = ms.map(k => sum(sl.filter(l => mKey(l.dc_date) === k), l => l.revenue) + sum(es.filter(e => mKey(e.sale_date) === k), e => e.amount)), mc = ms.map(k => sum(sl.filter(l => mKey(l.dc_date) === k), l => l.cogs) + sum(es.filter(e => mKey(e.sale_date) === k), e => e.cogs));
     const byCat = {}; cur(exp, e => e.exp_date).forEach(e => { byCat[e.category] = (byCat[e.category] || 0) + n0(e.amount); });
-    const CATN = { raw_material: "Raw material", packaging: "Packaging", marketing: "Marketing", transport: "Transport", utilities: "Utilities", salary: "Salary", rent: "Rent", asset: "Assets", other: "Other" };
+    const CATN = { raw_material: "Raw material", packaging: "Packaging", marketing: "Marketing", meals: "Client meals & hospitality", gifts: "Gifts", travel: "Travel for visits", samples: "Free samples & demos", transport: "Transport", utilities: "Utilities", salary: "Salary", rent: "Rent", asset: "Assets", other: "Other" };
     const catItems = Object.entries(byCat).sort((a, b) => b[1] - a[1]).map(([k, v]) => ({ label: CATN[k] || k, value: v, tip: `${CATN[k] || k} · ${inr(v)}` }));
     const topDue = cb.map(c => ({ label: c.name, value: n0(c.billed) - n0(c.received) })).filter(c => c.value > 0.005).sort((a, b) => b.value - a.value).slice(0, 6);
     const owe = {}; exp.filter(e => String(e.paid_by).toLowerCase() !== "company" && !e.reimbursed).forEach(e => { owe[e.paid_by] = (owe[e.paid_by] || 0) + n0(e.amount); });
@@ -131,7 +131,7 @@ export async function accountingDashboardPage(el) {
       noRate ? `<div>⚠ <b>${noRate} item${noRate > 1 ? "s" : ""} in stock have no purchase rate</b>, so cost and margin are understated. Add the purchase bills.</div>` : "",
     ].join("");
     const body = `<div class="dv-bar">${rangeSel(ARANGE)}<span class="muted small">${R.label}${R.pf ? " compared with the period before" : ""}</span></div>
-      <div class="stats">${stat("Sales (before GST)", short(sales), delta(sales, salesP))}${stat("Collected", short(coll), delta(coll, collP), "good")}${stat("Spent (all expenses)", short(spent), delta(spent, spentP, "down"))}
+      <div class="stats">${stat("Sales (before GST)", short(sales), delta(sales, salesP))}${stat("Collected", short(coll), delta(coll, collP), "good")}${stat("Spent (all expenses)", short(spent), delta(spent, spentP, "down"))}${stat("Business development", short(bizd), "Marketing, meals, gifts, travel, samples")}
         ${stat("Gross profit", short(gp), "Sales minus material and packing cost", gp >= 0 ? "good" : "bad")}${stat("Net profit (estimate)", short(net), "After expenses and depreciation", net >= 0 ? "good" : "bad")}
         ${stat("To collect", short(outstanding), `${open.length} open invoice${open.length === 1 ? "" : "s"}`, outstanding > 0 ? "warn" : "")}${stat("Raw material at site", short(stock), "At latest purchase rates")}${stat("Assets (book value)", short(assetBV), `Cost ${short(assetCost)}`)}</div>
       <div class="dv-grid">
@@ -184,8 +184,8 @@ export async function productionDashboardPage(el) {
     const capItems = Object.entries(cp).sort((a, b) => b[1].l - a[1].l).map(([k, v]) => ({ label: k, value: v.l, text: lit(v.l), tip: `${k} · can make about ${lit(v.l)} with current stock. Limited by ${v.by}` }));
     const ops = {}; cur.forEach(b => { const o = (ops[b.operator_name || "–"] ||= { n: 0, a: 0, rw: 0, dv: 0 }); o.n++; if (b.status === "approved") o.a++; if (b.status === "rework" || b.status === "rejected") o.rw++; if ((b.param_deviations || []).length) o.dv++; });
     const outRm = rm.filter(r => n0(r.on_hand) <= 0).length, lowRm = rm.filter(r => r.below_min || r.below_cover).length, negRm = rm.filter(r => n0(r.on_hand) < 0).length;
-    let blocked = [];
-    for (const b of pending.slice(0, 10)) { const r = await sb.rpc("batch_stock_check", { p_batch: b.id }); const sh = (r.data || []).filter(x => n0(x.short) > 0.0005); if (sh.length) blocked.push({ b, sh }); }
+    const chk = await Promise.all(pending.slice(0, 10).map(async b => { const r = await sb.rpc("batch_stock_check", { p_batch: b.id }); return { b, sh: (r.data || []).filter(x => n0(x.short) > 0.0005) }; }));
+    const blocked = chk.filter(x => x.sh.length);
     const attn = [
       pending.length ? `<div>⏳ <b>${pending.length} batch${pending.length > 1 ? "es" : ""} waiting for approval</b>, oldest ${oldest >= 24 ? (oldest / 24).toFixed(1) + " days" : oldest.toFixed(0) + " hours"}.</div>` : `<div>✔ No batch is waiting for approval.</div>`,
       ...blocked.map(x => `<div>⚠ <b>${esc(x.b.temp_ref)}</b> cannot be approved: short of ${x.sh.map(s => `${esc(s.name)} by ${n0(s.short).toFixed(2)} ${esc(s.unit)}`).join(", ")}.</div>`),

@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Become an EarthLabs Partner — Dealer or Distributor</title>
+<meta name="description" content="Become an authorised EarthLabs dealer or distributor. Register online and track your application.">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&family=Playfair+Display:wght@900&display=swap" rel="stylesheet">
+<style>/* EarthLabs partner portal design system — ported from the review prototype */
+:root{--teal:#13595a;--turq:#239a9e;--cream:#fffcf2;--slate:#314452;--gold:#c89739;--brown:#7b543b;--olive:#5d643f;--mint:#ebf3d8;--sky:#ccecfc;--peach:#fcd3c5;--sand:#ffdba7;
+--line:rgba(19,89,90,.2);--mute:#51626f;--soft:#f3f7ee;--good:#2f7d52;--warn:#b07d17;--serious:#c0622a;--crit:#b3372f;--card:#fff;
+--sh1:0 1px 2px rgba(19,52,56,.06),0 4px 14px rgba(19,52,56,.06);--sh2:0 2px 4px rgba(19,52,56,.06),0 14px 34px rgba(19,52,56,.12);--ln:rgba(19,89,90,.13);--goldg:linear-gradient(135deg,#d9ae55,#b8872b);--tealg:linear-gradient(135deg,#176a6b,#0f4a4b)}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%}
+body{background:radial-gradient(1200px 500px at 85% -120px,rgba(35,154,158,.10),transparent 70%),var(--cream);color:var(--slate);font-family:'Open Sans',system-ui,sans-serif;font-size:14.5px;line-height:1.5;-webkit-font-smoothing:antialiased}
+button,input,select,textarea{font:inherit;color:inherit}
+h1,h2,h3,h4{margin:0}
+h1{font-family:'Playfair Display',Georgia,serif;font-weight:900;font-size:30px;color:var(--teal);line-height:1.15;letter-spacing:-.01em;margin-bottom:6px}
+h1:after{content:"";display:block;width:44px;height:3px;border-radius:3px;background:var(--goldg);margin-top:10px}
+h2{font-family:'Playfair Display',Georgia,serif;font-weight:900;font-size:22px;color:var(--teal);line-height:1.2}
+h3{font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:var(--teal);font-weight:700}
+a{color:var(--teal)}
+.mini{font-size:12.5px;color:#566574}
+.sub{font-size:14.5px;color:#5a6b77;margin:10px 0 22px;line-height:1.6;max-width:900px}
+
+/* top bar */
+.top{position:sticky;top:0;z-index:40;background:rgba(255,252,242,.82);backdrop-filter:saturate(1.4) blur(14px);border-bottom:1px solid var(--ln);box-shadow:0 6px 24px rgba(19,52,56,.05);display:flex;align-items:center;gap:14px;padding:9px 22px}
+.brand{font-family:'Playfair Display',Georgia,serif;font-weight:900;font-size:23px;color:var(--teal);line-height:1;letter-spacing:-.01em;text-decoration:none;display:block}
+.brand small{display:block;font-family:'Open Sans',sans-serif;font-size:9.5px;letter-spacing:.24em;color:var(--turq);font-weight:700;margin-top:3px}
+.who{margin-left:auto;display:flex;align-items:center;gap:10px;font-size:13px}
+.who .nm{text-align:right;line-height:1.2}.who .nm b{display:block}.who .nm span{font-size:11.5px;color:#566574}
+.av{width:32px;height:32px;border-radius:50%;background:linear-gradient(135deg,#1c7577,#0f4a4b);color:var(--cream);display:grid;place-items:center;font-weight:700;font-size:13px;box-shadow:0 0 0 3px rgba(200,151,57,.35);flex:none}
+.mob{display:none}
+
+/* shell + sidebar */
+.shell{display:grid;grid-template-columns:248px minmax(0,1fr);min-height:calc(100vh - 58px)}
+.side{background:linear-gradient(180deg,#fffdf6,#f8f6ea);border-right:1px solid var(--ln);padding:16px 12px;position:sticky;top:58px;align-self:start;max-height:calc(100vh - 58px);overflow:auto}
+.side .grp{letter-spacing:.2em;font-size:9.5px;margin:20px 10px 6px;color:#6b7a84;font-weight:700;text-transform:uppercase}
+.side .grp:first-child{margin-top:4px}
+.nav{display:flex;align-items:center;gap:9px;width:100%;text-align:left;border:0;background:transparent;padding:8px 11px;border-radius:10px;cursor:pointer;font-weight:600;color:var(--slate);font-size:13.5px;text-decoration:none;position:relative;transition:background .18s,transform .18s,box-shadow .18s}
+.nav:hover{background:rgba(19,89,90,.07);transform:translateX(2px)}
+.nav[aria-current=page]{background:var(--tealg);color:var(--cream);box-shadow:0 6px 16px rgba(19,89,90,.28)}
+.nav[aria-current=page]:before{content:"";position:absolute;left:-12px;top:9px;bottom:9px;width:3px;border-radius:3px;background:var(--gold)}
+.nav .ic{width:18px;text-align:center;opacity:.85;flex:none}
+.nav .ct{margin-left:auto;background:var(--goldg);color:#fff;border-radius:999px;font-size:11px;font-weight:700;padding:0 7px;box-shadow:0 2px 6px rgba(184,135,43,.4)}
+.main{padding:28px 34px 70px;min-width:0;max-width:1500px;animation:fadeup .45s cubic-bezier(.2,.7,.2,1)}
+@keyframes fadeup{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.skip{position:absolute;left:-999px;top:0;background:var(--teal);color:#fff;padding:10px 16px;z-index:100;border-radius:0 0 10px 0}.skip:focus{left:0}
+
+/* cards, grid, KPI */
+.card{background:#fff;border:1px solid var(--ln);border-radius:16px;box-shadow:var(--sh1);padding:20px 22px;margin-bottom:16px;transition:box-shadow .25s}
+.card:hover{box-shadow:var(--sh2)}
+.card h2{margin-bottom:8px}
+.grid{display:grid;gap:14px}
+.g2{grid-template-columns:repeat(2,minmax(0,1fr))}.g3{grid-template-columns:repeat(3,minmax(0,1fr))}.g4{grid-template-columns:repeat(4,minmax(0,1fr))}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:14px;margin:18px 0}
+.kpi{background:linear-gradient(180deg,#fff,#fbfcf7);border:1px solid var(--ln);border-radius:16px;box-shadow:var(--sh1);padding:16px 18px;position:relative;overflow:hidden;display:block;text-decoration:none;color:inherit;transition:transform .25s,box-shadow .25s,border-color .25s}
+.kpi:before{content:"";position:absolute;left:0;top:0;right:0;height:3px;background:linear-gradient(90deg,var(--teal),var(--turq))}
+.kpi .l{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--mute);font-weight:700}
+.kpi .v{font-family:'Playfair Display',serif;font-weight:900;font-size:30px;color:var(--teal);line-height:1.2;margin:4px 0 1px}
+.kpi .d{font-size:12.5px;color:var(--mute)}
+a.kpi:hover{transform:translateY(-3px);box-shadow:var(--sh2);border-color:rgba(35,154,158,.5)}
+.row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.sp{flex:1}
+
+/* buttons: a plain .btn is the primary action, .out is the outline variant */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-height:40px;border:1px solid #0f4a4b;background:var(--tealg);color:var(--cream);border-radius:10px;padding:8px 16px;cursor:pointer;font-weight:700;font-size:13.5px;letter-spacing:.01em;text-decoration:none;box-shadow:0 4px 14px rgba(19,89,90,.28);transition:all .18s}
+.btn:hover{transform:translateY(-1px);box-shadow:0 8px 18px rgba(19,89,90,.3)}
+.btn:active{transform:none}
+.btn.out,.btn.sec{background:#fff;color:var(--teal);border:1.5px solid var(--teal);box-shadow:none}.btn.out:hover,.btn.sec:hover{background:#eaf4ee}
+.btn.gold-fill{background:var(--goldg);color:#2b2008;border:0;padding:11px 22px;font-size:14.5px;box-shadow:0 8px 22px rgba(200,151,57,.4)}
+.btn.ghost{background:rgba(255,255,255,.08);color:#fff;border:1px solid rgba(255,255,255,.45);padding:11px 20px;font-size:14.5px;box-shadow:none;backdrop-filter:blur(4px)}.btn.ghost:hover{background:rgba(255,255,255,.18)}
+.btn.red{background:#fff;color:var(--crit);border:1.5px solid var(--crit);box-shadow:none}
+.btn.sm{min-height:30px;padding:3px 11px;font-size:12.5px;border-radius:8px}
+.btn:disabled{opacity:.5;cursor:not-allowed;transform:none}
+:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+
+/* forms: bare inputs and labels are styled so every existing screen picks the new look up */
+label{display:block;font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.12em;color:var(--teal)}
+input,select,textarea{width:100%;padding:9px 12px;border:1px solid rgba(19,89,90,.25);border-radius:10px;font:inherit;margin:4px 0 12px;background:#fff;color:var(--slate);transition:box-shadow .15s,border-color .15s}
+input:focus,select:focus,textarea:focus{outline:0;border-color:var(--turq);box-shadow:0 0 0 4px rgba(35,154,158,.15)}
+input[type=checkbox],input[type=radio]{width:auto;margin:0 6px 0 0;accent-color:var(--teal)}
+td select,td input{margin:0}
+.frm2{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}
+.field small,.hint{color:var(--mute);font-size:12px;display:block;margin:-6px 0 10px}
+
+/* tables */
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th{text-align:left;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--teal);padding:11px 12px;border-bottom:1px solid var(--ln);white-space:nowrap;background:#f7faf3}
+td{text-align:left;padding:11px 12px;border-bottom:1px solid rgba(19,89,90,.07);vertical-align:middle}
+tbody tr:hover td{background:#f4f9f3}
+.tablewrap{overflow-x:auto}
+
+/* badges, bars, notes, tabs, steps */
+.badge{display:inline-flex;align-items:center;gap:5px;font-size:11px;font-weight:700;border-radius:999px;padding:3px 11px;white-space:nowrap;background:#e8eef0;color:var(--slate)}
+.b-good{background:#dff0e5;color:#1f6a3f}.b-warn{background:#fbf0d3;color:#8a6212}.b-ser{background:#fbe5d6;color:#a4501b}.b-crit{background:#f8dcd9;color:#a02a23}.b-info{background:#d9eef0;color:#0f4f51}
+.bar{height:7px;border-radius:5px;background:#e8eee6;overflow:hidden}.bar>i{display:block;height:100%;background:linear-gradient(90deg,var(--teal),var(--turq));border-radius:5px}
+.note{border-radius:12px;border:1px solid rgba(200,151,57,.25);border-left:4px solid var(--gold);background:#fbf4e0;padding:11px 15px;font-size:13.5px;margin:10px 0}
+.note.ok{background:#e6f3ea;border-color:rgba(47,125,82,.25);border-left-color:var(--good)}.note.bad{background:#fbeceb;border-color:rgba(179,55,47,.25);border-left-color:var(--crit)}
+.tabs{display:flex;gap:2px;flex-wrap:wrap;border-bottom:1px solid var(--ln);margin:10px 0 14px}
+.tabs button{border:0;background:transparent;padding:8px 14px;font-weight:700;color:var(--teal);cursor:pointer;border-radius:10px 10px 0 0;font-size:13.5px;position:relative}
+.tabs button[aria-selected=true]:after{content:"";position:absolute;left:10px;right:10px;bottom:-1px;height:3px;border-radius:3px;background:var(--goldg)}
+.steps{display:flex;flex-wrap:wrap;gap:4px 0;margin:10px 0 18px}
+.step{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--mute);padding:3px 14px 3px 0}
+.step i{width:24px;height:24px;border-radius:50%;border:1.5px solid var(--ln);display:grid;place-items:center;font-style:normal;font-size:11px;font-weight:700;background:#fff}
+.step.done{color:var(--teal)}.step.done i{background:var(--tealg);border-color:var(--teal);color:#fff}
+.step.cur{color:var(--slate);font-weight:700}.step.cur i{background:var(--goldg);border-color:#b8872b;color:#2b2008}
+.switch{position:relative;display:inline-block;width:44px;height:25px;flex:0 0 44px}
+.switch input{opacity:0;position:absolute;inset:0;margin:0;cursor:pointer;z-index:2;width:100%}
+.switch i{position:absolute;inset:0;background:#cfd8d6;border-radius:999px;transition:.2s}
+.switch i:after{content:"";position:absolute;left:3px;top:3px;width:19px;height:19px;border-radius:50%;background:#fff;box-shadow:0 2px 5px rgba(0,0,0,.25);transition:.2s}
+.switch input:checked+i{background:var(--tealg)}.switch input:checked+i:after{transform:translateX(19px)}
+
+/* public site: home, Become a Partner, register */
+.pub{max-width:1120px;margin:0 auto;padding:22px 20px 70px}
+.pub .top{position:static;background:transparent;box-shadow:none;border:0;padding:0 0 22px;backdrop-filter:none}
+.pub .top .row{margin-left:auto}
+.hero2{position:relative;overflow:hidden;border-radius:26px;padding:58px 52px 40px;color:var(--cream);background:radial-gradient(700px 360px at 90% 0,rgba(35,154,158,.55),transparent 65%),radial-gradient(500px 300px at 0 110%,rgba(200,151,57,.28),transparent 60%),linear-gradient(135deg,#13595a,#0b3a3b);box-shadow:0 30px 70px rgba(11,58,59,.35)}
+.hero2:before{content:"";position:absolute;inset:0;background-image:radial-gradient(rgba(255,255,255,.07) 1px,transparent 1px);background-size:22px 22px;mask-image:linear-gradient(90deg,transparent,#000 70%);pointer-events:none}
+.hero2>*{position:relative}
+.hero2 h1{color:#fffcf2;font-size:46px;line-height:1.08;max-width:700px}.hero2 h1:after{display:none}
+.hero2 p{max-width:600px;color:#cfe6e1;font-size:16px;line-height:1.7;margin:16px 0 0}
+.eyebrow{font-size:11px;letter-spacing:.26em;font-weight:700;color:#e7c982;margin-bottom:14px}.eyebrow.dk{color:var(--turq);margin-bottom:6px}
+.hero-stats{display:flex;gap:38px;margin-top:38px;padding-top:22px;border-top:1px solid rgba(255,255,255,.16);flex-wrap:wrap}
+.hero-stats b{font-family:'Playfair Display',serif;font-size:30px;display:block;color:#fff;line-height:1}
+.hero-stats span{font-size:11.5px;letter-spacing:.1em;text-transform:uppercase;color:#a9cfc9}
+.sec-h{margin:46px 0 18px;text-align:center}.sec-h h2{font-size:30px}
+.paths{max-width:880px;margin:0 auto}
+.path{position:relative;background:#fff;border:1px solid var(--ln);border-radius:22px;padding:30px 28px 26px;box-shadow:var(--sh1);transition:transform .3s,box-shadow .3s;overflow:hidden;display:flex;flex-direction:column}
+.path:hover{transform:translateY(-6px);box-shadow:0 22px 50px rgba(19,52,56,.18)}
+.path:before{content:"";position:absolute;left:0;right:0;top:0;height:4px;background:linear-gradient(90deg,var(--teal),var(--turq),var(--gold))}
+.path .btn{margin-top:auto;align-self:flex-start}
+.path-n{position:absolute;right:22px;top:14px;font-family:'Playfair Display',serif;font-size:54px;color:rgba(19,89,90,.07);line-height:1}
+.path-ic{width:54px;height:54px;border-radius:16px;display:grid;place-items:center;font-size:26px;background:linear-gradient(135deg,#e6f2ee,#f6ecd2);margin-bottom:14px}
+.path h2{font-size:25px;margin-bottom:6px}
+.pts{list-style:none;padding:0;margin:14px 0 20px}
+.pts li{padding:6px 0 6px 26px;position:relative;font-size:13.5px;border-bottom:1px dashed rgba(19,89,90,.12)}
+.pts li:before{content:"✓";position:absolute;left:0;top:6px;width:17px;height:17px;border-radius:50%;background:var(--teal);color:#fff;font-size:10px;display:grid;place-items:center}
+.journey{margin:48px auto 0;max-width:900px;text-align:center}
+.jrow{display:flex;align-items:flex-start;justify-content:center;margin-top:14px}
+.jst{display:flex;flex-direction:column;align-items:center;gap:8px;flex:0 0 120px;font-size:12.5px;font-weight:600}
+.jst i{width:40px;height:40px;border-radius:50%;display:grid;place-items:center;font-style:normal;font-weight:700;color:#fff;background:var(--tealg);box-shadow:0 6px 16px rgba(19,89,90,.3)}
+.jline{flex:1;height:2px;margin-top:20px;background:repeating-linear-gradient(90deg,rgba(19,89,90,.35) 0 6px,transparent 6px 12px)}
+.signin{max-width:440px;margin:40px auto 0}
+.wiz{max-width:720px;margin:0 auto}
+
+@media print{.side,.top,.no-print,nav{display:none!important}.main{margin:0!important;padding:0!important}}
+@media(max-width:1000px){
+  .shell{grid-template-columns:1fr}
+  .side{position:static;max-height:none;border-right:0;border-bottom:1px solid var(--ln);display:none}.side.open{display:block}
+  .mob{display:inline-flex}.who .nm{display:none}
+  .g4,.g3{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:700px){
+  .top{padding:9px 14px}
+  .main{padding:18px 14px 60px}
+  .card{padding:14px;overflow-x:auto}
+  table{min-width:560px}
+  h1{font-size:25px}h2{font-size:20px}
+  .g2,.g3,.g4,.frm2{grid-template-columns:1fr}
+  .hero2{padding:36px 22px 26px}.hero2 h1{font-size:32px}.hero-stats{gap:22px}
+  .jrow{flex-wrap:wrap;gap:10px}.jline{display:none}.jst{flex:0 0 30%}
+  .pub{padding:14px 14px 60px}
+  .pub .top{flex-wrap:wrap;gap:10px}.pub .top .row{margin-left:0;gap:6px}
+}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+</style></head><body>
+<div class="pub">
+<header class="top"><a class="brand" href="https://www.earthlabsproducts.com/">EarthLabs<small>PARTNER NETWORK</small></a><div class="row"><a class="btn out sm" href="https://www.earthlabsproducts.com/partner/track/">Track application</a><a class="btn out sm" href="https://www.earthlabsproducts.com/partner/">Partner sign-in</a></div></header>
+<section class="hero2"><div class="eyebrow">EARTHLABS · PARTNER NETWORK</div><h1>Grow with the brand that heals, not harms.</h1>
+<p>Join EarthLabs as an authorised partner and build a business on herbal hand wash and eco-cleaning products. Choose your path below and register online in a few minutes.</p>
+<div class="row" style="margin-top:22px"><a class="btn gold-fill" href="https://www.earthlabsproducts.com/partner/register/?type=DLR">Become a Dealer</a><a class="btn ghost" href="https://www.earthlabsproducts.com/partner/register/?type=DST">Become a Distributor</a></div>
+<div class="hero-stats"><div><b>34</b><span>Districts</span></div><div><b>5</b><span>Growth steps</span></div><div><b>100</b><span>Point score</span></div></div></section>
+<div class="sec-h"><div class="eyebrow dk">CHOOSE YOUR PATH</div><h2>How would you like to work with us?</h2></div>
+<div class="grid paths g2"><div class="path"><div class="path-n">01</div><div class="path-ic" aria-hidden="true">🏪</div><h2>Authorized Dealer</h2><p class="mini">Sell EarthLabs herbal hand wash and eco-cleaning products to shops, workshops and institutions in your district.</p><ul class="pts"><li>Non-exclusive district authorisation to start</li><li>Brand kit, samples and partner price list</li><li>Monthly targets with a clear 100-point score</li><li>Earn your way up to Distributor</li></ul><a class="btn" href="https://www.earthlabsproducts.com/partner/register/?type=DLR">Apply as Dealer →</a></div><div class="path"><div class="path-n">02</div><div class="path-ic" aria-hidden="true">🚚</div><h2>Authorized Distributor</h2><p class="mini">Supply a cluster of districts and build your own network of authorised dealers.</p><ul class="pts"><li>A cluster of 2–3 districts</li><li>Your own authorised dealer network</li><li>Priority supply and a better margin slab</li><li>Exclusive rights earned on performance</li></ul><a class="btn" href="https://www.earthlabsproducts.com/partner/register/?type=DST">Apply as Distributor →</a></div></div>
+<div class="sec-h"><div class="eyebrow dk">WHY EARTHLABS</div><h2>Built for partners who want to last</h2></div>
+<div class="grid g2" style="max-width:880px;margin:0 auto"><div class="card"><div style="font-size:26px" aria-hidden="true">🌿</div><h2 style="font-size:19px">A brand that heals, not harms</h2><p class="mini" style="font-size:13.5px">Herbal hand wash and eco-cleaning products rooted in Indian heritage and built for global markets.</p></div><div class="card"><div style="font-size:26px" aria-hidden="true">🛡️</div><h2 style="font-size:19px">Protected, fair territory</h2><p class="mini" style="font-size:13.5px">Authorisation is by district. Everything is recorded, so there are no side deals and no surprises.</p></div><div class="card"><div style="font-size:26px" aria-hidden="true">📈</div><h2 style="font-size:19px">A clear way to grow</h2><p class="mini" style="font-size:13.5px">Monthly targets and a 100-point score show exactly what moves you from Dealer to Distributor.</p></div><div class="card"><div style="font-size:26px" aria-hidden="true">📜</div><h2 style="font-size:19px">Verifiable credentials</h2><p class="mini" style="font-size:13.5px">A signed agreement and a partner certificate with a QR code that anyone can check.</p></div></div>
+<div class="journey"><div class="eyebrow dk">YOUR JOURNEY</div><div class="jrow"><div class="jst"><i>1</i><span>Register</span></div><div class="jline"></div><div class="jst"><i>2</i><span>Verification</span></div><div class="jline"></div><div class="jst"><i>3</i><span>Approval</span></div><div class="jline"></div><div class="jst"><i>4</i><span>Agreement & certificate</span></div><div class="jline"></div><div class="jst"><i>5</i><span>Start trading</span></div></div><p class="mini" style="margin-top:14px">Registration does not authorise trading. Every application is verified and approved by EarthLabs management.</p></div>
+<div class="sec-h"><div class="eyebrow dk">GOOD TO KNOW</div><h2>Questions before you apply</h2></div>
+<div style="max-width:780px;margin:0 auto"><details class="card" style="margin-bottom:10px;padding:14px 18px"><summary style="font-weight:700;color:var(--teal);cursor:pointer">Does registering mean I can start trading?</summary><p style="margin-bottom:0">No. Every application is verified and approved by EarthLabs management first. You can order only after approval and a signed agreement.</p></details><details class="card" style="margin-bottom:10px;padding:14px 18px"><summary style="font-weight:700;color:var(--teal);cursor:pointer">What documents will I need?</summary><p style="margin-bottom:0">Identity and business proof, GST details if you have them, and address proof. We ask for these when your application is verified.</p></details><details class="card" style="margin-bottom:10px;padding:14px 18px"><summary style="font-weight:700;color:var(--teal);cursor:pointer">Can a dealer become a distributor?</summary><p style="margin-bottom:0">Yes. Performance decides it. A partner who keeps hitting targets is assessed for the next step.</p></details><details class="card" style="margin-bottom:10px;padding:14px 18px"><summary style="font-weight:700;color:var(--teal);cursor:pointer">How do I follow my application?</summary><p style="margin-bottom:0">Use Track application with your reference and e-mail. You will see each step, and we tell you if we need anything.</p></details></div>
+<div class="card" style="max-width:780px;margin:28px auto 0;text-align:center"><h2>Ready to start?</h2><p>It takes a few minutes. You can track your application at any time.</p><div class="row" style="justify-content:center"><a class="btn" href="https://www.earthlabsproducts.com/partner/register/?type=DLR">Register as a Dealer</a><a class="btn" href="https://www.earthlabsproducts.com/partner/register/?type=DST">Register as a Distributor</a></div></div>
+</div></body></html>

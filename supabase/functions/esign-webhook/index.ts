@@ -26,5 +26,6 @@ Deno.serve(async (req) => {
   if (up.error) return new Response("could not store the signed copy", { status: 500 });
   const { error } = await db.rpc("esign_completed", { docid: b.documentId, path });
   if (error) return new Response(error.message, { status: 500 });
+  // Both parties have signed. The company approves the signed MOU in the portal, which activates the partner, issues the certificate and e-mails the login.
   return new Response("ok");
 });

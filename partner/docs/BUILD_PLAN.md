@@ -22,12 +22,12 @@ The Supabase organisation `earthlabs.work` has reached its free-project limit, s
 Everything in the review prototype is in scope and must ship. Each line is a module with its done-box. Pages in brackets are the prototype pages to match.
 
 **Internal portal (Super Admin, Sales, Accounts, Warehouse)**
-- [ ] Dashboard by role [dashboard]
+- [x] Dashboard by role [dashboard] (build 3-8: role dashboards, database numbers per role)
 - [x] Approvals centre: catalogue, scheme, procurement, credit, payments [appr] (build 6: one queue, decisions through guarded functions; orders, proofs and change requests are decided on their own screens)
-- [ ] Applications: review, more-info, field verification, approve/reject, permanent Partner ID [applications]
-- [ ] Territory Explorer: Gujarat district map, coverage, exclusivity, white-space [territory]
-- [ ] Partners: list, profile, status, territories, ledger [partners]
-- [ ] Agreements and certificates: MOU flow, custom MOU template upload, send for signing, certificate with public verify [agree]
+- [x] Applications: review, more-info, field verification, approve/reject, permanent Partner ID [applications] (build 2)
+- [x] Territory Explorer: Gujarat district map, coverage, exclusivity, white-space [territory] (build 2: district grid list view, not a drawn map)
+- [x] Partners: list, profile, status, territories, ledger [partners] (build 2)
+- [x] Agreements and certificates: MOU flow, custom MOU template upload, send for signing, certificate with public verify [agree] (builds 2-5b; Leegality needs credentials)
 - [x] Performance Matrix: monthly score, weights, promotion/hold rules [perf] (build 7: migration 012, screen /performance)
 - [x] Products and pricing: SKU add/retire, partner-wise SKUs, SKU-wise MRP and margins, slabs, GST, policies [catalog] (build 3: tested in DB; screen not click-tested on live)
 - [x] Schemes: partner-wise, engine, budget, disclosure control (build 3)
@@ -38,16 +38,16 @@ Everything in the review prototype is in scope and must ship. Each line is a mod
 - [x] AI Intelligence: recommendations (credit, schemes, reorder, promotion), management approves [ai] (build 6: `ai-recommend` Edge Function; needs the ANTHROPIC_API_KEY secret)
 - [x] Vendors: master, vendor credit [vendors] (build 6; vendor performance scoring not built, see Day 4)
 - [x] Reports and exports (CSV/PDF) [reports] (build 7: 19 role-gated reports, CSV download, print to PDF, every run audited)
-- [ ] Notifications: in-app, email, WhatsApp-ready hooks [notifs]
-- [ ] Users and access: roles, permissions per module, module on/off switches, registration-type switches [users]
+- [x] Notifications: in-app, email, WhatsApp-ready hooks [notifs] (build 2: in-app and e-mail; WhatsApp hook not built)
+- [x] Users and access: roles, permissions per module, module on/off switches, registration-type switches [users] (build 9: switches in Users & access hide menus; RFQ, planning and network modules also refuse their actions in the database)
 - [x] Audit trail viewer [audit] (build 5: Super Admin screen /audit with table and record filter)
 
 **Partner portal (dealer, distributor)**
-- [ ] Dashboard, Place an order (price, schemes, hints, lead time), My orders, payment details (UTR/advice), Invoices and ledger
-- [ ] My performance, Growth ladder, Agreement and certificate, My network, Offers and credit
+- [x] Dashboard, Place an order (price, schemes, hints, lead time), My orders, payment details (UTR/advice), Invoices and ledger
+- [x] My performance, Growth ladder, Agreement and certificate, My network (build 9), Offers and credit
 
 **Vendor portal**
-- [ ] Dashboard, quotes, purchase orders, payments, performance, stock reports, release orders
+- [x] Dashboard, quotes (build 9 RFQs), purchase orders (an awarded quote becomes a release order with the payment gate), payments, performance (scorecard), stock reports, release orders
 
 **Public website area**
 - [x] Home with registration types (only dealer and distributor on; installation partner behind switch), registration wizard, application tracking, certificate verification (build 3)
@@ -66,7 +66,7 @@ Everything in the review prototype is in scope and must ship. Each line is a mod
 - [x] Next.js app skeleton, brand theme
 - [x] Migrations 001-004 (identity, partners, catalogue, schemes, approvals, settings) with local security tests
 - [x] CI, branch, pull request
-- [ ] Day 1B (afternoon 18 Nov): users and access module, module switches, audit viewer, notifications table and in-app bell, public home and registration wizard
+- [x] Day 1B (afternoon 18 Nov): users and access module, module switches, audit viewer, notifications table and in-app bell, public home and registration wizard
 
 ### Scope: the WHOLE system, all four phases (every module in the review prototype)
 Each session works through the unchecked boxes of its day, then continues into the next day's items if time remains. Nothing is "phase 1 only". A module is done only when it meets the definition of done below.
@@ -100,7 +100,7 @@ Each session works through the unchecked boxes of its day, then continues into t
 ### Day 5 — Hardening, launch preparation, hand-over
 - [x] Security review of every RLS policy for every role, attack tests, rate limits, storage rules (build 8: tests/build8_test.sql, migration 014; rate limits and Auth CAPTCHA are dashboard settings, listed in HANDOVER.md)
 - [x] Performance and load test (1,000 partners, 50,000 orders), index review (build 8: run_load_test.sh, migration 015)
-- [ ] Accessibility and mobile pass on every screen; browser test of the main journeys per role
+- [~] Accessibility and mobile pass (build 9: focus outlines, skip link, checkbox/select styling, tables scroll on phones, contrast; public pages checked in headless Chrome at 390 px). Signed-in screens and per-role browser journeys still need test users on the live project
 - [x] User guide, hand-over checklist, deploy steps for /partner redirect written (USER_GUIDE.md, HANDOVER.md, DEPLOY.md). Backups and the restore drill need Viraj: Pro plan and a person to run it (HANDOVER.md section D)
 
 ## Definition of done (every module)

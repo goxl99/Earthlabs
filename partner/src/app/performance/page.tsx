@@ -75,6 +75,7 @@ function Staff({ role }: { role: Role }) {
         <p>Enter each parameter as a percentage (0–100). Leave blank when it cannot be verified yet.</p>
         <label>Month<input type="month" value={month} onChange={(e) => setMonth(e.target.value)} /></label>
         <table><tbody>{weights.map((w, i) => <tr key={i}><td>{w.n} <span className="mini">(weight {w.w})</span></td><td><input aria-label={w.n} type="number" min={0} max={100} value={vals[i]} onChange={(e) => setVals(vals.map((x, j) => (j === i ? e.target.value : x)))} /></td></tr>)}</tbody></table>
+        <p><button className="btn" onClick={async () => { const { data, error } = await supabase.rpc("suggest_score_inputs", { pid: sel, m: `${month}-01` }); if (error) { setMsg({ ok: false, t: error.message }); return; } const a = data as (number | null)[]; setVals(a.map((x, i) => (x == null ? vals[i] : String(Math.round(x * 100))))); setMsg({ ok: true, t: `Filled ${a.filter((x) => x != null).length} value(s) from invoices, payments, orders and the linked network. Review them, add the rest, then save.` }); }}>Fill what the system can verify</button></p>
         <label>Note<input value={note} onChange={(e) => setNote(e.target.value)} /></label>
         <p>Preview: <b>{prev.score ?? "no verified data"}</b> {bandOf(prev.score) ? `· ${bandOf(prev.score)}` : ""} (verified weight {prev.verified} of 100)</p>
         <button className="btn" onClick={() => call("record_partner_score", { pid: sel, m: `${month}-01`, p: params, why: note || null })}>Save score</button></div>

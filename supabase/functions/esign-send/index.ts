@@ -35,14 +35,20 @@ Deno.serve(async (req) => {
   if (!isPdf(bytes)) return json({ error: "The file is not a PDF" }, 400, origin);
   if (bytes.length > 15 * 1024 * 1024) return json({ error: "The PDF is over 15 MB" }, 400, origin);
 
+  // Signers in order: the partner first, then the EarthLabs authorised signatory (set by Super Admin under Agreements > Company details).
+  const { data: cp } = await db.from("company_profile").select("key,value");
+  const co = Object.fromEntries((cp ?? []).map((r: { key: string; value: string }) => [r.key, r.value]));
+  const invitees = [{ name: p.contact_name || p.name, email: p.email ?? undefined, phone: p.phone ?? undefined }];
+  if (co.signatory_name && (co.signatory_email || co.signatory_phone)) invitees.push({ name: co.signatory_name, email: co.signatory_email || undefined, phone: co.signatory_phone || undefined });
   let payload;
-  try { payload = buildSignRequest(profile, `EarthLabs agreement ${ag.partner_id}.pdf`, encodeBase64(bytes), { name: p.contact_name || p.name, email: p.email ?? undefined, phone: p.phone ?? undefined }, aid); }
+  try { payload = buildSignRequest(profile, `EarthLabs MOU ${ag.partner_id}.pdf`, encodeBase64(bytes), invitees, aid); }
   catch (e) { return json({ error: (e as Error).message }, 400, origin); }
   const base = Deno.env.get("LEEGALITY_BASE_URL") ?? "https://sandbox.leegality.com/api";
   const r = await fetch(`${base}/v3.0/sign/request`, { method: "POST", headers: { "X-Auth-Token": token, "Content-Type": "application/json" }, body: JSON.stringify(payload) });
   const out = await r.json().catch(() => null);
   if (!r.ok || !out || out.status !== 1 || !out.data?.documentId) return json({ error: "Leegality did not accept the document", detail: out?.messages ?? null }, 502, origin);
   const { error } = await db.rpc("esign_started", { aid, docid: out.data.documentId, url: out.data.invitees?.[0]?.signUrl ?? null });
+  const signers = invitees.length;
   if (error) return json({ error: error.message }, 500, origin);
-  return json({ ok: true, document_id: out.data.documentId }, 200, origin);
+  return json({ ok: true, document_id: out.data.documentId, signers }, 200, origin);
 });

@@ -18,7 +18,7 @@ const ENVS: { k: Env | "public"; label: string }[] = [
  *  Layout (top bar, portal switch, grouped side menu) follows the approved review prototype. */
 export default function Shell({ page, children }: { page: string; children: (p: Profile) => ReactNode }) {
   const [p, setP] = useState<Profile | null | undefined>(undefined);
-  const [open, setOpen] = useState(false);
+  const [open, setOpen] = useState(false); const [mods, setMods] = useState<Record<string, boolean>>({});
   const [ct, setCt] = useState<Record<string, number>>({});
   const path = usePathname() ?? "";
   useEffect(() => {
@@ -28,6 +28,7 @@ export default function Shell({ page, children }: { page: string; children: (p: 
       const { data: prof } = await supabase.from("profiles").select("id,role,full_name,partner_id,active").eq("id", data.user.id).single();
       setP((prof as Profile) ?? null);
       if (prof && ["super_admin", "sales", "accounts", "warehouse"].includes((prof as Profile).role)) supabase.rpc("nav_counts").then(({ data: c }) => setCt((c as Record<string, number>) ?? {}));
+      supabase.rpc("my_modules").then(({ data: m }) => { if (m) setMods(m as Record<string, boolean>); });
     });
   }, []);
   if (p === undefined) return <main className="main">Loading…</main>;
@@ -36,7 +37,7 @@ export default function Shell({ page, children }: { page: string; children: (p: 
   if (!p.active) return <main className="main"><h1>Waiting for approval</h1><div className="note">Your account is created. EarthLabs will activate it soon.</div></main>;
 
   const env = envOf(p.role);
-  const items = navFor(p.role);
+  const items = navFor(p.role, mods);
   // Highlight only the first item that points at this screen (partner menu has two entries for orders and performance).
   const current = items.find((n) => n.href.split("#")[0].replace(/\/$/, "").endsWith(page.replace(/\/$/, "")) || path.replace(/\/$/, "").endsWith(n.href.split("#")[0].replace(/\/$/, "")))?.key;
   let lastGroup = "";

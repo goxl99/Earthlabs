@@ -41,6 +41,11 @@ Owner after hand-over: Viraj (Super Admin). Tick each box when done. Nothing her
 - `email_outbox` and `id_counters` have RLS on and no policy: intentional, only server code with the service key touches them.
 - "Unused index" notes on a new empty project disappear once there is traffic. Re-check after one month.
 
+## E2. Build 9 switches
+- WhatsApp is OFF. To start: set the Edge Function secrets, deploy `send-whatsapp`, schedule it every few minutes, then in the SQL editor run `update settings set value = '{"enabled":true}' where key = 'whatsapp';`.
+- Link each dealer to its distributor under My network (Super Admin or Sales). Distributors then see only activity, not terms.
+- Add the bill of materials under Material planning before using the planner.
+
 ## F. Go-live (needs Viraj's approval, see DEPLOY.md)
 - [ ] Merge the pull request to `main` (Viraj only).
 - [ ] Deploy the static site.

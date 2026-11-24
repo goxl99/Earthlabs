@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Shell from "@/components/Shell";
 import Drawer from "@/components/Drawer";
+import { callFn } from "@/lib/fn";
 import { supabase } from "@/lib/supabase";
 import { Badge, Msg, when } from "@/components/ui";
 import { askForm, askReason, notify } from "@/lib/dialog";
@@ -90,7 +91,12 @@ function Inner({ role }: { role: string }) {
     if (error || !data) { await notify("Could not open the file", error?.message ?? "No link returned"); return; }
     window.open(data.signedUrl, "_blank", "noopener");
   }
+  async function issueLogin(a: App) {
+    const r = await callFn("provision-login", { partner_id: a.partner_id });
+    setMsg({ ok: r.ok, t: r.ok ? (r.data?.created === false ? String(r.data?.note ?? "") : r.data?.emailed ? "Login ID and password e-mailed to the partner." : "Login created, but the e-mail could not be sent. Ask the partner to use Forgot password.") : "Could not create the login: " + r.error }); await load();
+  }
   const foot = (a: App) => {
+    if (a.status === "Approved" && canApprove && a.partner_id) return <button className="btn pri" onClick={() => issueLogin(a)}>Issue / re-send login</button>;
     const s = a.status; if (!canVerify || ["Approved", "Rejected", "Agreement pending", "MOU signed"].includes(s)) return null;
     return (<>
       {s === "Submitted" && <button className="btn pri" onClick={() => step(a, "Documents requested", {}, "Documents requested from the applicant")}>Request documents</button>}

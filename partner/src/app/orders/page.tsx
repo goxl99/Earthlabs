@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import Shell from "@/components/Shell";
 import { supabase } from "@/lib/supabase";
@@ -76,7 +77,7 @@ function Inner({ role }: { role: Role }) {
     <h2>{staff ? "Order queue" : "Order history"}</h2>
     {staff && <p><select aria-label="Filter by status" value={filter} onChange={(e) => setFilter(e.target.value)}><option value="">All statuses</option>{["Pending Approval", "Approved", "Payment Confirmed", "Dispatched", "Delivered", "On hold", "Cancelled"].map((s) => <option key={s}>{s}</option>)}</select></p>}
     <div className="card"><table><thead><tr><th>Order</th>{staff && <th>Partner</th>}<th>Placed</th><th>Total incl. GST</th><th>Status</th><th>Expected</th><th></th></tr></thead><tbody>
-      {orders.map((o) => (<><tr key={o.id}><td><a href="#" onClick={(e) => { e.preventDefault(); show(o.id); }}>{o.id}</a></td>{staff && <td>{o.partner_id}</td>}<td>{when(o.created_at)}</td><td>{inr(o.total)}</td>
+      {orders.map((o) => (<><tr key={o.id}><td><a href="#" onClick={(e) => { e.preventDefault(); show(o.id); }}>{o.id}</a><div><Link className="mini" href={`/doc/?k=po&id=${encodeURIComponent(o.id)}`} target="_blank" rel="noopener">Purchase order</Link></div></td>{staff && <td>{o.partner_id}</td>}<td>{when(o.created_at)}</td><td>{inr(o.total)}</td>
         <td>{o.status}{!staff && <div style={{ fontSize: 12 }}>{STATUS_HELP[o.status]}</div>}{o.hold_reason && <div style={{ fontSize: 12 }}>Reason: {o.hold_reason}</div>}{o.cancel_reason && <div style={{ fontSize: 12 }}>Reason: {o.cancel_reason}</div>}</td>
         <td>{o.eta_from ? `${when(o.eta_from)} to ${when(o.eta_to)}` : ""}</td>
         <td style={{ whiteSpace: "nowrap" }}>{canSubmitProof(role, o.status) && <button className="btn sm" style={{ marginRight: 6 }} onClick={() => sendProof(o)}>I have paid</button>}{actionsFor(role, o.status).map((a) => <button key={a} className="btn sm" style={{ marginRight: 6 }} onClick={() => act(o, a)}>{({ approve: "Approve", pay: "Confirm payment", dispatch: "Dispatch", deliver: "Mark delivered", hold: "Hold", resume: "Resume", cancel: "Cancel" } as const)[a]}</button>)}</td></tr>

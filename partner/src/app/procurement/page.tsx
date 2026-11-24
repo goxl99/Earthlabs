@@ -8,23 +8,25 @@ import { coverDays, rmState, roActions, type RM, type RO } from "@/lib/procureme
 import type { Role } from "@/lib/roles";
 import { askForm, askConfirm, askReason, notify } from "@/lib/dialog";
 import SubTabs from "@/components/SubTabs";
+import AiAssistant from "@/components/AiAssistant";
 import { PROC_TABS } from "@/lib/procTabs";
 
 type Proc = { lead_buffer: number; ro_limit: number; auto_limit: number; advance_pct: number; auto_email: boolean };
 
 function Inner({ role }: { role: Role }) {
   const boss = role === "super_admin", wh = boss || role === "warehouse";
-  const [rms, setRms] = useState<RM[]>([]); const [ros, setRos] = useState<RO[]>([]); const [set, setSet] = useState<Proc | null>(null); const [msg, setMsg] = useState<{ ok: boolean; t: string } | null>(null);
+  const [view, setView] = useState<"stock" | "ai">("stock"); const [rms, setRms] = useState<RM[]>([]); const [ros, setRos] = useState<RO[]>([]); const [set, setSet] = useState<Proc | null>(null); const [msg, setMsg] = useState<{ ok: boolean; t: string } | null>(null);
   const load = useCallback(async () => {
     setRms(((await supabase.from("raw_materials").select("*").order("id").limit(100)).data as RM[]) ?? []);
     setRos(((await supabase.from("release_orders").select("*").order("created_at", { ascending: false }).limit(50)).data as RO[]) ?? []);
     setSet(((await supabase.from("settings").select("value").eq("key", "procurement").maybeSingle()).data?.value as Proc) ?? null);
   }, []);
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => { load(); const sync = () => setView(window.location.hash === "#assistant" ? "ai" : "stock"); sync(); window.addEventListener("hashchange", sync); return () => window.removeEventListener("hashchange", sync); }, [load]);
   async function call(fn: string, args: Record<string, unknown>) { const { error } = await supabase.rpc(fn, args); setMsg({ ok: !error, t: error ? error.message : "Done" }); load(); }
   const incoming = (id: string) => ros.filter((r) => r.rm_id === id && ["Approved", "Acknowledged", "Dispatched"].includes(r.status)).reduce((a, r) => a + Number(r.qty), 0);
   async function saveSettings(s: Proc) { const { error } = await supabase.from("settings").update({ value: s }).eq("key", "procurement"); setMsg({ ok: !error, t: error ? error.message : "Settings saved" }); load(); }
-  return (<><h1>Procurement & raw materials</h1><p className="sub">Vendor stock, raw-material inventory, release orders and credit. Everything adjustable by management. Linked to the Batch Management System.</p><SubTabs current="/procurement/" items={PROC_TABS} />{msg && <Msg kind={msg.ok ? "ok" : "bad"}>{msg.t}</Msg>}
+  return (<><h1>Procurement & raw materials</h1><p className="sub">Vendor stock, raw-material inventory, release orders and credit. Everything adjustable by management. Linked to the Batch Management System.</p><SubTabs current={view === "ai" ? "/procurement/#assistant" : "/procurement/"} items={PROC_TABS} />{msg && <Msg kind={msg.ok ? "ok" : "bad"}>{msg.t}</Msg>}
+    {view === "ai" ? <AiAssistant role={role} /> : <>
     <h2>Raw-material inventory</h2>
     <div className="card"><table><thead><tr><th>Item</th><th>On hand</th><th>Incoming</th><th>Cover</th><th>Lead</th><th>Vendor</th><th>State</th><th></th></tr></thead><tbody>
       {rms.map((m) => <tr key={m.id}><td>{m.name}<div style={{ fontSize: 12 }}>{m.id}</div></td><td>{m.on_hand} {m.unit}</td><td>{incoming(m.id)}</td><td>{coverDays(m) === 999 ? "n/a" : coverDays(m) + " d"}</td><td>{m.lead_days} d{m.v_lead ? ` (vendor ${m.v_lead})` : ""}</td><td>{m.vendor_id ?? "none"}</td><td>{rmState(m, incoming(m.id), set?.lead_buffer ?? 2)}</td>
@@ -44,6 +46,6 @@ function Inner({ role }: { role: Role }) {
       <p style={{ fontSize: 12 }}>Pay-and-carry: the vendor ships only after Accounts releases the advance, unless the vendor is on an approved credit level. Rate and lead time come from the database, not from this screen.</p></div>
     {set && <><h2>Procurement rules {boss ? "" : "(Super Admin changes these)"}</h2><div className="card">
       <p>Lead-time buffer: <b>{set.lead_buffer} days</b> · Approval limit (flag): <b>{inr(set.ro_limit)}</b> · Auto-approve up to: <b>{set.auto_limit ? inr(set.auto_limit) : "off"}</b> · Advance: <b>{set.advance_pct}%</b> · E-mail vendor on approval: <b>{set.auto_email ? "yes" : "no"}</b></p>
-      {boss && <button className="btn" onClick={async () => { const f = await askForm("Rules & lead times", [{ name: "lb", label: "Lead-time buffer (days)", type: "number", min: 0, value: set.lead_buffer }, { name: "ro", label: "Flag release orders above (₹)", type: "number", min: 0, value: set.ro_limit }, { name: "au", label: "Auto-approve up to (₹, 0 = off)", type: "number", min: 0, value: set.auto_limit }, { name: "ad", label: "Advance to pay before dispatch (%)", type: "number", min: 0, max: 100, value: set.advance_pct }], { ok: "Save rules" }); if (!f) return; saveSettings({ lead_buffer: Number(f.lb), ro_limit: Number(f.ro), auto_limit: Number(f.au), advance_pct: Number(f.ad), auto_email: set.auto_email }); }}>Change rules</button>}</div></>}</>);
+      {boss && <button className="btn" onClick={async () => { const f = await askForm("Rules & lead times", [{ name: "lb", label: "Lead-time buffer (days)", type: "number", min: 0, value: set.lead_buffer }, { name: "ro", label: "Flag release orders above (₹)", type: "number", min: 0, value: set.ro_limit }, { name: "au", label: "Auto-approve up to (₹, 0 = off)", type: "number", min: 0, value: set.auto_limit }, { name: "ad", label: "Advance to pay before dispatch (%)", type: "number", min: 0, max: 100, value: set.advance_pct }], { ok: "Save rules" }); if (!f) return; saveSettings({ lead_buffer: Number(f.lb), ro_limit: Number(f.ro), auto_limit: Number(f.au), advance_pct: Number(f.ad), auto_email: set.auto_email }); }}>Change rules</button>}</div></>}</>}</>);
 }
 export default function Page() { return <Shell page="procurement">{(p) => <Inner role={p.role} />}</Shell>; }

@@ -1,4 +1,5 @@
 "use client";
+import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import Shell from "@/components/Shell";
 import { supabase } from "@/lib/supabase";
@@ -56,7 +57,7 @@ function Inner({ role }: { role: Role }) {
     {tab === "invoices" && <><h2>Invoices</h2>
     <div className="card"><table><thead><tr><th>Invoice</th>{money && <th>Partner</th>}<th>Order</th><th>Date</th><th>Taxable</th><th>CGST</th><th>SGST</th><th>IGST</th><th>Total</th><th></th></tr></thead><tbody>
       {inv.map((i) => (<><tr key={i.id}><td><a href="#" onClick={(e) => { e.preventDefault(); show(i.id); }}>{i.id}</a></td>{money && <td>{i.partner_id}</td>}<td>{i.order_id}</td><td>{when(i.issued_on)}</td><td>{inr(i.taxable)}</td><td>{inr(i.cgst)}</td><td>{inr(i.sgst)}</td><td>{inr(i.igst)}</td><td>{inr(i.total)}</td>
-        <td>{money && <button className="btn" onClick={async () => { const f = await askForm(`Credit note against ${i.id}`, [{ name: "a", label: "Amount incl. GST (₹)", type: "number", required: true, min: 1, max: Number(i.total), hint: `Maximum ${inr(i.total)}` }, { name: "why", label: "Reason", type: "textarea", required: true }], { ok: "Issue credit note" }); if (f) call("issue_credit_note", { inv_id: i.id, amt: Number(f.a), why: f.why.trim() }); }}>Credit note</button>}</td></tr>
+        <td style={{ whiteSpace: "nowrap" }}><Link className="btn sm" style={{ marginRight: 6 }} href={`/doc/?k=invoice&id=${encodeURIComponent(i.id)}`} target="_blank" rel="noopener">View / print</Link>{money && <button className="btn" onClick={async () => { const f = await askForm(`Credit note against ${i.id}`, [{ name: "a", label: "Amount incl. GST (₹)", type: "number", required: true, min: 1, max: Number(i.total), hint: `Maximum ${inr(i.total)}` }, { name: "why", label: "Reason", type: "textarea", required: true }], { ok: "Issue credit note" }); if (f) call("issue_credit_note", { inv_id: i.id, amt: Number(f.a), why: f.why.trim() }); }}>Credit note</button>}</td></tr>
         {open === i.id && <tr key={i.id + "d"}><td colSpan={10}><table><tbody>{lines.map((l) => <tr key={l.sku}><td>{l.name}</td><td>{l.units} units</td><td>{inr(l.unit_price)} / unit</td><td>{inr(l.amount)}</td></tr>)}</tbody></table>
           <p style={{ margin: "8px 0 0" }}>Place of supply: {i.supply_state}</p></td></tr>}</>))}
       {inv.length === 0 && <tr><td colSpan={10}>No invoices yet.</td></tr>}</tbody></table></div>

@@ -2,10 +2,12 @@
 import { useCallback, useEffect, useState } from "react";
 import Shell from "@/components/Shell";
 import { supabase } from "@/lib/supabase";
-import { Msg, when } from "@/components/ui";
+import { Msg, when, Kpi } from "@/components/ui";
+import { inr } from "@/lib/orders";
 import type { Role } from "@/lib/roles";
 import { askReason } from "@/lib/dialog";
 import { EFFECT, KIND_LABEL, supporting, canAct } from "@/lib/ai";
+import type { Insights } from "@/lib/aiAssist";
 
 type R = { id: number; kind: string; title: string; reasons: string[]; status: string; created_at: string; model: string | null; target_kind: string | null; target_id: string | null; payload: Record<string, unknown> | null; note: string | null };
 
@@ -13,7 +15,8 @@ function Inner({ role }: { role: Role }) {
   const boss = role === "super_admin";
   const [recs, setRecs] = useState<R[]>([]); const [msg, setMsg] = useState<{ ok: boolean; t: string } | null>(null); const [busy, setBusy] = useState(false);
   const load = useCallback(async () => { setRecs(((await supabase.from("ai_recommendations").select("*").order("created_at", { ascending: false }).limit(50)).data as R[]) ?? []); }, []);
-  useEffect(() => { load(); }, [load]);
+  const [ins, setIns] = useState<Insights | null>(null);
+  useEffect(() => { load(); supabase.rpc("ai_insights").then(({ data }) => setIns((data as Insights) ?? null)); }, [load]);
   async function run() {
     setBusy(true); const { data, error } = await supabase.functions.invoke("ai-recommend", { body: {} }); setBusy(false);
     setMsg({ ok: !error && !data?.error, t: error || data?.error ? (data?.error ?? error?.message ?? "Failed") : `Done: ${data.stored} recommendations, ${data.credit_proposals} credit proposals${data.dropped ? `, ${data.dropped} dropped as invalid` : ""}` }); load();
@@ -27,6 +30,12 @@ function Inner({ role }: { role: Role }) {
     const { error } = await supabase.rpc("defer_ai_recommendation", { rid: id, why }); setMsg({ ok: !error, t: error ? error.message : "Deferred. It stays open for a later decision." }); load();
   }
   return (<><h1>AI Intelligence</h1><p><b>AI recommends. Management approves.</b> The assistant never approves promotions, credit, prices, agreements or suspensions. It sees ids and numbers only, never names, contacts or prices.</p>
+    {ins && <><h2>This month at a glance</h2><div className="grid g4" style={{ gap: 12, marginBottom: 12 }}>
+      <Kpi label="Top performer" value={ins.top ? ins.top.name : "No orders yet"} note={ins.top ? `${ins.top.id} · ${inr(ins.top.value90)} in 90 days · ${ins.top.orders90} order(s)` : "Appears after the first orders"} />
+      <Kpi label="Declining / at risk" value={ins.at_risk.length} note={ins.at_risk.length ? ins.at_risk.slice(0, 3).map((x) => `${x.id}: ${inr(x.last30)} vs ${inr(x.prev30)} before`).join(" · ") : "No partner has dropped below half of last month"} />
+      <Kpi label="Inactive (60 days)" value={ins.inactive.length} note={ins.inactive.length ? ins.inactive.slice(0, 4).map((x) => x.id).join(", ") : "Every active partner has ordered recently"} />
+      <Kpi label="Collection forecast" value={inr(ins.forecast.outstanding)} note={`${ins.forecast.partners_owing} partner(s) owe money · ${inr(ins.forecast.orders_in_hand)} of orders in hand`} />
+    </div><div className="mini" style={{ marginBottom: 12 }}>Computed from orders and the ledger. These cards inform; they decide nothing.</div></>}
     {msg && <Msg kind={msg.ok ? "ok" : "bad"}>{msg.t}</Msg>}
     <p><button className="btn" disabled={busy} onClick={run}>{busy ? "Thinking…" : "Generate recommendations"}</button></p>
     {recs.map((r) => <div className="card" key={r.id} style={{ marginBottom: 10 }}><b>{KIND_LABEL[r.kind] ?? r.kind}</b> · {r.status} · {when(r.created_at)}<div style={{ margin: "4px 0" }}><b>{r.title}</b></div>

@@ -30,9 +30,9 @@ Branch: `epdms-walkthrough-complete`. Everything that already worked was kept; t
 | Products & Pricing (8 tabs) | A | `/catalogue/`, `/schemes/`, `/schemes/partners/`, `/catalogue/policies/` | All eight tabs exist. Policies & weights edits lead time and pay-and-carry. Score weights are edited on Performance. |
 | Orders | B | `/orders/` | Not re-audited against the order drawer. |
 | Inventory & Dispatch | A | `/inventory/` | Four tabs: Stock, Batches, Dispatches, Traceability (batch to dispatches, orders, partners). |
-| Procurement & Raw Materials | B | `/procurement/`, `/rfq/`, `/bom/`, `/credit/` | Tabs linked. The AI assistant inside Procurement is not built: AI recommendations live on AI Intelligence. |
+| Procurement & Raw Materials | B | `/procurement/`, `/rfq/`, `/bom/`, `/credit/` | Tabs linked. AI assistant tab built (build 12): five quick questions answered by the database from live data (`ai_assist`), reorder answers can raise a release order that still needs approval. |
 | Invoices & Payments | A | `/invoices/` | Four tabs. Credit & reminders sends one reminder per partner per 24 hours (migration 025). |
-| AI Intelligence | A | `/ai/` | Cards show Supporting data, Reasoning and Risk. Approve, Defer, Reject (migration 022). The "Risk" text describes what approval does. It is not a model-generated risk score. |
+| AI Intelligence | A | `/ai/` | Build 12 adds the four glance cards (top performer, declining, inactive, collection forecast; `ai_insights`). Cards show Supporting data, Reasoning and Risk. Approve, Defer, Reject (migration 022). The "Risk" text describes what approval does. It is not a model-generated risk score. |
 | Vendors | A | `/vendors/`, `/vendors/invoices/` | Staff accept, reject and pay vendor invoices. |
 | Reports & Exports | B | `/reports/` | Not re-audited. |
 | Notifications & Automation | B | `/notifications/` | Two tabs (Triggers & templates, Sent log). Editing and previewing message text is not built: the text is generated in the database and editing it would change live behaviour. |
@@ -87,10 +87,14 @@ Branch: `epdms-walkthrough-complete`. Everything that already worked was kept; t
 - Editable notification templates.
 - Territory cluster and circle editing.
 - Click-to-drop map pin on registration.
-- AI assistant inside Procurement.
 - Pages marked "not re-audited": a line-by-line check against the walkthrough screens is still owed.
 
 ## Found and fixed on this branch
 
 - Bootstrap lock: one of the two source lines had dropped the row lock that lets only one first sign-up become Super Admin. Restored (migration 018b).
 - Eight internal database functions could be called by anonymous visitors. Closed (migration 019b).
+
+
+## Build 12 additions
+- Printable Tax Invoice and Purchase Order (`/doc/`, function `trade_doc`). Open items: no HSN code field on SKUs and no bank details in the company profile, so neither is printed.
+- Test distributor ELP-DST-0001 (Active, no login yet; Super Admin issues it from Users). Delete after review.

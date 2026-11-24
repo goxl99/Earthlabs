@@ -56,6 +56,8 @@ export const SUGGESTIONS = [
   ["🧾 Who owes us money?", "Make a customer-wise outstanding report with invoice dates and how late each is. Who should I call first?"],
   ["🧴 What to buy / reorder", "Which raw materials and packaging are low or will run out for the planned production? Give a reorder list as a table."],
   ["🎯 Reach 30% margin", "Using my unit economics, what MRP or cost changes would give a 30% margin on the 5 ml sachet and on the 250 ml bottle? Show scenarios in a table."],
+  ["🚀 On track for ₹100 Cr?", "Look at the founder snapshot and the EPDMS network. Are we on track for my vision? Show where we are vs the path in a table, and the three biggest gaps."],
+  ["🤝 Network I need", "How many dealers, distributors and stockists do I need to reach my vision and what should I do in the next 90 days? Use the EPDMS network data."],
   ["✅ What should I do this week?", "Look at everything and tell me the top 5 things to do this week, ranked by money impact."],
 ];
 let HIST = [], BUSY = false;

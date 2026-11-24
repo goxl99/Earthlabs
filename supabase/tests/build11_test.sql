@@ -162,4 +162,21 @@ select pg_temp.as_user(null); set role anon;
 select pg_temp.fails($q$select dashboard_territory()$q$, 'permission denied');
 reset role;
 -- the ledger is append-only, so the isolated test partner and its rows stay; the test database is rebuilt on every run
+-- payment reminders
+select pg_temp.as_user('00000000-0000-0000-0000-000000000005'); set role authenticated;
+select pg_temp.fails($q$select send_payment_reminder('ELP-DLR-0001')$q$, 'nothing overdue');
+select send_payment_reminder('ELP-DLR-9001');
+select pg_temp.fails($q$select send_payment_reminder('ELP-DLR-9001')$q$, 'last 24 hours');
+do $$ begin assert (select count(*) from payment_reminders where partner_id='ELP-DLR-9001')=1 and (select amount from payment_reminders where partner_id='ELP-DLR-9001')=300, 'reminder logged with the overdue amount'; end $$;
+reset role;
+select pg_temp.as_user('00000000-0000-0000-0000-000000000002'); set role authenticated;
+select pg_temp.fails($q$select send_payment_reminder('ELP-DLR-9001')$q$, 'Only Accounts');
+do $$ begin assert (select count(*) from payment_reminders)=0, 'sales cannot read reminders'; end $$;
+reset role;
+select pg_temp.as_user('00000000-0000-0000-0000-000000000004'); set role authenticated;
+select pg_temp.fails($q$select send_payment_reminder('ELP-DLR-9001')$q$, 'Only Accounts');
+reset role;
+select pg_temp.as_user(null); set role anon;
+select pg_temp.fails($q$select send_payment_reminder('ELP-DLR-9001')$q$, 'permission denied');
+reset role;
 \echo BUILD 11 DASHBOARD TESTS PASSED

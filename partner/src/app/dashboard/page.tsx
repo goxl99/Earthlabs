@@ -56,7 +56,7 @@ function StaffDashboard({ role }: { role: Role }) {
         <T l="Active vendors" v={o.vendors_active} d={`${o.vendors_pending} in verification`} to="/vendors/" />
         <T l="Pending approvals" v={o.pending_apps + o.pending_orders_approval} d={`${o.pending_apps} applications · ${o.pending_orders_approval} orders`} to="/applications/" />
         <T l="Pending agreements" v={o.pending_agreements} d="MOU drafts waiting" to="/agreements/" />
-        <T l="Payments to verify" v={o.proofs_to_verify} d="proofs uploaded" to="/invoices/" />
+        <T l="Payments to verify" v={o.proofs_to_verify} d="proofs uploaded" to="/invoices/#payments" />
         <T l="Promotion eligible" v={o.promotion_eligible} d="for management assessment" to="/performance/" />
         <T l="Unverified secondary" v={o.unverified_partners} d="partners with no verified data" to="/performance/" />
       </div></>}

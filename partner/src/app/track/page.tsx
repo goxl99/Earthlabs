@@ -15,9 +15,9 @@ const NEXT: Record<string, string> = {
   "Documents submitted": "We have your documents and are checking them.",
   "More info needed": "We need something corrected. See the note below and use the Documents tab.",
   "Field verification": "Your documents are cleared. We will contact you for a meeting or field visit.",
-  "Agreement pending": "You are approved. Watch your e-mail and phone for the MOU (agreement) from Leegality and sign it. Your login ID and password follow once it is signed.",
-  "MOU signed": "Both sides have signed your MOU. EarthLabs is approving the signed copy. Your certificate, login ID and password will be e-mailed next.",
-  "Approved": "Your MOU is signed and approved. Your login ID and password were e-mailed to you. Sign in from the sign-in page.",
+  "Agreement pending": "You are approved. Watch your e-mail and phone for the Dealer Agreement from Leegality and sign it. Your login ID and password follow once it is signed.",
+  "MOU signed": "Both sides have signed your Dealer Agreement. EarthLabs is approving the signed copy. Your certificate, login ID and password will be e-mailed next.",
+  "Approved": "Your Dealer Agreement is signed and approved. Your login ID and password were e-mailed to you. Sign in from the sign-in page.",
   "Rejected": "This application was not approved.",
 };
 export default function Track() {

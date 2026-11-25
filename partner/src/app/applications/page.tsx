@@ -114,7 +114,7 @@ function Inner({ role }: { role: string }) {
     return (<>
       <div className="row"><Badge kind={kind(a.status)}>{a.status}</Badge><Chip c={a.type_code} />{a.partner_id && <Badge kind="good">Partner ID {a.partner_id}</Badge>}</div>
       {["Documents submitted", "Field verification"].includes(a.status) && !canApprove && <div className="note">Final approval stays with authorised EarthLabs management. Your role ({role.replace("_", " ")}) can verify and recommend, not approve.</div>}
-      {["Agreement pending", "MOU signed"].includes(a.status) && <div className="note">Approved. The rest happens on Agreements &amp; Certificates: prepare and send the MOU, then approve the signed copy to activate the partner.</div>}
+      {["Agreement pending", "MOU signed"].includes(a.status) && <div className="note">Approved. The rest happens on Agreements &amp; Certificates: prepare and send the Dealer Agreement, then approve the signed copy to activate the partner.</div>}
       <div className="note ai"><b>✦ AI application review</b> <span className="mini">(rule-based on the answers below; the recommendation never approves anything)</span><p style={{ margin: "6px 0 0" }}>{r.summary}</p></div>
       <div className="grid g2">
         <div className="card flat"><h3>Completeness</h3><div style={{ fontSize: 22, fontWeight: 700 }}>{r.comp}%</div><div className="bar"><i className={r.comp === 100 ? "g" : "w"} style={{ width: `${r.comp}%` }} /></div>
@@ -123,7 +123,7 @@ function Inner({ role }: { role: string }) {
       {(r.risks.length > 0 || r.checks.length > 0) && <><h3 style={{ marginTop: 12 }}>Risks and checks</h3>{r.risks.map((x, i) => <div key={i} className={`note${x[0] === "crit" ? " bad" : ""}`}>{x[0] === "crit" ? "⛔" : "⚠"} {x[1]}</div>)}{r.checks.map((x, i) => <div key={i} className="note">ℹ {x}</div>)}</>}
       {r.join && <><h3 style={{ marginTop: 12 }}>Joining criteria (from your Performance Matrix)</h3>
         <div className="tw"><table className="t"><thead><tr><th>Criterion</th><th className="n">Weight</th><th className="n">Actual</th><th className="n">Score</th><th className="n">Min</th></tr></thead><tbody>{r.join.rows.map((x) => <tr key={x.n}><td>{x.n}</td><td className="n">{Math.round(x.w * 100)}%</td><td className="n">{x.actual == null ? <Badge kind="mute">Unverified</Badge> : x.actual}</td><td className="n">{x.score == null ? "—" : Math.round(x.score * 100) + (x.pass ? "" : " ⚠")}</td><td className="n">{Math.round(x.min * 100)}</td></tr>)}</tbody></table></div>
-        <p className="mini">Unverified items are shown separately and not counted as zero. Must-pass: valid company registration ({a.reg_verified ? "verified" : <b style={{ color: "var(--crit)" }}>not verified</b>}); the signed MOU and opening order come later.</p></>}
+        <p className="mini">Unverified items are shown separately and not counted as zero. Must-pass: valid company registration ({a.reg_verified ? "verified" : <b style={{ color: "var(--crit)" }}>not verified</b>}); the signed Dealer Agreement and opening order come later.</p></>}
       <h3 style={{ marginTop: 12 }}>Applicant</h3><div className="mini">{a.contact_name} · {a.phone} · {a.email}{a.gstin ? ` · GSTIN ${a.gstin}` : ""} · submitted {when(a.created_at)}</div>
       <h3 style={{ marginTop: 12 }}>Their answers</h3>
       <div className="tw"><table className="t"><thead><tr><th>Question</th><th>Answer</th></tr></thead><tbody>{qs.map((q) => <tr key={q.key}><td>{q.label}</td><td>{answer(a, q) ?? "—"}</td></tr>)}</tbody></table></div>

@@ -6,7 +6,7 @@ export const MOU_FIELD_HELP: [MouField, string][] = [
   ["partner_name", "The partner's registered business name"], ["partner_id", "The permanent Partner ID, for example ELP-DLR-0001"],
   ["contact_name", "The partner's contact person"], ["district", "The partner's district"], ["state", "The partner's state"],
   ["gstin", "GST number (blank if the partner has none)"], ["type_name", "Partner type, for example Authorized Dealer"],
-  ["date", "The date the MOU is prepared, for example 25 November 2026"], ["territory", "The allocated territory (the district if none is allocated yet)"],
+  ["date", "The date the agreement is prepared, for example 25 November 2026"], ["territory", "The allocated territory (the district if none is allocated yet)"],
 ];
 
 /** Parses lines like `{{NAME}} = partner_name` into a placeholder map. Returns an error text for the first bad line. */
@@ -80,4 +80,12 @@ export function fillDocx(bytes: Uint8Array, map: Record<string, MouField>, value
   const r = fillDocXml(strFromU8(files[name]), map, values);
   files[name] = strToU8(r.xml);
   return { bytes: zipSync(files), replaced: r.replaced };
+}
+
+/** Plain text of a Word (.docx) file, one blank line between paragraphs. Used to attach an agreement template and then fill its {{placeholders}}. */
+export function docxToText(bytes: Uint8Array): string {
+  const doc = unzipSync(bytes)["word/document.xml"];
+  if (!doc) throw new Error("This does not look like a Word (.docx) file");
+  const paras = [...strFromU8(doc).matchAll(/<w:p[ >][\s\S]*?<\/w:p>/g)].map((m) => [...m[0].matchAll(/<w:t(?: [^>]*)?>([\s\S]*?)<\/w:t>/g)].map((t) => unesc(t[1])).join(""));
+  return paras.join("\n\n").replace(/\n{3,}/g, "\n\n").trim();
 }

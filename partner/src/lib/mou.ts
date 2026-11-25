@@ -6,7 +6,7 @@ export const MOU_FIELD_HELP: [MouField, string][] = [
   ["partner_name", "The partner's registered business name"], ["partner_id", "The permanent Partner ID, for example ELP-DLR-0001"],
   ["contact_name", "The partner's contact person"], ["district", "The partner's district"], ["state", "The partner's state"],
   ["gstin", "GST number (blank if the partner has none)"], ["type_name", "Partner type, for example Authorized Dealer"],
-  ["territory", "The allocated territory (the district if none is allocated yet)"], ["date", "The date the MOU is prepared, for example 25 November 2026"],
+  ["date", "The date the MOU is prepared, for example 25 November 2026"], ["territory", "The allocated territory (the district if none is allocated yet)"],
 ];
 
 /** Parses lines like `{{NAME}} = partner_name` into a placeholder map. Returns an error text for the first bad line. */

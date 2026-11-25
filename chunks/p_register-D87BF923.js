@@ -16,18 +16,19 @@ const BUCKETS = [["0–30 days", 0, 30], ["31–60 days", 31, 60], ["61–90 day
 // ---------- data ----------
 async function load() {
   const get = async q => { const { data, error } = await q; if (error) throw new Error(error.message); return data || []; };
-  const [inv, bal, pay, cus, ord, set] = await Promise.all([
+  const [inv, bal, pay, cus, ord, set, es] = await Promise.all([
     get(sb.from("tax_invoices").select("id,invoice_no,invoice_date,taxable,tax,total,status,order_id,data").order("invoice_date", { ascending: false }).limit(5000)),
     get(sb.from("v_invoice_balance").select("invoice_no,customer_id,customer,total,paid,balance")),
     get(sb.from("customer_payments").select("id,customer_id,invoice_id,paid_on,amount,mode,ref,notes,bank_txn_id,epdms_order_id,epdms_ref").order("paid_on", { ascending: false }).limit(5000)),
     get(sb.from("customers").select("id,name,gstin,state,customer_type,epdms_partner_id")),
     get(sb.from("sales_orders").select("id,order_no,source,epdms_order_id,epdms_invoice_no")),
     get(sb.from("app_settings").select("key,value")).catch(() => []),
+    get(sb.from("earlier_sales").select("id,sale_date,customer_id,kind,product,qty,amount,gst_amount,total,received,payment_id,doc_no").order("sale_date", { ascending: false })).catch(() => []),
   ]);
-  return build({ inv, bal, pay, cus, ord, set });
+  return build({ inv, bal, pay, cus, ord, set, es });
 }
 
-export function build({ inv, bal, pay, cus, ord, set }, today = iso(new Date())) {
+export function build({ inv, bal, pay, cus, ord, set, es = [] }, today = iso(new Date())) {
   const cusBy = Object.fromEntries(cus.map(c => [c.id, c])), ordBy = Object.fromEntries(ord.map(o => [o.id, o]));
   const balBy = Object.fromEntries(bal.map(b => [b.invoice_no, b])), invById = Object.fromEntries(inv.map(i => [i.id, i]));
   const days = d => Math.max(0, Math.floor((new Date(today) - new Date(String(d).slice(0, 10))) / 864e5));
@@ -49,11 +50,34 @@ export function build({ inv, bal, pay, cus, ord, set }, today = iso(new Date()))
     const i = invById[p.invoice_id], c = cusBy[p.customer_id] || {}, fromEpdms = !!(p.epdms_ref || p.epdms_order_id);
     return {
       id: p.id, date: String(p.paid_on).slice(0, 10), cust: c.name || "", custId: p.customer_id || "", inv: i?.invoice_no || "", amount: n(p.amount), mode: MODE[p.mode] || p.mode || "",
-      ref: p.ref || p.epdms_ref || "", src: fromEpdms ? "EPDMS" : p.bank_txn_id ? "Bank statement" : "Entered here", epdmsOrder: p.epdms_order_id || "", onAcct: !p.invoice_id, note: p.notes || "",
+      ref: p.ref || p.epdms_ref || "", src: fromEpdms ? "EPDMS" : p.bank_txn_id ? "Bank statement" : "Entered here", epdmsOrder: p.epdms_order_id || "", onAcct: !p.invoice_id, advance: p.invoice_id ? 0 : n(p.amount), auto: false, note: p.notes || "",
     };
   });
   const company = Object.fromEntries((set || []).map(s => [s.key, s.value]));
-  return { invoices, payments, cus, ord, cancelledNos, company, today, days, invById };
+  // Sales recorded as "earlier records" (before the system) are invoices too: ELI/001, ELI/002 ...
+  const payById = Object.fromEntries(payments.map(p => [p.id, p])), used = new Set();
+  const esInv = es.map(e => {
+    const c = cusBy[e.customer_id] || {}, tax = n(e.gst_amount), half = r2(tax / 2), lp = e.payment_id && payById[e.payment_id];
+    if (lp) { used.add(lp.id); lp.inv = e.doc_no || "earlier sale"; lp.onAcct = false; lp.advance = 0; }
+    return { id: "es:" + e.id, no: e.doc_no || "(no number)", date: String(e.sale_date).slice(0, 10), cust: c.name || "", custId: e.customer_id || "", custType: c.customer_type || "", gstin: c.gstin || "", state: c.state || "", order: "", dc: "", taxable: n(e.amount), cgst: half, sgst: r2(tax - half), igst: 0, tax, total: n(e.total) || n(e.amount) + tax, paid: lp ? lp.amount : n(e.received), balance: 0, age: 0, status: "", src: "Before system", epdmsInv: "", product: e.product || "" };
+  });
+  esInv.forEach(i => { i.balance = i.total - i.paid; });
+  const all = [...invoices, ...esInv];
+  // Payments saved without an invoice are matched to the customer's oldest unpaid invoices.
+  const pool = {}; payments.filter(p => p.onAcct && !used.has(p.id)).forEach(p => (pool[p.custId] || (pool[p.custId] = [])).push(p));
+  Object.entries(pool).forEach(([cid, ps]) => {
+    ps.sort((a, b) => a.date.localeCompare(b.date));
+    ps.forEach(p => {
+      const open = all.filter(i => i.custId === cid && i.balance > 0.005).sort((a, b) => a.date.localeCompare(b.date) || a.no.localeCompare(b.no));
+      let left = p.amount; const hit = [], exact = open.find(i => Math.abs(i.balance - p.amount) <= 1);
+      for (const i of exact ? [exact] : open) { if (left <= 0.005) break; const x = Math.min(left, i.balance); i.paid += x; i.balance -= x; left -= x; hit.push(i.no); }
+      if (hit.length && left <= 1) left = 0;
+      if (hit.length) { p.inv = hit.join(", "); p.auto = true; p.advance = left > 0.005 ? r2(left) : 0; p.onAcct = p.advance > 0; }
+    });
+  });
+  all.forEach(i => { if (i.balance > 0.005 && i.balance <= 1) { i.roundoff = r2(i.balance); i.balance = 0; } i.status = i.balance <= 0.005 ? "Paid" : i.paid > 0.005 ? "Part paid" : "Unpaid"; i.age = i.balance > 0.005 ? days(i.date) : 0; });
+  all.sort((a, b) => b.date.localeCompare(a.date) || b.no.localeCompare(a.no));
+  return { invoices: all, payments, cus, ord, cancelledNos, company, today, days, invById };
 }
 
 // ---------- calculations ----------
@@ -66,7 +90,7 @@ export function scope(M, F) {
 
 export function kpis(M, S) {
   const invoiced = sum(S.invoices, i => i.total), collected = sum(S.invoices, i => i.paid), pending = sum(S.invoices, i => i.balance);
-  const overdue = sum(S.invoices.filter(i => i.age > 30), i => i.balance), advances = sum(S.payments.filter(p => p.onAcct), p => p.amount);
+  const overdue = sum(S.invoices.filter(i => i.age > 30), i => i.balance), advances = sum(S.payments, p => p.advance);
   const linked = S.payments.filter(p => !p.onAcct), byNo = Object.fromEntries(M.invoices.map(i => [i.no, i]));
   let w = 0, a = 0; linked.forEach(p => { const i = byNo[p.inv]; if (i) { w += p.amount * Math.max(0, (new Date(p.date) - new Date(i.date)) / 864e5); a += p.amount; } });
   const last90 = M.invoices.filter(i => M.days(i.date) <= 90), s90 = sum(last90, i => i.total);
@@ -77,7 +101,7 @@ export function ageing(M, S) {
   const by = {};
   const row = (id, name) => by[id] || (by[id] = { id, name, b: [0, 0, 0, 0], pending: 0, advance: 0, n: 0 });
   S.invoices.filter(i => i.balance > 0.005).forEach(i => { const r = row(i.custId || i.cust, i.cust); const k = BUCKETS.findIndex(([, a, b]) => i.age >= a && i.age <= b); r.b[k < 0 ? 3 : k] += i.balance; r.pending += i.balance; r.n++; });
-  S.payments.filter(p => p.onAcct).forEach(p => { const r = row(p.custId || p.cust, p.cust); r.advance += p.amount; });
+  S.payments.filter(p => p.advance > 0.005).forEach(p => { const r = row(p.custId || p.cust, p.cust); r.advance += p.advance; });
   return Object.values(by).map(r => ({ ...r, net: Math.max(0, r.pending - r.advance) })).sort((a, b) => b.pending - a.pending);
 }
 
@@ -98,8 +122,8 @@ export function checks(M, S) {
   const old = S.invoices.filter(i => i.balance > 0.005 && i.age > 90);
   add(old.length ? "high" : "ok", "Unpaid for more than 90 days", old.length ? `${old.length} invoice${old.length > 1 ? "s" : ""}, ${R(sum(old, i => i.balance))}. Follow up or consider a provision for doubtful debts.` : "Nothing is unpaid beyond 90 days.", old.map(i => `${i.no} · ${i.cust} · ${R(i.balance)} · ${i.age} days`));
   // 3. advances
-  const adv = S.payments.filter(p => p.onAcct);
-  add(adv.length ? "warn" : "ok", "Payments not linked to an invoice", adv.length ? `${adv.length} payment${adv.length > 1 ? "s" : ""}, ${R(sum(adv, p => p.amount))}, treated as advance / on account. Link them to invoices so the pending list is right.` : "Every payment is linked to an invoice.", adv.map(p => `${p.date} · ${p.cust} · ${R(p.amount)}${p.ref ? " · " + p.ref : ""}`));
+  const adv = S.payments.filter(p => p.advance > 0.005);
+  add(adv.length ? "warn" : "ok", "Payments not linked to an invoice", adv.length ? `${adv.length} payment${adv.length > 1 ? "s" : ""}, ${R(sum(adv, p => p.advance))}, treated as advance / on account. Link them to invoices so the pending list is right.` : "Every payment is linked to an invoice.", adv.map(p => `${p.date} · ${p.cust} · ${R(p.advance)}${p.ref ? " · " + p.ref : ""}`));
   // 4. duplicate references
   const refs = {}; M.payments.filter(p => p.ref).forEach(p => (refs[p.ref.toLowerCase()] || (refs[p.ref.toLowerCase()] = [])).push(p));
   const dup = Object.values(refs).filter(a => a.length > 1);
@@ -119,8 +143,10 @@ export function checks(M, S) {
 
 export function statement(M, custId) {
   const inv = M.invoices.filter(i => i.custId === custId).map(i => ({ d: i.date, doc: "Invoice " + i.no, dr: i.total, cr: 0 }));
-  const pay = M.payments.filter(p => p.custId === custId).map(p => ({ d: p.date, doc: "Payment " + (p.mode || "") + (p.ref ? " " + p.ref : "") + (p.inv ? " against " + p.inv : " (on account)"), dr: 0, cr: p.amount }));
-  let run = 0; return [...inv, ...pay].sort((a, b) => a.d.localeCompare(b.d) || (b.dr - a.dr)).map(x => ({ ...x, bal: (run += x.dr - x.cr) }));
+  const pay = M.payments.filter(p => p.custId === custId).map(p => ({ d: p.date, doc: "Payment " + (p.mode || "") + (p.ref ? " " + p.ref : "") + (p.inv ? " against " + p.inv + (p.auto ? " (matched)" : "") : " (on account)"), dr: 0, cr: p.amount }));
+  let run = 0; const rows = [...inv, ...pay].sort((a, b) => a.d.localeCompare(b.d) || (b.dr - a.dr)).map(x => ({ ...x, bal: (run += x.dr - x.cr) }));
+  if (rows.length && run > 0.005 && run <= 1) rows.push({ d: rows[rows.length - 1].d, doc: "Round-off", dr: 0, cr: r2(run), bal: 0 });
+  return rows;
 }
 
 // ---------- Excel ----------
@@ -130,10 +156,10 @@ export async function saveBook(name, sheets) {
   sheets.forEach(([title, rows]) => { const ws = X.utils.aoa_to_sheet(rows); ws["!cols"] = rows[0].map((_, c) => ({ wch: Math.min(40, Math.max(10, ...rows.slice(0, 60).map(r => String(r[c] ?? "").length + 2))) })); X.utils.book_append_sheet(wb, ws, title.slice(0, 31)); });
   dl(name, new Blob([X.write(wb, { bookType: "xlsx", type: "array" })], { type: "application/octet-stream" }));
 }
-const invHead = ["Invoice no", "Invoice date", "Customer", "Customer GSTIN", "Place of supply", "Order", "Challan", "Taxable value", "CGST", "SGST", "IGST", "Total GST", "Invoice total", "Collected till date", "Balance pending", "Days outstanding", "Status", "Source"];
-const invRow = i => [i.no, i.date, i.cust, i.gstin, i.state, i.order, i.dc, r2(i.taxable), r2(i.cgst), r2(i.sgst), r2(i.igst), r2(i.tax), r2(i.total), r2(i.paid), r2(i.balance), i.balance > 0.005 ? i.age : "", i.status, i.src];
+const invHead = ["Invoice no", "Invoice date", "Customer", "Customer GSTIN", "Place of supply", "Order", "Challan", "Taxable value", "CGST", "SGST", "IGST", "Total GST", "Invoice total", "Collected till date", "Balance pending", "Days outstanding", "Status", "Source", "Round-off difference"];
+const invRow = i => [i.no, i.date, i.cust, i.gstin, i.state, i.order, i.dc, r2(i.taxable), r2(i.cgst), r2(i.sgst), r2(i.igst), r2(i.tax), r2(i.total), r2(i.paid), r2(i.balance), i.balance > 0.005 ? i.age : "", i.status, i.src, i.roundoff ? r2(i.roundoff) : ""];
 const payHead = ["Payment date", "Customer", "Against invoice", "Amount", "Mode", "Reference / UTR", "Source", "EPDMS order", "Notes"];
-const payRow = p => [p.date, p.cust, p.inv || "On account / advance", r2(p.amount), p.mode, p.ref, p.src, p.epdmsOrder, p.note];
+const payRow = p => [p.date, p.cust, p.inv ? p.inv + (p.auto ? " (matched)" : "") : "On account / advance", r2(p.amount), p.mode, p.ref, p.src, p.epdmsOrder, p.note];
 const totalRow = (head, rows, cols) => head.map((_, c) => c === 0 ? "TOTAL" : cols.includes(c) ? r2(rows.reduce((t, r) => t + n(r[c]), 0)) : "");
 
 export function packSheets(M, S, F, opts = {}) {
@@ -156,6 +182,56 @@ export function packSheets(M, S, F, opts = {}) {
 export async function downloadCAPack(F = { from: "", to: "", cust: "" }) {
   const M = await load(), S = scope(M, F);
   await saveBook(`EarthLabs-invoices-and-collections-${M.today}.xlsx`, packSheets(M, S, F));
+}
+
+
+// ---------- orders in hand (customer orders received but not yet delivered) ----------
+export function orderBook(orders, lines, custs = [], today = iso(new Date())) {
+  const cBy = Object.fromEntries(custs.map(c => [c.id, c.name])), days = d => Math.max(0, Math.floor((new Date(today) - new Date(String(d).slice(0, 10))) / 864e5));
+  const out = [], byProd = {}, byCust = {};
+  (orders || []).filter(o => o.status === "open" || o.status === "part_delivered").forEach(o => {
+    const L = (lines || []).filter(l => l.order_id === o.id).map(l => { const pend = Math.max(0, n(l.qty) - n(l.delivered_qty)), value = r2(pend * n(l.rate)), gst = r2(value * n(l.gst_pct) / 100); return { desc: l.description || "Item", pend, ordered: n(l.qty), rate: n(l.rate), value, gst }; }).filter(l => l.pend > 0.0005);
+    if (!L.length) return;
+    const value = sum(L, l => l.value), gst = sum(L, l => l.gst), cust = cBy[o.customer_id] || o.customers?.name || "";
+    out.push({ id: o.id, no: o.order_no, date: String(o.order_date).slice(0, 10), cust, source: o.source === "epdms" ? "EPDMS" : "Entered here", status: o.status === "part_delivered" ? "Part delivered" : "Open", lines: L, units: sum(L, l => l.pend), value, gst, total: r2(value + gst), age: days(o.order_date) });
+    L.forEach(l => { const q = byProd[l.desc] || (byProd[l.desc] = { desc: l.desc, units: 0, value: 0, total: 0, orders: 0 }); q.units += l.pend; q.value += l.value; q.total += l.value + l.gst; q.orders++; });
+    const c = byCust[cust] || (byCust[cust] = { cust, orders: 0, units: 0, value: 0, total: 0 }); c.orders++; c.units += sum(L, l => l.pend); c.value += value; c.total += value + gst;
+  });
+  out.sort((a, b) => a.date.localeCompare(b.date) || a.no.localeCompare(b.no));
+  return { orders: out, products: Object.values(byProd).sort((a, b) => b.value - a.value), customers: Object.values(byCust).sort((a, b) => b.value - a.value), units: sum(out, o => o.units), value: sum(out, o => o.value), gst: sum(out, o => o.gst), total: sum(out, o => o.total), oldest: out.length ? Math.max(...out.map(o => o.age)) : 0 };
+}
+export async function loadOrderBook() {
+  const get = async q => { const { data, error } = await q; if (error) throw new Error(error.message); return data || []; };
+  const [so, sol, cu] = await Promise.all([get(sb.from("sales_orders").select("id,order_no,status,customer_id,order_date,source")), get(sb.from("v_sales_order_lines").select("order_id,description,qty,rate,gst_pct,delivered_qty")), get(sb.from("customers").select("id,name"))]);
+  return orderBook(so, so.length ? sol : [], cu, iso(new Date()));
+}
+// small summary for the dashboards: fills `el`, opens Sales > Orders in hand on click
+export async function orderTile(el) {
+  try {
+    const B = await loadOrderBook(), f = new Intl.NumberFormat("en-IN");
+    el.innerHTML = `<div class="dv-attn"><div>Order amount in hand: <b>${R(B.value)}</b> <span class="muted small">(${R(B.total)} with GST)</span></div><div>Open orders: <b>${B.orders.length}</b> from ${B.customers.length} customer${B.customers.length === 1 ? "" : "s"}, ${f.format(B.units)} units still to deliver</div>${B.orders.length ? `<div>Oldest open order: <b>${B.oldest} days</b></div>` : "<div>✔ Nothing waiting to be delivered.</div>"}</div><div style="margin-top:10px"><button class="btn ghost sm" data-ordgo="1">Open orders in hand →</button></div>`;
+    const b = el.querySelector("[data-ordgo]"); if (b) b.onclick = e => { e.stopPropagation(); window.__nav = { page: "sales", tab: "orderbook" }; location.hash = "#/sales"; };
+  } catch (e) { el.innerHTML = '<span class="muted small">Order amount in hand is not available for your role.</span>'; }
+}
+export async function ordersInHand(el) {
+  el.innerHTML = '<p class="muted">Loading…</p>';
+  let B, today = iso(new Date());
+  try { B = await loadOrderBook(); } catch (e) { el.innerHTML = `<p class="dev">Could not load: ${esc(e.message)}</p>`; return; }
+  const tile = (l, v, s = "", c = "") => `<div class="stat ${c}"><div class="stat-l">${l}</div><div class="stat-v">${v}</div>${s ? `<div class="stat-s">${s}</div>` : ""}</div>`;
+  el.innerHTML = `<div class="toolbar"><b>Order amount in hand</b><span class="muted small">Customer orders received (including from EPDMS) that are not delivered yet.</span><span style="flex:1"></span><button class="btn" id="oxl">⬇ Excel</button></div>
+    <div class="stats">${tile("Order amount in hand", R(B.value), "Before GST", "good")}${tile("Including GST", R(B.total), `GST ${R(B.gst)}`)}${tile("Open orders", String(B.orders.length), `${B.customers.length} customer${B.customers.length === 1 ? "" : "s"}`)}${tile("Units still to deliver", new Intl.NumberFormat("en-IN").format(B.units), `${B.products.length} product${B.products.length === 1 ? "" : "s"}`)}${tile("Oldest open order", B.orders.length ? B.oldest + " days" : "–", "Since order date", B.oldest > 30 ? "warn" : "")}</div>
+    <h3 style="margin:14px 0 6px">What is waiting to be delivered, by product</h3>` +
+    table([{ h: "Product", v: p => p.desc }, { h: "Units to deliver", v: p => new Intl.NumberFormat("en-IN").format(p.units) }, { h: "Orders", v: p => p.orders }, { h: "Amount (before GST)", v: p => R(p.value) }, { h: "Incl. GST", v: p => R(p.total) }], B.products, { empty: "No open orders. Everything ordered has been delivered." }) +
+    `<h3 style="margin:16px 0 6px">Open orders</h3>` +
+    table([{ h: "Order", v: o => o.no }, { h: "Date", v: o => dfmt(o.date) }, { h: "Customer", v: o => o.cust }, { h: "Source", v: o => o.source }, { h: "Status", v: o => o.status }, { h: "Units to deliver", v: o => new Intl.NumberFormat("en-IN").format(o.units) }, { h: "Amount (before GST)", v: o => R(o.value) }, { h: "Incl. GST", v: o => R(o.total) }, { h: "Days open", html: o => `<span class="${o.age > 30 ? "dev" : ""}">${o.age}</span>` }], B.orders, { empty: "No open orders." }) +
+    `<h3 style="margin:16px 0 6px">By customer</h3>` + table([{ h: "Customer", v: c => c.cust }, { h: "Orders", v: c => c.orders }, { h: "Units", v: c => new Intl.NumberFormat("en-IN").format(c.units) }, { h: "Amount (before GST)", v: c => R(c.value) }, { h: "Incl. GST", v: c => R(c.total) }], B.customers, { empty: "No open orders." });
+  $("#oxl", el).onclick = () => saveBook(`EarthLabs-orders-in-hand-${today}.xlsx`, [
+    ["Summary", [["Order amount in hand"], ["As on", today], ["Open orders", B.orders.length], ["Units to deliver", r2(B.units)], ["Amount before GST", r2(B.value)], ["GST", r2(B.gst)], ["Amount incl. GST", r2(B.total)]]],
+    ["Orders", [["Order", "Order date", "Customer", "Source", "Status", "Units to deliver", "Amount before GST", "GST", "Amount incl. GST", "Days open"], ...B.orders.map(o => [o.no, o.date, o.cust, o.source, o.status, r2(o.units), r2(o.value), r2(o.gst), r2(o.total), o.age])]],
+    ["Order lines", [["Order", "Customer", "Product", "Ordered qty", "Units to deliver", "Rate", "Amount before GST", "GST"], ...B.orders.flatMap(o => o.lines.map(l => [o.no, o.cust, l.desc, r2(l.ordered), r2(l.pend), r2(l.rate), r2(l.value), r2(l.gst)]))]],
+    ["By product", [["Product", "Units to deliver", "Orders", "Amount before GST", "Amount incl. GST"], ...B.products.map(p => [p.desc, r2(p.units), p.orders, r2(p.value), r2(p.total)])]],
+    ["By customer", [["Customer", "Orders", "Units", "Amount before GST", "Amount incl. GST"], ...B.customers.map(c => [c.cust, c.orders, r2(c.units), r2(c.value), r2(c.total)])]],
+  ]);
 }
 
 // ---------- screen ----------
@@ -192,7 +268,7 @@ function draw(el, M) {
   } else if (F.sub === "pay") {
     const epd = fp.filter(p => p.src === "EPDMS");
     rv.innerHTML = `<div class="toolbar"><span class="muted small">${fp.length} payment${fp.length === 1 ? "" : "s"} · ${R(sum(fp, p => p.amount))} collected · ${R(sum(epd, p => p.amount))} of it from EPDMS</span><span style="flex:1"></span><button class="btn ghost sm" id="dx">⬇ Excel – this list</button></div>` +
-      table([{ h: "Date", v: p => dfmt(p.date) }, { h: "Customer", v: p => p.cust }, { h: "Invoice", html: p => p.inv ? esc(p.inv) : '<span class="muted">On account</span>' }, { h: "Amount", v: p => R(p.amount) }, { h: "Mode", v: p => p.mode }, { h: "Reference / UTR", v: p => p.ref || "–" }, { h: "Source", v: p => p.src + (p.epdmsOrder ? " · " + p.epdmsOrder : "") }], fp, { empty: "No payments for these filters." });
+      table([{ h: "Date", v: p => dfmt(p.date) }, { h: "Customer", v: p => p.cust }, { h: "Invoice", html: p => p.inv ? esc(p.inv) + (p.auto ? ' <span class="muted small">(matched)</span>' : "") + (p.advance > 0.005 ? ' <span class="muted small">+ ' + R(p.advance) + " advance</span>" : "") : '<span class="muted">On account</span>' }, { h: "Amount", v: p => R(p.amount) }, { h: "Mode", v: p => p.mode }, { h: "Reference / UTR", v: p => p.ref || "–" }, { h: "Source", v: p => p.src + (p.epdmsOrder ? " · " + p.epdmsOrder : "") }], fp, { empty: "No payments for these filters." });
     $("#dx", rv).onclick = () => saveBook(`EarthLabs-payments-${M.today}.xlsx`, [["Payments", [payHead, ...fp.map(payRow)]]]);
   } else if (F.sub === "age") {
     const A = ageing(M, S), open = S.invoices.filter(i => i.balance > 0.005).sort((a, b) => b.age - a.age);

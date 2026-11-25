@@ -217,7 +217,7 @@ export async function salesPage(el) {
   const customers = c1.data || [], orders = c2.data || [], olines = c3.data || [], pis = c4.data || [], dcs = c5.data || [], invs = c6.data || [];
   const linesOf = id => olines.filter(l => l.order_id === id);
   const valueOf = id => linesOf(id).reduce((s, l) => s + Number(l.qty) * Number(l.rate) * (1 + Number(l.gst_pct) / 100), 0);
-  const tabs = [["orders", "Orders"], ["customers", "Customers"], ["docs", "Documents"], ...(isAdmin ? [["register", "Invoices & collections"]] : []), ...(isAdmin ? [["settings", "Company details"]] : [])];
+  const tabs = [["orders", "Orders"], ["customers", "Customers"], ["docs", "Documents"], ["orderbook", "Orders in hand"], ...(isAdmin ? [["register", "Invoices & collections"]] : []), ...(isAdmin ? [["settings", "Company details"]] : [])];
   const nv = window.__nav; if (nv && nv.page === "sales") { window.__nav = null; if (nv.tab) TAB = nv.tab; }
   if (!tabs.some(([k]) => k === TAB)) TAB = "orders";
   el.innerHTML = `<div class="tabs wrapt">${tabs.map(([k, t]) => `<button class="tab ${k === TAB ? "on" : ""}" data-k="${k}">${t}</button>`).join("")}</div><div id="sv"></div>`;
@@ -488,9 +488,13 @@ export async function salesPage(el) {
       $$(".ec", sv).forEach(b => b.onclick = () => openCustomer(customers.find(x => x.id === b.dataset.id)));
     };
     draw(); $("#q").oninput = draw; $("#ch").onchange = draw; $("#nc").onclick = () => openCustomer();
+  } else if (TAB === "orderbook") {
+    sv.innerHTML = '<p class="muted">Loading…</p>';
+    const { ordersInHand } = await import("./p_register-D87BF923.js");
+    await ordersInHand(sv);
   } else if (TAB === "register" && isAdmin) {
     sv.innerHTML = '<p class="muted">Loading…</p>';
-    const { invoiceRegister } = await import("./p_register-25825E99.js");
+    const { invoiceRegister } = await import("./p_register-D87BF923.js");
     await invoiceRegister(sv);
   } else if (TAB === "docs") {
     const rows = [

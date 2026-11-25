@@ -6,7 +6,7 @@ import { callFn } from "@/lib/fn";
 import { Badge, Kpi, Msg, when } from "@/components/ui";
 import { askConfirm } from "@/lib/dialog";
 import { DISTRICTS } from "@/lib/districts";
-import { leadMail, parsePasted, statusKind, statusLabel, summarize, STATUSES, type Lead, type Reply } from "@/lib/outreach";
+import { leadMail, parsePasted, statusKind, statusLabel, summarize, waLink, waMessage, STATUSES, type Lead, type Reply } from "@/lib/outreach";
 
 type Cfg = { reply_to: string | null; daily_cap: number };
 const NEXT_CHOICES = ["Call them", "Send product details", "Invite to register on the portal", "Schedule a visit", "Follow up in 7 days", "Closed: not interested", "Read the reply and decide"];
@@ -43,8 +43,10 @@ function Inner({ isSuper }: { isSuper: boolean }) {
     const r = await callFn("lead-discover", { district: dist, focus });
     setBusy("");
     if (!r.ok) return setMsg({ k: "bad", t: r.error ?? "The search did not work" });
-    const d = r.data as { added: number; known: number; found: number };
-    setMsg({ k: d.added ? "ok" : "note", t: d.added ? `Found ${d.added} new dealer${d.added === 1 ? "" : "s"} in ${dist}${d.known ? ` (${d.known} already on your list or already partners)` : ""}. Check each one, then approve.` : d.found ? `Nothing new in ${dist}: all ${d.found} were already known.` : `The AI found no dealer in ${dist} it could confirm from a public page. Try a nearby district, or add your own list.` });
+    const d = r.data as { added: number; withEmail: number; known: number; found: number; dropped: number };
+    setMsg({ k: d.added ? "ok" : "note", t: d.added
+      ? `Found ${d.added} new dealer${d.added === 1 ? "" : "s"} in ${dist}, ${d.withEmail} with an e-mail address.${d.known ? ` ${d.known} were already on your list or are already partners.` : ""}${d.dropped ? ` ${d.dropped} left out (only on an old page or a directory with no website of their own).` : ""} Check each one, then approve or WhatsApp.`
+      : d.found ? `Nothing new in ${dist}: ${d.dropped ? `${d.dropped} were only on old or directory pages` : "all were already known"}. Press Find dealers again to search more, or try a nearby district.` : `The AI found no dealer in ${dist} it could confirm from a recent public page. Try again, a nearby district, or add your own list.` });
     setArea(dist); load();
   }
   async function approve() {
@@ -88,6 +90,10 @@ function Inner({ isSuper }: { isSuper: boolean }) {
     const { error } = await supabase.rpc("set_lead_settings", { reply_to: setf.reply_to.trim() || null, daily_cap: Number(setf.daily_cap) || 25 });
     setMsg(error ? { k: "bad", t: error.message } : { k: "ok", t: "Saved. Approved leads are released within 10 minutes." }); load();
   }
+  async function wa(l: Lead) {
+    await supabase.from("dealer_leads").update({ wa_at: new Date().toISOString() }).eq("id", l.id); load();
+  }
+  const waBtn = (l: Lead, sm = true) => { const h = waLink(l.phone, waMessage({ name: l.name, district: l.district })); return h ? <a className={"btn" + (sm ? " sm" : "")} style={{ background: "#25D366", borderColor: "#25D366", color: "#073b1c" }} href={h} target="_blank" rel="noopener noreferrer" onClick={() => wa(l)}>WhatsApp</a> : null; };
   const toggle = (id: string) => setSel((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const field = (k: keyof Lead) => (edit[k] as string | undefined) ?? ((open?.[k] as string | null) ?? "");
   const locked = open ? !["Found", "Rejected"].includes(open.status) : true;
@@ -105,15 +111,15 @@ function Inner({ isSuper }: { isSuper: boolean }) {
       <div className="row" style={{ flexWrap: "wrap", gap: 8, alignItems: "flex-end" }}>
         <label className="mini">Area<select value={dist} onChange={(e) => setDist(e.target.value)}>{DISTRICTS.map((d) => <option key={d}>{d}</option>)}</select></label>
         <label className="mini" style={{ flex: 1, minWidth: 220 }}>Focus (optional)<input value={focus} onChange={(e) => setFocus(e.target.value)} maxLength={300} placeholder="e.g. industrial cleaning chemicals, hotel and hospital suppliers" /></label>
-        <button className="btn" disabled={busy === "find"} onClick={find}>{busy === "find" ? "Searching… (up to a minute)" : "Find dealers"}</button></div>
+        <button className="btn" disabled={busy === "find"} onClick={find}>{busy === "find" ? "Searching… (up to 2 minutes)" : "Find dealers"}</button></div>
     </div>
 
     <div className="card" style={{ marginBottom: 10 }}>
       <h2 style={{ marginTop: 0 }}>By area</h2>
       {rows.length === 0 ? <p className="mini">No leads yet. Pick an area above and press Find dealers.</p> :
-        <div style={{ overflowX: "auto" }}><table><thead><tr><th>Area</th><th>Leads</th><th>To review</th><th>Sending</th><th>Mails sent</th><th>Replied</th><th>Reply needs action</th><th>Converted</th></tr></thead>
+        <div style={{ overflowX: "auto" }}><table><thead><tr><th>Area</th><th>Leads</th><th>To review</th><th>Sending</th><th>Mails sent</th><th>WhatsApp</th><th>Replied</th><th>Reply needs action</th><th>Converted</th></tr></thead>
           <tbody>{rows.map((r) => <tr key={r.district} style={{ cursor: "pointer", background: area === r.district ? "var(--soft, #f3f7f3)" : undefined }} onClick={() => setArea(area === r.district ? "" : r.district)}>
-            <td><b>{r.district}</b></td><td>{r.leads}</td><td>{r.toReview}</td><td>{r.sending}</td><td>{r.sent}</td><td>{r.sent ? `${r.replied} of ${r.sent}` : "–"}</td><td>{r.todo ? <Badge kind="good">{r.todo}</Badge> : "–"}</td><td>{r.converted}</td></tr>)}</tbody></table></div>}
+            <td><b>{r.district}</b></td><td>{r.leads}</td><td>{r.toReview}</td><td>{r.sending}</td><td>{r.sent}</td><td>{r.wa || "–"}</td><td>{r.sent || r.wa ? `${r.replied} of ${r.sent + r.wa}` : "–"}</td><td>{r.todo ? <Badge kind="good">{r.todo}</Badge> : "–"}</td><td>{r.converted}</td></tr>)}</tbody></table></div>}
       <p className="mini" style={{ margin: "6px 0 0" }}>Click an area to filter the list below.{unmatched > 0 && ` ${unmatched} repl${unmatched === 1 ? "y" : "ies"} came from an address that is not on the list; they are saved, not lost.`}</p>
     </div>
 
@@ -132,10 +138,10 @@ function Inner({ isSuper }: { isSuper: boolean }) {
         <tbody>{shown.map((l) => <tr key={l.id}>
           <td><input type="checkbox" aria-label={`Tick ${l.business}`} checked={sel.has(l.id)} onChange={() => toggle(l.id)} /></td>
           <td><b>{l.business}</b>{l.name && <div className="mini">{l.name}</div>}<div className="mini">{l.source === "ai_search" ? <>AI found · {l.source_url ? <a href={l.source_url} target="_blank" rel="noopener noreferrer">source page</a> : "no link"}</> : "Added by staff"}</div></td>
-          <td>{l.email ?? <span className="mini">no e-mail</span>}{l.phone && <div className="mini">{l.phone}</div>}</td>
+          <td>{l.email ?? <span className="mini">no e-mail</span>}{l.phone && <div className="mini">{l.phone}</div>}{l.wa_at && <div className="mini">WhatsApp opened {when(l.wa_at)}</div>}</td>
           <td>{l.district}</td><td><Badge kind={statusKind(l.status)}>{statusLabel(l.status)}</Badge></td><td>{when(l.sent_at)}</td>
           <td>{l.last_reply_at && <div className="mini">Replied {when(l.last_reply_at)}</div>}{l.next_step && <div><b>{l.next_step}</b></div>}{l.next_step_note && <div className="mini">{l.next_step_note}</div>}</td>
-          <td><button className="btn sm out" onClick={() => openLead(l)}>Open</button></td></tr>)}
+          <td style={{ whiteSpace: "nowrap" }}>{waBtn(l)} <button className="btn sm out" onClick={() => openLead(l)}>Open</button></td></tr>)}
           {shown.length === 0 && <tr><td colSpan={8} className="mini">Nothing here yet.</td></tr>}</tbody></table></div>
     </div>
 
@@ -164,6 +170,7 @@ function Inner({ isSuper }: { isSuper: boolean }) {
       <label className="mini" style={{ display: "block", marginTop: 6 }}>First e-mail: message {locked ? "(already approved, so locked)" : "(a STOP line is added automatically)"}<textarea rows={9} style={{ width: "100%" }} value={field("body")} disabled={locked} onChange={(e) => setEdit({ ...edit, body: e.target.value })} /></label>
       {rep.length > 0 && <><h3>Replies</h3>{rep.map((r) => <div key={r.id} className="check"><div style={{ flex: 1 }}><b>{when(r.received_at)}</b> {r.ai_note && <span className="mini">· {r.ai_note}</span>}<div className="mini" style={{ whiteSpace: "pre-wrap" }}>{r.body}</div></div></div>)}</>}
       <footer style={{ flexWrap: "wrap" }}>
+        {waBtn(open, false)}
         {["Sent", "Queued", "Approved", "Not interested", "Found"].includes(open.status) && <button className="btn out" onClick={() => mark("Replied", [open.id])}>They replied (no e-mail)</button>}
         {open.status === "Rejected" && <button className="btn out" onClick={() => mark("Found", [open.id])}>Put back to review</button>}
         {open.status !== "Converted" && open.status !== "Opted out" && <button className="btn out" onClick={() => mark("Converted", [open.id])}>Mark converted</button>}

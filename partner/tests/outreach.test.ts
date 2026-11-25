@@ -128,6 +128,7 @@ describe("WhatsApp", () => {
     expect(l.startsWith("https://wa.me/918867859643?text=")).toBe(true); expect(decodeURIComponent(l)).toContain("Hello R. Shah"); expect(decodeURIComponent(l)).toContain("Surat");
     expect(waLink("0265 2345678", "x")).toBeNull();
   });
+  it("WhatsApp message links the brochure and the video", () => { const m = waMessage({ district: "Rajkot" }); expect(m).toContain("/partner-assets/EarthLabs-Product-Brochure.pdf"); expect(m).toContain("/partner-assets/EarthLabs-Intro-Video.mp4"); });
   it("message makes no price, scheme, exclusivity or chemical-free claim and offers an opt-out", () => { const m = waMessage({ district: "Rajkot" }); expect(m).not.toMatch(/₹|rs\.?\s*\d|discount|margin|scheme|exclusive|chemical-free|germ|cure/i); expect(m).toMatch(/STOP/); expect(m).toContain("Appointment follows registration checks"); });
   it("area summary counts WhatsApp", () => { expect(summarize([L({ wa_at: "x" }), L({})])[0].wa).toBe(1); });
 });

@@ -14,3 +14,9 @@ How it behaves
 - Nothing is sent without a person approving that lead. The first e-mail is fixed wording (no prices, schemes or claims) that you can edit before approving, with a STOP line added automatically.
 - A reply of STOP, unsubscribe or similar marks the dealer Opted out and they are never mailed again.
 - At most the daily cap goes out each day (India time); the rest follow automatically.
+
+## Brochure and video in the first e-mail
+- The two files live on the website server in `public_html/partner-assets/` (outside `/partner`, so a portal upload never removes them): `EarthLabs-Product-Brochure.pdf` (1.4 MB) and `EarthLabs-Intro-Video.mp4` (3.4 MB, 720p).
+- The settings row `lead_attachments` lists them (`filename` and an https `path`). `release_approved_leads()` copies it onto each queued mail and adds "I have attached our product brochure and a short video."; `send-emails` passes the links to Resend, which fetches and attaches the files. To stop attaching, delete that settings row.
+- WhatsApp messages link to the same two files (`BROCHURE_URL`, `VIDEO_URL` in `src/lib/outreach.ts`). To replace a file, upload a new one with the same name to that folder.
+- Keep the total under about 10 MB: Gmail refuses messages over 25 MB after encoding, and large attachments in first e-mails are more likely to land in spam.

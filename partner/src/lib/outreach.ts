@@ -72,7 +72,10 @@ export function waNumber(phone: string | null | undefined): string | null {
   return /^[6-9]\d{9}$/.test(d) ? "91" + d : null;
 }
 /** The first WhatsApp message. Fixed wording: no prices, schemes, claims or promises. */
+/** Public files shared with dealers: attached to the first e-mail (setting lead_attachments) and linked in the WhatsApp message. */
+export const BROCHURE_URL = "https://www.earthlabsproducts.com/partner-assets/EarthLabs-Product-Brochure.pdf";
+export const VIDEO_URL = "https://www.earthlabsproducts.com/partner-assets/EarthLabs-Intro-Video.mp4";
 export function waMessage(l: { name?: string | null; district: string }): string {
-  return `Hello${l.name ? " " + l.name : ""}, this is EarthLabs Innovative Products, Vadodara. We make herbal, eco-conscious hand wash and cleaning products and are appointing authorised dealers in ${l.district}. May we call you to explain how the dealer programme works? Appointment follows registration checks, a Dealer Agreement and company approval. If you would rather not hear from us, reply STOP.`;
+  return `Hello${l.name ? " " + l.name : ""}, this is EarthLabs Innovative Products, Vadodara. We make herbal, eco-conscious hand wash and cleaning products and are appointing authorised dealers in ${l.district}. May we call you to explain how the dealer programme works? Appointment follows registration checks, a Dealer Agreement and company approval.\n\nBrochure: ${BROCHURE_URL}\nShort video: ${VIDEO_URL}\n\nIf you would rather not hear from us, reply STOP.`;
 }
 export const waLink = (phone: string | null | undefined, msg: string): string | null => { const n = waNumber(phone); return n ? `https://wa.me/${n}?text=${encodeURIComponent(msg)}` : null; };

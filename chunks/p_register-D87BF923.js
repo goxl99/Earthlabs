@@ -184,6 +184,56 @@ export async function downloadCAPack(F = { from: "", to: "", cust: "" }) {
   await saveBook(`EarthLabs-invoices-and-collections-${M.today}.xlsx`, packSheets(M, S, F));
 }
 
+
+// ---------- orders in hand (customer orders received but not yet delivered) ----------
+export function orderBook(orders, lines, custs = [], today = iso(new Date())) {
+  const cBy = Object.fromEntries(custs.map(c => [c.id, c.name])), days = d => Math.max(0, Math.floor((new Date(today) - new Date(String(d).slice(0, 10))) / 864e5));
+  const out = [], byProd = {}, byCust = {};
+  (orders || []).filter(o => o.status === "open" || o.status === "part_delivered").forEach(o => {
+    const L = (lines || []).filter(l => l.order_id === o.id).map(l => { const pend = Math.max(0, n(l.qty) - n(l.delivered_qty)), value = r2(pend * n(l.rate)), gst = r2(value * n(l.gst_pct) / 100); return { desc: l.description || "Item", pend, ordered: n(l.qty), rate: n(l.rate), value, gst }; }).filter(l => l.pend > 0.0005);
+    if (!L.length) return;
+    const value = sum(L, l => l.value), gst = sum(L, l => l.gst), cust = cBy[o.customer_id] || o.customers?.name || "";
+    out.push({ id: o.id, no: o.order_no, date: String(o.order_date).slice(0, 10), cust, source: o.source === "epdms" ? "EPDMS" : "Entered here", status: o.status === "part_delivered" ? "Part delivered" : "Open", lines: L, units: sum(L, l => l.pend), value, gst, total: r2(value + gst), age: days(o.order_date) });
+    L.forEach(l => { const q = byProd[l.desc] || (byProd[l.desc] = { desc: l.desc, units: 0, value: 0, total: 0, orders: 0 }); q.units += l.pend; q.value += l.value; q.total += l.value + l.gst; q.orders++; });
+    const c = byCust[cust] || (byCust[cust] = { cust, orders: 0, units: 0, value: 0, total: 0 }); c.orders++; c.units += sum(L, l => l.pend); c.value += value; c.total += value + gst;
+  });
+  out.sort((a, b) => a.date.localeCompare(b.date) || a.no.localeCompare(b.no));
+  return { orders: out, products: Object.values(byProd).sort((a, b) => b.value - a.value), customers: Object.values(byCust).sort((a, b) => b.value - a.value), units: sum(out, o => o.units), value: sum(out, o => o.value), gst: sum(out, o => o.gst), total: sum(out, o => o.total), oldest: out.length ? Math.max(...out.map(o => o.age)) : 0 };
+}
+export async function loadOrderBook() {
+  const get = async q => { const { data, error } = await q; if (error) throw new Error(error.message); return data || []; };
+  const [so, sol, cu] = await Promise.all([get(sb.from("sales_orders").select("id,order_no,status,customer_id,order_date,source")), get(sb.from("v_sales_order_lines").select("order_id,description,qty,rate,gst_pct,delivered_qty")), get(sb.from("customers").select("id,name"))]);
+  return orderBook(so, so.length ? sol : [], cu, iso(new Date()));
+}
+// small summary for the dashboards: fills `el`, opens Sales > Orders in hand on click
+export async function orderTile(el) {
+  try {
+    const B = await loadOrderBook(), f = new Intl.NumberFormat("en-IN");
+    el.innerHTML = `<div class="dv-attn"><div>Order amount in hand: <b>${R(B.value)}</b> <span class="muted small">(${R(B.total)} with GST)</span></div><div>Open orders: <b>${B.orders.length}</b> from ${B.customers.length} customer${B.customers.length === 1 ? "" : "s"}, ${f.format(B.units)} units still to deliver</div>${B.orders.length ? `<div>Oldest open order: <b>${B.oldest} days</b></div>` : "<div>✔ Nothing waiting to be delivered.</div>"}</div><div style="margin-top:10px"><button class="btn ghost sm" data-ordgo="1">Open orders in hand →</button></div>`;
+    const b = el.querySelector("[data-ordgo]"); if (b) b.onclick = e => { e.stopPropagation(); window.__nav = { page: "sales", tab: "orderbook" }; location.hash = "#/sales"; };
+  } catch (e) { el.innerHTML = '<span class="muted small">Order amount in hand is not available for your role.</span>'; }
+}
+export async function ordersInHand(el) {
+  el.innerHTML = '<p class="muted">Loading…</p>';
+  let B, today = iso(new Date());
+  try { B = await loadOrderBook(); } catch (e) { el.innerHTML = `<p class="dev">Could not load: ${esc(e.message)}</p>`; return; }
+  const tile = (l, v, s = "", c = "") => `<div class="stat ${c}"><div class="stat-l">${l}</div><div class="stat-v">${v}</div>${s ? `<div class="stat-s">${s}</div>` : ""}</div>`;
+  el.innerHTML = `<div class="toolbar"><b>Order amount in hand</b><span class="muted small">Customer orders received (including from EPDMS) that are not delivered yet.</span><span style="flex:1"></span><button class="btn" id="oxl">⬇ Excel</button></div>
+    <div class="stats">${tile("Order amount in hand", R(B.value), "Before GST", "good")}${tile("Including GST", R(B.total), `GST ${R(B.gst)}`)}${tile("Open orders", String(B.orders.length), `${B.customers.length} customer${B.customers.length === 1 ? "" : "s"}`)}${tile("Units still to deliver", new Intl.NumberFormat("en-IN").format(B.units), `${B.products.length} product${B.products.length === 1 ? "" : "s"}`)}${tile("Oldest open order", B.orders.length ? B.oldest + " days" : "–", "Since order date", B.oldest > 30 ? "warn" : "")}</div>
+    <h3 style="margin:14px 0 6px">What is waiting to be delivered, by product</h3>` +
+    table([{ h: "Product", v: p => p.desc }, { h: "Units to deliver", v: p => new Intl.NumberFormat("en-IN").format(p.units) }, { h: "Orders", v: p => p.orders }, { h: "Amount (before GST)", v: p => R(p.value) }, { h: "Incl. GST", v: p => R(p.total) }], B.products, { empty: "No open orders. Everything ordered has been delivered." }) +
+    `<h3 style="margin:16px 0 6px">Open orders</h3>` +
+    table([{ h: "Order", v: o => o.no }, { h: "Date", v: o => dfmt(o.date) }, { h: "Customer", v: o => o.cust }, { h: "Source", v: o => o.source }, { h: "Status", v: o => o.status }, { h: "Units to deliver", v: o => new Intl.NumberFormat("en-IN").format(o.units) }, { h: "Amount (before GST)", v: o => R(o.value) }, { h: "Incl. GST", v: o => R(o.total) }, { h: "Days open", html: o => `<span class="${o.age > 30 ? "dev" : ""}">${o.age}</span>` }], B.orders, { empty: "No open orders." }) +
+    `<h3 style="margin:16px 0 6px">By customer</h3>` + table([{ h: "Customer", v: c => c.cust }, { h: "Orders", v: c => c.orders }, { h: "Units", v: c => new Intl.NumberFormat("en-IN").format(c.units) }, { h: "Amount (before GST)", v: c => R(c.value) }, { h: "Incl. GST", v: c => R(c.total) }], B.customers, { empty: "No open orders." });
+  $("#oxl", el).onclick = () => saveBook(`EarthLabs-orders-in-hand-${today}.xlsx`, [
+    ["Summary", [["Order amount in hand"], ["As on", today], ["Open orders", B.orders.length], ["Units to deliver", r2(B.units)], ["Amount before GST", r2(B.value)], ["GST", r2(B.gst)], ["Amount incl. GST", r2(B.total)]]],
+    ["Orders", [["Order", "Order date", "Customer", "Source", "Status", "Units to deliver", "Amount before GST", "GST", "Amount incl. GST", "Days open"], ...B.orders.map(o => [o.no, o.date, o.cust, o.source, o.status, r2(o.units), r2(o.value), r2(o.gst), r2(o.total), o.age])]],
+    ["Order lines", [["Order", "Customer", "Product", "Ordered qty", "Units to deliver", "Rate", "Amount before GST", "GST"], ...B.orders.flatMap(o => o.lines.map(l => [o.no, o.cust, l.desc, r2(l.ordered), r2(l.pend), r2(l.rate), r2(l.value), r2(l.gst)]))]],
+    ["By product", [["Product", "Units to deliver", "Orders", "Amount before GST", "Amount incl. GST"], ...B.products.map(p => [p.desc, r2(p.units), p.orders, r2(p.value), r2(p.total)])]],
+    ["By customer", [["Customer", "Orders", "Units", "Amount before GST", "Amount incl. GST"], ...B.customers.map(c => [c.cust, c.orders, r2(c.units), r2(c.value), r2(c.total)])]],
+  ]);
+}
+
 // ---------- screen ----------
 const F = { from: "", to: "", cust: "", status: "", q: "", sub: "inv" };
 export async function invoiceRegister(el) {

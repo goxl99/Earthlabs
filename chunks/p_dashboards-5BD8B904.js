@@ -159,6 +159,7 @@ export async function accountingDashboardPage(el) {
         ${stat("To collect", short(outstanding), `${open.length} open invoice${open.length === 1 ? "" : "s"}${advances > 0.005 ? ` · ${short(advances)} paid in advance` : ""}`, outstanding > 0 ? "warn" : "", "accounts|ledger")}${stat("Raw material at site", short(stock), "At latest purchase rates", "", "stock|stock")}${stat("Assets (book value)", short(assetBV), `Cost ${short(assetCost)}`, "", "accounts|assets")}</div>
       <div class="dv-grid">
         ${card("Needs attention", "", `<div class="dv-attn">${attn}</div>`)}
+        ${card("Order amount in hand", "Orders received, including from EPDMS, not delivered yet.", `<div id="ordtile-a" class="muted small">Loading…</div>`)}
         ${card("Invoices and payments collected (till date)", "From Sales & Invoicing. Payments pushed from EPDMS are included.", `<div class="dv-attn"><div>Invoices raised: <b>${ib.length + es.length}</b> · ${inr(sum(cb, c => c.billed))} incl. GST${es.length ? ` (${es.length} from before the system)` : ""}</div><div>Collected: <b>${inr(sum(cb, c => Math.min(n0(c.received), n0(c.billed))))}</b> · ${sum(cb, c => c.billed) ? (sum(cb, c => Math.min(n0(c.received), n0(c.billed))) / sum(cb, c => c.billed) * 100).toFixed(0) : 0}% of invoiced</div><div>Pending: <b>${inr(outstanding)}</b> from ${cb.filter(c => n0(c.billed) - n0(c.received) > 1).length} customer${cb.filter(c => n0(c.billed) - n0(c.received) > 1).length === 1 ? "" : "s"}${overdue.length ? ` · <span class="dev">${overdue.length} over 30 days</span>` : ""}</div><div>All payments received: <b>${inr(sum(pay, p => p.amount))}</b>${sum(pay.filter(p => p.epdms_ref), p => p.amount) ? ` · of which from EPDMS ${inr(sum(pay.filter(p => p.epdms_ref), p => p.amount))}` : ""}</div></div><div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px"><button class="btn sm" id="capack">⬇ Excel for CA</button><button class="btn ghost sm" data-go="sales|register">Open invoice list →</button></div>`, "sales|register")}
         ${card("Money in and out", "Last 6 months. Money in = customer payments received; money out = all expenses.", cols(ms.map(mLabel), [{ name: "Received", color: C1, vals: mi }, { name: "Spent", color: C2, vals: mo }]) + tview(["Month", "Received", "Spent", "Net"], ms.map((k, i) => [mLabel(k), inr(mi[i]), inr(mo[i]), inr(mi[i] - mo[i])])), "accounts|account")}
         ${card("Sales and material cost", "Last 6 months, by delivery date. Sales before GST; cost = materials and packing at latest rates.", cols(ms.map(mLabel), [{ name: "Sales", color: C1, vals: mr }, { name: "Material cost", color: C2, vals: mc }]) + tview(["Month", "Sales", "Cost", "Margin"], ms.map((k, i) => [mLabel(k), inr(mr[i]), inr(mc[i]), mr[i] ? ((mr[i] - mc[i]) / mr[i] * 100).toFixed(1) + "%" : "–"])), "accounts|profit")}
@@ -170,7 +171,8 @@ export async function accountingDashboardPage(el) {
     el.innerHTML = body; tipInit(el);
     const goTo = t => { const [page, tab, sub] = t.dataset.go.split("|"); window.__nav = { page, tab, sub }; location.hash = "#/" + page; };
     const root = $("#acctroot", el); root.onclick = e => { if (e.target.closest("#capack")) return; const t = e.target.closest("[data-go]"); if (t) goTo(t); };
-    const cap = $("#capack", el); if (cap) cap.onclick = async () => { cap.disabled = true; const t0 = cap.textContent; cap.textContent = "Preparing…"; try { const m = await import("./p_register-E38B8046.js"); await m.downloadCAPack(); cap.textContent = t0; } catch (e) { cap.textContent = "Could not create the file"; } cap.disabled = false; };
+    import("./p_register-D87BF923.js").then(m => m.orderTile($("#ordtile-a", el))).catch(() => {});
+    const cap = $("#capack", el); if (cap) cap.onclick = async () => { cap.disabled = true; const t0 = cap.textContent; cap.textContent = "Preparing…"; try { const m = await import("./p_register-D87BF923.js"); await m.downloadCAPack(); cap.textContent = t0; } catch (e) { cap.textContent = "Could not create the file"; } cap.disabled = false; };
     root.onkeydown = e => { if (e.key !== "Enter" && e.key !== " ") return; const t = e.target.closest("[data-go]"); if (t) { e.preventDefault(); goTo(t); } };
     $("#rg", el).onchange = e => { ARANGE = e.target.value; draw(); };
     aiPanel($("#aidash", el), "business", async () => ({ business: (await sb.rpc("business_snapshot")).data || {} }));
@@ -229,6 +231,7 @@ export async function productionDashboardPage(el) {
         ${stat("Filling loss", pc(lossRate), `${lit(loss)} lost`, lossRate != null && lossRate > 3 ? "warn" : "")}${stat("Avg time to approve", avgTat == null ? "–" : avgTat >= 24 ? (avgTat / 24).toFixed(1) + " days" : avgTat.toFixed(1) + " hours", "Submitted to approved")}${stat("Bulk waiting to fill", lit(bulk), `${num(fgUnits, 0)} finished units available`)}</div>
       <div class="dv-grid">
         ${card("Needs attention", "", `<div class="dv-attn">${attn}</div>`)}
+        ${card("Order amount in hand", "Orders to deliver, including from EPDMS.", `<div id="ordtile-p" class="muted small">Loading…</div>`)}
         ${card("Litres made and filled", "Last 6 months, approved batches by manufacturing date.", cols(ms.map(mLabel), [{ name: "Made", color: C1, vals: mManu }, { name: "Filled", color: C2, vals: mFill }], x => lit(x)) + tview(["Month", "Made (L)", "Filled (L)"], ms.map((k, i) => [mLabel(k), mManu[i].toFixed(1), mFill[i].toFixed(1)])))}
         ${card("Batch results", `${R.label}.`, hbars(stat3) + tview(["Result", "Batches"], stat3.map(s => [s.label, s.text])))}
         ${card("What we made", `${R.label}. Litres by product.`, hbars(prodItems, lit) + tview(["Product", "Litres"], prodItems.map(p => [p.label, p.text])))}
@@ -236,6 +239,7 @@ export async function productionDashboardPage(el) {
         ${card("How much we can make", "Litres possible with the raw material in stock now (the scarcest ingredient decides).", hbars(capItems, lit) + tview(["Product", "Litres"], capItems.map(p => [p.label, p.text])))}
         ${card("By operator", `${R.label}.`, `<div style="overflow:auto"><table><thead><tr><th>Operator</th><th>Batches</th><th>Approved</th><th>Rework / rejected</th><th>With deviations</th></tr></thead><tbody>${Object.entries(ops).map(([k, o]) => `<tr><td>${esc(k)}</td><td>${o.n}</td><td>${o.a}</td><td>${o.rw}</td><td>${o.dv}</td></tr>`).join("") || '<tr><td colspan="5" class="muted">No batches in this period.</td></tr>'}</tbody></table></div>`)}
       </div>`;
+    import("./p_register-D87BF923.js").then(m => m.orderTile($("#ordtile-p", el))).catch(() => {});
     tipInit(el); $("#rg", el).onchange = e => { PRANGE = e.target.value; draw(); };
   };
   await draw();

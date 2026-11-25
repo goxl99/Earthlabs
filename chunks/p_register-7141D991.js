@@ -186,19 +186,24 @@ export async function downloadCAPack(F = { from: "", to: "", cust: "" }) {
 
 
 // ---------- orders in hand (customer orders received but not yet delivered) ----------
+// pack size in mL from a product description: "20 ml sachet", "500ML bottle", "1 L can", "5 litre"
+export function sizeMl(d) {
+  const m = String(d || "").match(/(\d+(?:\.\d+)?)\s*(ml|ltrs?|litres?|liters?|l)\b/i); if (!m) return 0;
+  const v = parseFloat(m[1]); return /^m/i.test(m[2]) ? v : v * 1000;
+}
 export function orderBook(orders, lines, custs = [], today = iso(new Date())) {
   const cBy = Object.fromEntries(custs.map(c => [c.id, c.name])), days = d => Math.max(0, Math.floor((new Date(today) - new Date(String(d).slice(0, 10))) / 864e5));
   const out = [], byProd = {}, byCust = {};
   (orders || []).filter(o => o.status === "open" || o.status === "part_delivered").forEach(o => {
-    const L = (lines || []).filter(l => l.order_id === o.id).map(l => { const pend = Math.max(0, n(l.qty) - n(l.delivered_qty)), value = r2(pend * n(l.rate)), gst = r2(value * n(l.gst_pct) / 100); return { desc: l.description || "Item", pend, ordered: n(l.qty), rate: n(l.rate), value, gst }; }).filter(l => l.pend > 0.0005);
+    const L = (lines || []).filter(l => l.order_id === o.id).map(l => { const pend = Math.max(0, n(l.qty) - n(l.delivered_qty)), value = r2(pend * n(l.rate)), gst = r2(value * n(l.gst_pct) / 100); const sz = sizeMl(l.description), litres = sz ? pend * sz / 1000 : 0; return { desc: l.description || "Item", pend, ordered: n(l.qty), rate: n(l.rate), value, gst, litres, noSize: !sz }; }).filter(l => l.pend > 0.0005);
     if (!L.length) return;
     const value = sum(L, l => l.value), gst = sum(L, l => l.gst), cust = cBy[o.customer_id] || o.customers?.name || "";
-    out.push({ id: o.id, no: o.order_no, date: String(o.order_date).slice(0, 10), cust, source: o.source === "epdms" ? "EPDMS" : "Entered here", status: o.status === "part_delivered" ? "Part delivered" : "Open", lines: L, units: sum(L, l => l.pend), value, gst, total: r2(value + gst), age: days(o.order_date) });
-    L.forEach(l => { const q = byProd[l.desc] || (byProd[l.desc] = { desc: l.desc, units: 0, value: 0, total: 0, orders: 0 }); q.units += l.pend; q.value += l.value; q.total += l.value + l.gst; q.orders++; });
+    out.push({ id: o.id, no: o.order_no, date: String(o.order_date).slice(0, 10), cust, source: o.source === "epdms" ? "EPDMS" : "Entered here", status: o.status === "part_delivered" ? "Part delivered" : "Open", lines: L, units: sum(L, l => l.pend), value, gst, litres: sum(L, l => l.litres), noSize: L.some(l => l.noSize), total: r2(value + gst), age: days(o.order_date) });
+    L.forEach(l => { const q = byProd[l.desc] || (byProd[l.desc] = { desc: l.desc, units: 0, value: 0, total: 0, orders: 0, litres: 0, noSize: l.noSize }); q.litres += l.litres; q.units += l.pend; q.value += l.value; q.total += l.value + l.gst; q.orders++; });
     const c = byCust[cust] || (byCust[cust] = { cust, orders: 0, units: 0, value: 0, total: 0 }); c.orders++; c.units += sum(L, l => l.pend); c.value += value; c.total += value + gst;
   });
   out.sort((a, b) => a.date.localeCompare(b.date) || a.no.localeCompare(b.no));
-  return { orders: out, products: Object.values(byProd).sort((a, b) => b.value - a.value), customers: Object.values(byCust).sort((a, b) => b.value - a.value), units: sum(out, o => o.units), value: sum(out, o => o.value), gst: sum(out, o => o.gst), total: sum(out, o => o.total), oldest: out.length ? Math.max(...out.map(o => o.age)) : 0 };
+  return { orders: out, products: Object.values(byProd).sort((a, b) => b.value - a.value), customers: Object.values(byCust).sort((a, b) => b.value - a.value), litres: sum(out, o => o.litres), noSize: out.some(o => o.noSize), units: sum(out, o => o.units), value: sum(out, o => o.value), gst: sum(out, o => o.gst), total: sum(out, o => o.total), oldest: out.length ? Math.max(...out.map(o => o.age)) : 0 };
 }
 export async function loadOrderBook() {
   const get = async q => { const { data, error } = await q; if (error) throw new Error(error.message); return data || []; };
@@ -223,6 +228,30 @@ export async function orderStat(el) {
     const go = () => { window.__nav = { page: "sales", tab: "orderbook" }; location.hash = "#/sales"; };
     el.onclick = e => { e.stopPropagation(); go(); }; el.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } };
   } catch (e) { el.remove(); }
+}
+export async function ordersInLitres(el) {
+  el.innerHTML = '<p class="muted">Loading…</p>';
+  let B, fg = [], bt = [], today = iso(new Date());
+  try {
+    B = await loadOrderBook();
+    const soft = async q => { const { data } = await q; return data || []; };
+    [fg, bt] = await Promise.all([soft(sb.from("v_finished_goods").select("size_ml,available")), soft(sb.from("v_batch_register").select("status,remaining_l"))]);
+  } catch (e) { el.innerHTML = `<p class="dev">Could not load: ${esc(e.message)}</p>`; return; }
+  const L = x => new Intl.NumberFormat("en-IN", { maximumFractionDigits: 1 }).format(n(x)) + " L", f0 = x => new Intl.NumberFormat("en-IN").format(n(x));
+  const fgL = sum(fg, r => n(r.available) * n(r.size_ml) / 1000), bulk = sum(bt.filter(b => b.status === "approved"), b => b.remaining_l), toMake = Math.max(0, B.litres - fgL - bulk);
+  const tile = (l, v, s = "", c = "") => `<div class="stat ${c}"><div class="stat-l">${l}</div><div class="stat-v">${v}</div>${s ? `<div class="stat-s">${s}</div>` : ""}</div>`;
+  el.innerHTML = `<div class="toolbar"><b>Orders in hand, in litres</b><span class="muted small">Customer orders (including EPDMS) not delivered yet. Litres = units × pack size.</span><span style="flex:1"></span><button class="btn" id="oxl">⬇ Excel</button></div>
+    <div class="stats">${tile("Litres on order", L(B.litres), `${B.orders.length} open order${B.orders.length === 1 ? "" : "s"} · ${f0(B.units)} units`, "good")}${tile("Finished goods available", L(fgL), "Filled packs in stock")}${tile("Bulk waiting to fill", L(bulk), "Approved, not yet filled")}${tile("Still to make", L(toMake), "Orders minus finished goods and bulk", toMake > 0 ? "warn" : "")}${tile("Order value", approx(B.value), `${approx(B.total)} with GST`)}</div>
+    ${B.noSize ? '<p class="muted small">Some order lines have no pack size in their name, so their litres are counted as zero.</p>' : ""}
+    <h3 style="margin:14px 0 6px">Litres to deliver, by product</h3>` +
+    table([{ h: "Product", v: p => p.desc }, { h: "Units to deliver", v: p => f0(p.units) }, { h: "Litres", v: p => L(p.litres) }, { h: "Orders", v: p => p.orders }], B.products, { empty: "No open orders." }) +
+    `<h3 style="margin:16px 0 6px">Open orders</h3>` +
+    table([{ h: "Order", v: o => o.no }, { h: "Date", v: o => dfmt(o.date) }, { h: "Customer", v: o => o.cust }, { h: "Units", v: o => f0(o.units) }, { h: "Litres", v: o => L(o.litres) }, { h: "Days open", html: o => `<span class="${o.age > 30 ? "dev" : ""}">${o.age}</span>` }], B.orders, { empty: "No open orders." });
+  $("#oxl", el).onclick = () => saveBook(`EarthLabs-orders-in-litres-${today}.xlsx`, [
+    ["Summary", [["Orders in hand, litres"], ["As on", today], ["Litres on order", r2(B.litres)], ["Finished goods available (L)", r2(fgL)], ["Bulk waiting to fill (L)", r2(bulk)], ["Still to make (L)", r2(toMake)]]],
+    ["By product", [["Product", "Units to deliver", "Litres", "Orders"], ...B.products.map(p => [p.desc, r2(p.units), r2(p.litres), p.orders])]],
+    ["Orders", [["Order", "Date", "Customer", "Units", "Litres", "Days open"], ...B.orders.map(o => [o.no, o.date, o.cust, r2(o.units), r2(o.litres), o.age])]],
+  ]);
 }
 export async function ordersInHand(el) {
   el.innerHTML = '<p class="muted">Loading…</p>';

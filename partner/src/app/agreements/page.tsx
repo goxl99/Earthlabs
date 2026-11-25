@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import Shell from "@/components/Shell";
 import { supabase } from "@/lib/supabase";
 import { Msg, when } from "@/components/ui";
-import { parseFieldMap, templateFileOk, safeName, fillDocx, mouValues, type MouField } from "@/lib/mou";
+import { parseFieldMap, templateFileOk, safeName, fillDocx, mouValues, MOU_FIELD_HELP, type MouField } from "@/lib/mou";
 import { MouBuilder } from "@/components/MouBuilder";
 import type { Role } from "@/lib/roles";
 import { agreementStage, STAGES } from "@/lib/agreementStage";
@@ -16,7 +16,7 @@ function Inner({ role }: { role: Role }) {
   const isSuper = role === "super_admin"; const canPrepare = isSuper || role === "sales"; const staff = ["super_admin", "sales", "accounts", "warehouse"].includes(role);
   const [ag, setAg] = useState<A[]>([]); const [tp, setTp] = useState<T[]>([]); const [certs, setCerts] = useState<Cert[]>([]); const [msg, setMsg] = useState(""); const [bad, setBad] = useState(false);
   const [pst, setPst] = useState<Record<string, string>>({});
-  const [open, setOpen] = useState<string | null>(null); const [co, setCo] = useState<Record<string, string>>({}); const [pid, setPid] = useState(""); const [tpl, setTpl] = useState(""); const [name, setName] = useState(""); const [type, setType] = useState(""); const [map, setMap] = useState("{{PARTNER_NAME}} = partner_name\n{{PARTNER_ID}} = partner_id");
+  const [open, setOpen] = useState<string | null>(null); const [co, setCo] = useState<Record<string, string>>({}); const [pid, setPid] = useState(""); const [tpl, setTpl] = useState(""); const [name, setName] = useState(""); const [file, setFile] = useState<File | null>(null); const [fileKey, setFileKey] = useState(0); const [busyUp, setBusyUp] = useState(false); const [type, setType] = useState(""); const [map, setMap] = useState("{{PARTNER_NAME}} = partner_name\n{{PARTNER_ID}} = partner_id");
   const say = (m: string, b = false) => { setMsg(m); setBad(b); };
   async function load() {
     const rows = ((await supabase.from("agreements").select("id,partner_id,status,sent_at,signed_at,template_id").order("created_at", { ascending: false }).limit(50)).data as A[]) ?? [];
@@ -28,13 +28,18 @@ function Inner({ role }: { role: Role }) {
     if (staff) setTp(((await supabase.from("mou_templates").select("id,name,version,type_code,active,storage_path,field_map").order("created_at", { ascending: false }).limit(50)).data as T[]) ?? []);
   }
   useEffect(() => { load(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  async function upload(f: File | undefined) {
-    if (!f) return; const e = templateFileOk(f.name, f.size); if (e) return say(e, true);
-    const p = parseFieldMap(map); if (p.error) return say(p.error, true); if (name.trim().length < 3) return say("Give the template a name", true);
+  async function upload() {
+    const f = file; if (!f) return say("Choose a template file first (.docx, .pdf or .odt)", true);
+    const e = templateFileOk(f.name, f.size); if (e) return say(e, true);
+    const p = parseFieldMap(map); if (p.error) return say(p.error, true); if (name.trim().length < 3) return say("Give the template a name (at least 3 letters)", true);
+    if (Object.keys(p.map).length === 0) return say("Add at least one placeholder in the field mapping", true);
+    setBusyUp(true);
     const path = `_templates/${Date.now()}-${safeName(f.name)}`;
-    const up = await supabase.storage.from("agreements").upload(path, f); if (up.error) return say(up.error.message, true);
+    const up = await supabase.storage.from("agreements").upload(path, f); if (up.error) { setBusyUp(false); return say(up.error.message, true); }
     const { error } = await supabase.from("mou_templates").insert({ name: name.trim(), storage_path: path, field_map: p.map, type_code: type || null });
-    say(error ? error.message : "Template saved", !!error); load();
+    setBusyUp(false); say(error ? error.message : `Template "${name.trim()}" saved. It now appears in the list above.`, !!error);
+    if (!error) { setName(""); setFile(null); setFileKey((k) => k + 1); }
+    load();
   }
   async function saveCo() { for (const k of Object.keys(CO)) { const { error } = await supabase.rpc("set_company_profile", { k, v: (co[k] ?? "").trim() }); if (error) return say(error.message, true); } say("Company details saved"); load(); }
   async function rpc(fn: string, args: Record<string, unknown>, ok: string) { const { error } = await supabase.rpc(fn, args); say(error ? error.message : ok, !!error); load(); }
@@ -74,8 +79,19 @@ function Inner({ role }: { role: Role }) {
     <h2>Certificates</h2><div className="card"><table><tbody>{certs.map((c) => <tr key={c.code}><td>{c.partner_id}</td><td>{c.code}</td><td>{when(c.issued_at)}</td><td>{c.revoked ? "Revoked" : <><a href={`../verify/?code=${c.code}`}>Public page</a> · <a href={`../certificate/?code=${c.code}`} target="_blank">Certificate (print / PDF)</a></>}</td></tr>)}{certs.length === 0 && <tr><td>No certificates yet.</td></tr>}</tbody></table></div>
     {staff && <><h2>Company details</h2><div className="card"><p style={{ fontSize: 13 }}>Used in the MOU, on the certificate, and as the second signer on Leegality.</p><div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(260px,1fr))", gap: 10 }}>{Object.entries(CO).map(([k, l]) => <label key={k} style={{ fontSize: 13 }}>{l}<input style={{ width: "100%" }} disabled={!isSuper} value={co[k] ?? ""} onChange={(e) => setCo({ ...co, [k]: e.target.value })} /></label>)}</div>{isSuper && <p><button className="btn" onClick={saveCo}>Save company details</button></p>}</div>
     <h2>MOU templates</h2><div className="card"><table><tbody>{tp.map((t) => <tr key={t.id}><td>{t.name} v{t.version}</td><td>{t.type_code ?? "All types"}</td><td>{t.active ? "Active" : "Retired"}</td></tr>)}</tbody></table>
-      {isSuper && <><h3>Upload your own MOU template</h3><input placeholder="Template name" value={name} onChange={(e) => setName(e.target.value)} /> <select value={type} onChange={(e) => setType(e.target.value)}><option value="">All partner types</option><option value="DLR">Dealer</option><option value="DST">Distributor</option></select>
-        <p>Field mapping (one per line: placeholder in your file = partner field)</p><textarea rows={4} style={{ width: "100%" }} value={map} onChange={(e) => setMap(e.target.value)} />
-        <p><input type="file" accept=".docx,.pdf,.odt" onChange={(e) => upload(e.target.files?.[0])} /></p></>}</div></>}</>);
+      {isSuper && <><h3>Upload your own MOU template</h3>
+        <div className="note" style={{ fontSize: 13 }}><b>How it works</b>
+          <ol style={{ margin: "6px 0 6px 18px", padding: 0 }}>
+            <li>Write your MOU in Word and type a placeholder wherever a partner detail should appear, for example <code>{"{{PARTNER_NAME}}"}</code>. Use the same spelling in the file and in the mapping below.</li>
+            <li>In <b>Field mapping</b>, list each placeholder once as <code>{"{{PLACEHOLDER}}"} = field</code>, using one of the fields in the table.</li>
+            <li>Name the template, choose who it applies to, pick the file and press <b>Upload template</b>. It then appears in the list above and can be used when you open a partner&apos;s MOU.</li></ol>
+          <details><summary style={{ cursor: "pointer", fontWeight: 700 }}>Fields you can use</summary>
+            <div className="tw"><table className="t"><thead><tr><th>Field</th><th>What it fills in</th></tr></thead><tbody>{MOU_FIELD_HELP.map(([f, d]) => <tr key={f}><td><code>{f}</code></td><td>{d}</td></tr>)}</tbody></table></div></details>
+          <p className="mini" style={{ marginBottom: 0 }}>Only Word (.docx) templates are filled in automatically. PDF and ODT files are stored as they are and must be filled by hand. Maximum file size 5 MB. Only a Super Admin can add templates.</p></div>
+        <p style={{ marginBottom: 4 }}><b>Template name</b></p><input placeholder="Template name" value={name} onChange={(e) => setName(e.target.value)} />
+        <p style={{ marginBottom: 4 }}><b>Applies to</b></p><select value={type} onChange={(e) => setType(e.target.value)}><option value="">All partner types</option><option value="DLR">Dealer</option><option value="DST">Distributor</option></select>
+        <p style={{ marginBottom: 4 }}><b>Field mapping</b> <span className="mini">(one per line: placeholder in your file = partner field)</span></p><textarea rows={4} style={{ width: "100%" }} value={map} onChange={(e) => setMap(e.target.value)} />
+        <p style={{ marginBottom: 4 }}><b>Template file</b></p><p><input key={fileKey} type="file" accept=".docx,.pdf,.odt" onChange={(e) => setFile(e.target.files?.[0] ?? null)} /></p>
+        <p><button className="btn" disabled={busyUp || !file || name.trim().length < 3} onClick={upload}>{busyUp ? "Uploading…" : "Upload template"}</button>{file && <span className="mini"> &nbsp;{file.name}</span>}</p></>}</div></>}</>);
 }
 export default function Page() { return <Shell page="agreements">{(u) => <Inner role={u.role} />}</Shell>; }

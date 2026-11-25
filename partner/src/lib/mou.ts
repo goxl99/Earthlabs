@@ -1,6 +1,13 @@
 /** Partner fields a custom MOU template may use. Must match the list enforced in the database. */
 export const MOU_FIELDS = ["partner_name", "partner_id", "contact_name", "district", "state", "gstin", "type_name", "date", "territory"] as const;
 export type MouField = (typeof MOU_FIELDS)[number];
+/** What each allowed field fills in, shown beside the template upload form. Same order and names as MOU_FIELDS. */
+export const MOU_FIELD_HELP: [MouField, string][] = [
+  ["partner_name", "The partner's registered business name"], ["partner_id", "The permanent Partner ID, for example ELP-DLR-0001"],
+  ["contact_name", "The partner's contact person"], ["district", "The partner's district"], ["state", "The partner's state"],
+  ["gstin", "GST number (blank if the partner has none)"], ["type_name", "Partner type, for example Authorized Dealer"],
+  ["territory", "The allocated territory (the district if none is allocated yet)"], ["date", "The date the MOU is prepared, for example 25 November 2026"],
+];
 
 /** Parses lines like `{{NAME}} = partner_name` into a placeholder map. Returns an error text for the first bad line. */
 export function parseFieldMap(text: string): { map: Record<string, MouField>; error?: string } {

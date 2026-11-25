@@ -39,6 +39,9 @@ Choose **Register**, pick Dealer or Distributor, fill the form and submit. Save 
 - **Applications**: open one, review, ask for more information, record field verification, then reject (a reason is required) or approve. Approval issues the permanent Partner ID.
 - **Territory**: shows districts, who covers them, exclusive districts and white-space. An exclusive district cannot be shared.
 - **Agreements**: create the MOU from a template, send it for e-signing, store the signed copy.
+  - **Uploading your own MOU template** (Super Admin only). Write the MOU in Word and type a placeholder such as `{{PARTNER_NAME}}` wherever a partner detail belongs. On the Agreements page, under *Upload your own MOU template*, give the template a name, choose Dealer, Distributor or all types, list each placeholder as `{{PLACEHOLDER}} = field`, choose the file and press *Upload template*.
+  - **Fields you can use:** `partner_name`, `partner_id`, `contact_name`, `district`, `state`, `gstin`, `type_name`, `territory` and `date`. Any other name is refused.
+  - **File types:** Word (.docx) templates are filled in automatically. PDF and ODT files are stored as they are and must be filled by hand. Maximum size 5 MB.
 - **Performance**: record the monthly score (unverified parameters are left out, not scored zero) and start a promotion assessment. Only Super Admin decides promotions.
 - Sales can read prices, margins and schemes but **cannot change them**.
 

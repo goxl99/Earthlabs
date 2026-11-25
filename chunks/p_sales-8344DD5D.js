@@ -490,11 +490,11 @@ export async function salesPage(el) {
     draw(); $("#q").oninput = draw; $("#ch").onchange = draw; $("#nc").onclick = () => openCustomer();
   } else if (TAB === "orderbook") {
     sv.innerHTML = '<p class="muted">Loading…</p>';
-    const { ordersInHand } = await import("./p_register-43645A28.js");
+    const { ordersInHand } = await import("./p_register-7141D991.js");
     await ordersInHand(sv);
   } else if (TAB === "register" && isAdmin) {
     sv.innerHTML = '<p class="muted">Loading…</p>';
-    const { invoiceRegister } = await import("./p_register-43645A28.js");
+    const { invoiceRegister } = await import("./p_register-7141D991.js");
     await invoiceRegister(sv);
   } else if (TAB === "docs") {
     const rows = [

@@ -171,8 +171,8 @@ async function accountingOverview(el) {
     el.innerHTML = body; tipInit(el);
     const goTo = t => { const [page, tab, sub] = t.dataset.go.split("|"); window.__nav = { page, tab, sub }; location.hash = "#/" + page; };
     const root = $("#acctroot", el); root.onclick = e => { if (e.target.closest("#capack")) return; const t = e.target.closest("[data-go]"); if (t) goTo(t); };
-    import("./p_register-43645A28.js").then(m => m.orderTile($("#ordtile-a", el))).catch(() => {});
-    const cap = $("#capack", el); if (cap) cap.onclick = async () => { cap.disabled = true; const t0 = cap.textContent; cap.textContent = "Preparing…"; try { const m = await import("./p_register-43645A28.js"); await m.downloadCAPack(); cap.textContent = t0; } catch (e) { cap.textContent = "Could not create the file"; } cap.disabled = false; };
+    import("./p_register-7141D991.js").then(m => m.orderTile($("#ordtile-a", el))).catch(() => {});
+    const cap = $("#capack", el); if (cap) cap.onclick = async () => { cap.disabled = true; const t0 = cap.textContent; cap.textContent = "Preparing…"; try { const m = await import("./p_register-7141D991.js"); await m.downloadCAPack(); cap.textContent = t0; } catch (e) { cap.textContent = "Could not create the file"; } cap.disabled = false; };
     root.onkeydown = e => { if (e.key !== "Enter" && e.key !== " ") return; const t = e.target.closest("[data-go]"); if (t) { e.preventDefault(); goTo(t); } };
     $("#rg", el).onchange = e => { ARANGE = e.target.value; draw(); };
     aiPanel($("#aidash", el), "business", async () => ({ business: (await sb.rpc("business_snapshot")).data || {} }));
@@ -239,7 +239,7 @@ async function productionOverview(el) {
         ${card("How much we can make", "Litres possible with the raw material in stock now (the scarcest ingredient decides).", hbars(capItems, lit) + tview(["Product", "Litres"], capItems.map(p => [p.label, p.text])))}
         ${card("By operator", `${R.label}.`, `<div style="overflow:auto"><table><thead><tr><th>Operator</th><th>Batches</th><th>Approved</th><th>Rework / rejected</th><th>With deviations</th></tr></thead><tbody>${Object.entries(ops).map(([k, o]) => `<tr><td>${esc(k)}</td><td>${o.n}</td><td>${o.a}</td><td>${o.rw}</td><td>${o.dv}</td></tr>`).join("") || '<tr><td colspan="5" class="muted">No batches in this period.</td></tr>'}</tbody></table></div>`)}
       </div>`;
-    import("./p_register-43645A28.js").then(m => { m.orderTile($("#ordtile-p", el)); m.orderStat($("#ordstat-p", el)); }).catch(() => {});
+    import("./p_register-7141D991.js").then(m => { m.orderTile($("#ordtile-p", el)); m.orderStat($("#ordstat-p", el)); }).catch(() => {});
     tipInit(el); $("#rg", el).onchange = e => { PRANGE = e.target.value; draw(); };
   };
   await draw();
@@ -249,11 +249,11 @@ async function productionOverview(el) {
 const DTAB = { acct: "overview", prod: "overview" };
 async function withTabs(el, key, overview) {
   if (key === "acct" && !hasRole("admin")) return overview(el);
-  const tabs = [["overview", "Overview"], ["orders", "Orders in hand"]];
+  const tabs = [["overview", "Overview"], ["orders", key === "prod" ? "Orders in hand (litres)" : "Orders in hand"]];
   el.innerHTML = `<div class="tabs wrapt">${tabs.map(([k, t]) => `<button class="tab ${k === DTAB[key] ? "on" : ""}" data-k="${k}">${t}</button>`).join("")}</div><div id="dtab"></div>`;
   const body = $("#dtab", el);
   $$(".tab", el).forEach(b => b.onclick = () => { DTAB[key] = b.dataset.k; withTabs(el, key, overview); });
-  if (DTAB[key] === "orders") { const m = await import("./p_register-43645A28.js"); await m.ordersInHand(body); } else await overview(body);
+  if (DTAB[key] === "orders") { const m = await import("./p_register-7141D991.js"); await (key === "prod" ? m.ordersInLitres(body) : m.ordersInHand(body)); } else await overview(body);
 }
 export const accountingDashboardPage = el => withTabs(el, "acct", accountingOverview);
 export const productionDashboardPage = el => withTabs(el, "prod", productionOverview);

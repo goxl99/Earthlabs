@@ -19,7 +19,9 @@ language sql security definer set search_path = public as $$
   returning o.*;
 $$;
 revoke all on function public.claim_emails(int) from public, anon, authenticated;
-grant execute on function public.claim_emails(int) to service_role;
+do $$ begin  -- Supabase has the service_role role; a plain test database does not
+  if exists (select 1 from pg_roles where rolname = 'service_role') then grant execute on function public.claim_emails(int) to service_role; end if;
+end $$;
 
 -- 2. Fire the delivery function right after any statement that queues mail. pg_net sends the request after the transaction commits,
 --    so the person who submitted never waits for it, and any failure here is swallowed (the scheduled job is the safety net).

@@ -176,6 +176,7 @@ const compress = async file => {
 export async function accountsPage(el) {
   if (!hasRole("admin")) { el.innerHTML = '<p class="muted">Accounts is for admin only.</p>'; return; }
   const tabs = [["overview", "Overview"], ["account", "Overall account"], ["ledger", "Party ledger"], ["expenses", "Expenses"], ["assets", "Assets"], ["earlier", "Earlier records"], ["bank", "Bank statement"], ["profit", "Profitability"], ["unit", "Unit economics"]];
+  const nv = window.__nav; if (nv && nv.page === "accounts") { window.__nav = null; if (nv.tab) TAB = nv.tab; if (nv.sub) { SUB = nv.sub; SUB2 = "all"; } }
   if (!tabs.some(([k]) => k === TAB)) TAB = "overview";
   el.innerHTML = `<div class="tabs wrapt">${tabs.map(([k, t]) => `<button class="tab ${k === TAB ? "on" : ""}" data-k="${k}">${t}</button>`).join("")}</div><div id="av"><p class="muted">Loading…</p></div>`;
   $$(".tab", el).forEach(b => b.onclick = () => { TAB = b.dataset.k; accountsPage(el); });

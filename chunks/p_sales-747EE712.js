@@ -218,6 +218,7 @@ export async function salesPage(el) {
   const linesOf = id => olines.filter(l => l.order_id === id);
   const valueOf = id => linesOf(id).reduce((s, l) => s + Number(l.qty) * Number(l.rate) * (1 + Number(l.gst_pct) / 100), 0);
   const tabs = [["orders", "Orders"], ["customers", "Customers"], ["docs", "Documents"], ...(isAdmin ? [["settings", "Company details"]] : [])];
+  const nv = window.__nav; if (nv && nv.page === "sales") { window.__nav = null; if (nv.tab) TAB = nv.tab; }
   if (!tabs.some(([k]) => k === TAB)) TAB = "orders";
   el.innerHTML = `<div class="tabs wrapt">${tabs.map(([k, t]) => `<button class="tab ${k === TAB ? "on" : ""}" data-k="${k}">${t}</button>`).join("")}</div><div id="sv"></div>`;
   $$(".tab", el).forEach(b => b.onclick = () => { TAB = b.dataset.k; salesPage(el); });

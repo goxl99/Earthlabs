@@ -59,6 +59,7 @@ export async function stockPage(el) {
   const VAL = Object.fromEntries((vv.data || []).map(r => [r.raw_material_id, r]));
   const BILLS = bl.data || [], billsOk = !bl.error, lastP = Object.fromEntries((lp.data || []).map(r => [r.raw_material_id, r]));
   const tabsList = TABS.filter(([k]) => k !== "bills" || canOrder);
+  const nv = window.__nav; if (nv && nv.page === "stock") { window.__nav = null; if (nv.tab) TAB = nv.tab; }
   if (TAB === "bills" && !canOrder) TAB = "stock";
   const byId = Object.fromEntries(mats.map(m => [m.id, m]));
   const isLow = r => r.below_min || r.below_cover;

@@ -475,3 +475,12 @@ input,select,textarea{font:inherit}
 .tdoc-foot{background:var(--tt);color:#fff;text-align:center;padding:12px;font-size:11px}
 .brand-logo{max-width:220px;max-height:100px;object-fit:contain;border:1px dashed var(--ln);padding:6px;background:#fff}
 @media print{.top,.side,.no-print,.mob,nav{display:none!important}body{background:#fff}.main{padding:0!important;margin:0!important}.tdoc{border:0;max-width:none;min-height:0}.tdoc *{-webkit-print-color-adjust:exact;print-color-adjust:exact}}
+/* dealer outreach: clickable rows, modal with fixed header/footer and scrolling body */
+tr.clk{cursor:pointer}tr.clk:hover td{background:#f3f7f3}
+.modal{display:flex;flex-direction:column;max-height:90vh;overflow:hidden}
+.modal .body{flex:1;max-height:none;min-height:0}
+.modal footer{background:#fafcfa;border-radius:0 0 16px 16px}
+.modal h3{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--teal)}
+.modal .field textarea{resize:vertical;line-height:1.5}
+.modal .field input:disabled,.modal .field textarea:disabled{background:#f4f6f4;color:var(--mute)}
+@media(max-width:640px){.frm2{grid-template-columns:1fr}.mod-bg{padding:0}.modal{max-height:100vh;border-radius:0;min-height:100vh}}

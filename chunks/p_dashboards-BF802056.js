@@ -105,7 +105,7 @@ const aiPanel = (host, topic, getCtx) => {
   };
 };
 
-export async function accountingDashboardPage(el) {
+async function accountingOverview(el) {
   if (!hasRole("admin")) { el.innerHTML = '<p class="muted">The accounting dashboard is for admin only.</p>'; return; }
   css(); el.innerHTML = '<p class="muted">Loading…</p>';
   let D;
@@ -184,7 +184,7 @@ export async function accountingDashboardPage(el) {
 // PRODUCTION DASHBOARD
 // =====================================================================
 let PRANGE = "month";
-export async function productionDashboardPage(el) {
+async function productionOverview(el) {
   css(); el.innerHTML = '<p class="muted">Loading…</p>';
   let D;
   try {
@@ -244,3 +244,16 @@ export async function productionDashboardPage(el) {
   };
   await draw();
 }
+
+// ---- tabs: Overview | Orders in hand ----
+const DTAB = { acct: "overview", prod: "overview" };
+async function withTabs(el, key, overview) {
+  if (key === "acct" && !hasRole("admin")) return overview(el);
+  const tabs = [["overview", "Overview"], ["orders", "Orders in hand"]];
+  el.innerHTML = `<div class="tabs wrapt">${tabs.map(([k, t]) => `<button class="tab ${k === DTAB[key] ? "on" : ""}" data-k="${k}">${t}</button>`).join("")}</div><div id="dtab"></div>`;
+  const body = $("#dtab", el);
+  $$(".tab", el).forEach(b => b.onclick = () => { DTAB[key] = b.dataset.k; withTabs(el, key, overview); });
+  if (DTAB[key] === "orders") { const m = await import("./p_register-43645A28.js"); await m.ordersInHand(body); } else await overview(body);
+}
+export const accountingDashboardPage = el => withTabs(el, "acct", accountingOverview);
+export const productionDashboardPage = el => withTabs(el, "prod", productionOverview);

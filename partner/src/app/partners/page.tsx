@@ -4,6 +4,7 @@ import Link from "next/link";
 import Shell from "@/components/Shell";
 import { supabase } from "@/lib/supabase";
 import { saveCsv } from "@/lib/download";
+import Coverage from "@/components/Coverage";
 import { cleanTerm, emptyFilter, activeFilters, type PartnerFilter } from "@/lib/partnerFilter";
 
 type P = { id: string; name: string; type_code: string; district: string; status: string };
@@ -29,6 +30,7 @@ function Inner() {
     saveCsv(`partners-${new Date().toISOString().slice(0, 10)}.csv`, out.map((p) => ({ "Partner ID": p.id, Name: p.name, Type: p.type_code, District: p.district, Status: p.status })));
   }
   return (<><h1>Partners</h1><p className="sub">Every approved partner keeps one Partner ID for life. Open a row for the full profile.</p>
+    <Coverage refresh={total} />
     {err && <div className="note bad">{err}</div>}
     <div className="row" style={{ flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
       <input aria-label="Search partners" placeholder="Search name, ID or district" value={f.q} onChange={(e) => set("q", e.target.value)} style={{ maxWidth: 300 }} />

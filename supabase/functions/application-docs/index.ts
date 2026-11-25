@@ -15,10 +15,10 @@ Deno.serve(async (req) => {
   const db = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!, { auth: { persistSession: false } });
   const { data: app } = await db.from("applications").select("id,status,type_code,email,ref_no,business_name").eq("ref_no", String(b.ref ?? "").trim().toUpperCase()).maybeSingle();
   if (!app || String(app.email ?? "").trim().toLowerCase() !== String(b.email ?? "").trim().toLowerCase()) return json({ error: "Check the reference number and e-mail" }, 404, o);
-  const { data: req_ } = await db.rpc("required_docs", { t: app.type_code });
+  // The required list and the current documents are independent, so they are read together.
+  const [{ data: req_ }, { data: docs }] = await Promise.all([db.rpc("required_docs", { t: app.type_code }), db.from("application_documents").select("kind,file_name,status,note,uploaded_at,not_applicable").eq("application_id", app.id).eq("is_current", true)]);
   const required = (req_ as string[]) ?? [];
   const canUpload = OPEN.includes(app.status);
-  const { data: docs } = await db.from("application_documents").select("kind,file_name,status,note,uploaded_at,not_applicable").eq("application_id", app.id).eq("is_current", true);
 
   if (b.action === "list") return json({ status: app.status, can_upload: canUpload, required, docs: docs ?? [] }, 200, o);
   if (!canUpload) return json({ error: "Documents are not being collected for this application right now" }, 409, o);

@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { Badge, Kpi, Msg } from "@/components/ui";
 import { askForm, notify } from "@/lib/dialog";
 import Coverage, { useCoverageData } from "@/components/Coverage";
+import TerritoryAI from "@/components/TerritoryAI";
 import { coverage } from "@/lib/coverage";
 import { fmtL } from "@/lib/potential";
 import { GJ, CATS, MST_LABEL, dist, drillSet, fitTo, potential, pos, distFill, exclConflict, type Lvl, type VB, type ColorMode } from "@/lib/geo";
@@ -122,6 +123,7 @@ function Inner({ canAssign }: { canAssign: boolean }) {
         <select aria-label="Status" value={st} onChange={(e) => setSt(e.target.value)}>{[["all", "All statuses"], ["applicant", "Applicants (incl. verified)"], ["approved", "Approved, agreement pending"], ["active", "Active"], ["suspended", "Suspended"], ["rejected", "Rejected"]].map((o) => <option key={o[0]} value={o[0]}>{o[1]}</option>)}</select>
         <select aria-label="Colour by" value={color} onChange={(e) => setColor(e.target.value as ColorMode)}>{[["status", "Colour: coverage"], ["cluster", "Colour: cluster"], ["circle", "Colour: circle"], ["master", "Colour: master circle"], ["potential", "Colour: market potential"]].map((o) => <option key={o[0]} value={o[0]}>{o[1]}</option>)}</select>
         <label className="row mini" style={{ gap: 5, textTransform: "none", letterSpacing: 0, fontWeight: 400 }}><input type="checkbox" checked={vend} onChange={(e) => setVend(e.target.checked)} /> Vendors layer</label></div></div>
+    <TerritoryAI lvl={lvl} data={cov} district={lvl.d ?? null} />
     <Coverage lvl={lvl} data={cov} onLvl={(L) => { setLvl(L); setTown(""); setPick(L.d ? "d:" + L.d : null); setVb(fitTo(drillSet(L))); }} />
     <div className="grid g21" style={{ alignItems: "start" }}><div>
       <div className="mapwrap"><div style={{ position: "absolute", right: 10, top: 10, display: "flex", flexDirection: "column", gap: 6, zIndex: 2 }}><button className="btn" aria-label="Zoom in" onClick={() => zoom(0.7)}>+</button><button className="btn" aria-label="Zoom out" onClick={() => zoom(1 / 0.7)}>−</button><button className="btn sm" onClick={reset}>Reset</button></div>

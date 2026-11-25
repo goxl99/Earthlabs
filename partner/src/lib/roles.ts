@@ -18,6 +18,7 @@ export const NAV: NavItem[] = [
   { key: "appr", href: "/approvals/", label: "Approvals", icon: "✔", group: "Overview", roles: ["super_admin"] },
   { key: "apps", href: "/applications/", label: "Applications", icon: "✎", group: "Partners", module: "applications", roles: ["super_admin", "sales"] },
   { key: "map", href: "/territory/", label: "Territory Explorer", icon: "◉", group: "Partners", module: "territory", roles: ["super_admin", "sales"] },
+  { key: "outreach", href: "/outreach/", label: "Dealer Outreach", icon: "✉", group: "Partners", roles: ["super_admin", "sales"] },
   { key: "partners", href: "/partners/", label: "Partners", icon: "☷", group: "Partners", module: "partners", roles: ["super_admin", "sales", "accounts"] },
   { key: "agree", href: "/agreements/", label: "Agreements & Certificates", icon: "✍", group: "Partners", module: "agreements", roles: ["super_admin", "sales", "accounts"] },
   { key: "perf", href: "/performance/", label: "Performance Matrix", icon: "◔", group: "Partners", module: "performance", roles: ["super_admin", "sales", "accounts"] },

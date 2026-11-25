@@ -4,7 +4,7 @@
 // Secrets (set in Supabase, never in the repo): RESEND_API_KEY, MAIL_FROM, CRON_SECRET.
 import { createClient } from "npm:@supabase/supabase-js@2";
 
-type Row = { id: number; to_email: string; subject: string; body: string; attempts: number };
+type Row = { id: number; to_email: string; subject: string; body: string; attempts: number; reply_to?: string | null };
 const CHUNK = 5;
 
 Deno.serve(async (req) => {
@@ -18,7 +18,7 @@ Deno.serve(async (req) => {
     try {
       const r = await fetch("https://api.resend.com/emails", {
         method: "POST", headers: { Authorization: `Bearer ${Deno.env.get("RESEND_API_KEY")}`, "Content-Type": "application/json" },
-        body: JSON.stringify({ from: Deno.env.get("MAIL_FROM"), to: m.to_email, subject: m.subject, text: m.body }),
+        body: JSON.stringify({ from: Deno.env.get("MAIL_FROM"), to: m.to_email, subject: m.subject, text: m.body, ...(m.reply_to ? { reply_to: m.reply_to } : {}) }),
       });
       ok = r.ok;
     } catch { ok = false; }

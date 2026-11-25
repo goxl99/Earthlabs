@@ -5,6 +5,7 @@ import { buildContext, mailtoLink, riskyIn, MODE_LABEL, type Advice, type Mode }
 import type { CoverageData } from "@/components/Coverage";
 import type { Lvl } from "@/lib/geo";
 import { Msg } from "@/components/ui";
+import Link from "next/link";
 
 /** AI sales, distribution and export advisor for the area on the map. It advises only: nothing is sent or changed from here. */
 export default function TerritoryAI({ lvl, data, district }: { lvl: Lvl; data: CoverageData; district?: string | null }) {
@@ -25,6 +26,7 @@ export default function TerritoryAI({ lvl, data, district }: { lvl: Lvl; data: C
     <div className="row"><h2 style={{ margin: 0 }}>✦ AI sales &amp; distribution advisor</h2><div className="sp" /><button className="btn sm" onClick={() => setOpen(!open)} aria-expanded={open}>{open ? "Hide" : "Open"}</button></div>
     <p className="mini" style={{ margin: "4px 0 0" }}>Finds where to recruit dealers, drafts the first e-mail, and helps plan export. Works on the area selected above{district ? ` (${district})` : ""}. It only advises: nothing is sent or changed from here.</p>
     {open && <div style={{ marginTop: 8 }}>
+      <p className="note" style={{ margin: "0 0 8px" }}>Want real dealers with contact details and automatic first e-mails? Use <Link href={`/outreach/${district ? "?d=" + encodeURIComponent(district) : ""}`}><b>Dealer Outreach</b></Link>: the AI searches the web for dealers of similar products, you approve, and it sends and tracks replies.</p>
       <div className="row" style={{ flexWrap: "wrap", gap: 6 }}>{(["find_dealers", "outreach", "export", "ask"] as Mode[]).map((m) => <button key={m} className={"btn sm" + (mode === m ? "" : " out")} aria-pressed={mode === m} onClick={() => { setMode(m); setAdv(null); setErr(""); setNote(""); }}>{MODE_LABEL[m]}</button>)}</div>
       {needsLead && <div className="grid g2" style={{ marginTop: 8 }}>
         <label className="mini">Lead&apos;s name<input value={lead.name} onChange={(e) => setLead({ ...lead, name: e.target.value })} maxLength={80} /></label>

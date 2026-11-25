@@ -159,6 +159,7 @@ function Inner({ isSuper }: { isSuper: boolean }) {
       <h2 style={{ marginTop: 0 }}>Sending settings (Super Admin)</h2>
       <div className="grid g2"><label className="mini">Replies go to (a mailbox set up to receive replies)<input type="email" value={setf.reply_to} onChange={(e) => setSetf({ ...setf, reply_to: e.target.value })} placeholder="partners@replies.yourdomain.com" /></label>
         <label className="mini">Most mails a day<input type="number" min={1} max={200} value={setf.daily_cap} onChange={(e) => setSetf({ ...setf, daily_cap: e.target.value })} /></label></div>
+      <p className="mini">Every first e-mail carries the product brochure (PDF) and a short video as attachments. WhatsApp messages link to the same two files.</p>
       <p className="mini">A low daily cap protects your sender reputation. The reply address must be a mailbox Resend receives mail for, so replies reach this screen (see docs/OUTREACH_SETUP.md).</p>
       <p><button className="btn" onClick={saveSettings}>Save settings</button></p></div>}
 
@@ -205,7 +206,7 @@ function Inner({ isSuper }: { isSuper: boolean }) {
           <h3 style={{ margin: "14px 0 6px" }}>First e-mail{email.trim() && <span className="mini" style={{ fontWeight: 400 }}> · to {email}</span>}</h3>
           {locked && <p className="mini" style={{ margin: "0 0 6px" }}>Already approved, so the e-mail is locked.</p>}
           <div className="field"><label htmlFor="l-subj">Subject</label><input id="l-subj" value={field("subject")} disabled={locked} onChange={(e) => setEdit({ ...edit, subject: e.target.value })} /></div>
-          <div className="field"><label htmlFor="l-body">Message</label><textarea id="l-body" rows={9} value={field("body")} disabled={locked} onChange={(e) => setEdit({ ...edit, body: e.target.value })} />{!locked && <small>A STOP line is added automatically at the end.</small>}</div>
+          <div className="field"><label htmlFor="l-body">Message</label><textarea id="l-body" rows={9} value={field("body")} disabled={locked} onChange={(e) => setEdit({ ...edit, body: e.target.value })} />{!locked && <small>A line saying the brochure (PDF) and a short video are attached, and a STOP line, are added automatically at the end.</small>}</div>
 
           {rep.length > 0 && <><h3 style={{ margin: "14px 0 6px" }}>Replies</h3>{rep.map((r) => <div key={r.id} className="note ok" style={{ borderColor: "var(--turq)", background: "#e3f3f4" }}><b>{when(r.received_at)}</b>{r.ai_note && <span className="mini"> · {r.ai_note}</span>}<div className="mini" style={{ whiteSpace: "pre-wrap", marginTop: 4 }}>{r.body}</div></div>)}</>}
         </div>

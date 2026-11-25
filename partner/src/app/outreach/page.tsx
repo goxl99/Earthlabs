@@ -6,7 +6,7 @@ import { callFn } from "@/lib/fn";
 import { Badge, Kpi, Msg, when } from "@/components/ui";
 import { askConfirm } from "@/lib/dialog";
 import { DISTRICTS } from "@/lib/districts";
-import { leadMail, parsePasted, statusKind, statusLabel, summarize, waLink, waMessage, STATUSES, type Lead, type Reply } from "@/lib/outreach";
+import { leadMail, parsePasted, statusKind, statusLabel, summarize, waLink, waMessage, waNumber, STATUSES, type Lead, type Reply } from "@/lib/outreach";
 
 type Cfg = { reply_to: string | null; daily_cap: number };
 const NEXT_CHOICES = ["Call them", "Send product details", "Invite to register on the portal", "Schedule a visit", "Follow up in 7 days", "Closed: not interested", "Read the reply and decide"];
@@ -49,16 +49,17 @@ function Inner({ isSuper }: { isSuper: boolean }) {
       : d.found ? `Nothing new in ${dist}: ${d.dropped ? `${d.dropped} were only on old or directory pages` : "all were already known"}. Press Find dealers again to search more, or try a nearby district.` : `The AI found no dealer in ${dist} it could confirm from a recent public page. Try again, a nearby district, or add your own list.` });
     setArea(dist); load();
   }
-  async function approve() {
+  async function approveLeads(list: Lead[]) {
     if (!cfg.reply_to) return setMsg({ k: "bad", t: "Set the reply address first (Super Admin, section below). No mail goes out until replies have somewhere to land." });
-    if (!selReady.length) return setMsg({ k: "note", t: "Tick leads that are To review and have an e-mail address." });
-    const ok = await askConfirm("Approve and send?", `${selReady.length} dealer${selReady.length === 1 ? "" : "s"} will get the first e-mail automatically, up to ${cfg.daily_cap} a day (the rest follow the next day). Each mail has a STOP line, and anyone who replies STOP is never mailed again.`, "Approve and send");
+    if (!list.length) return setMsg({ k: "note", t: "Tick leads that are To review and have an e-mail address." });
+    const ok = await askConfirm("Approve and send?", `${list.length} dealer${list.length === 1 ? "" : "s"} will get the first e-mail automatically, up to ${cfg.daily_cap} a day (the rest follow the next day). Each mail has a STOP line, and anyone who replies STOP is never mailed again.`, "Approve and send");
     if (!ok) return;
     setBusy("approve");
-    const { data, error } = await supabase.rpc("approve_leads", { ids: selReady.map((l) => l.id) });
+    const { data, error } = await supabase.rpc("approve_leads", { ids: list.map((l) => l.id) });
     setBusy(""); setSel(new Set());
-    setMsg(error ? { k: "bad", t: error.message } : { k: "ok", t: `${data as number} approved. They are being sent now.` + ((data as number) < selReady.length ? " The rest could not be approved (already a partner or applicant, or the draft is empty)." : "") }); load();
+    setMsg(error ? { k: "bad", t: error.message } : { k: "ok", t: `${data as number} approved. They are being sent now.` + ((data as number) < list.length ? " The rest could not be approved (already a partner or applicant, or the draft is empty)." : "") }); setOpen(null); load();
   }
+  const approve = () => approveLeads(selReady);
   async function mark(s: string, ids: string[]) {
     if (!ids.length) return; setBusy("mark");
     const { error } = await supabase.rpc("set_lead_status", { ids, s }); setBusy(""); setSel(new Set());
@@ -79,13 +80,22 @@ function Inner({ isSuper }: { isSuper: boolean }) {
     setOpen(l); setEdit({}); setRep([]);
     const { data } = await supabase.from("lead_replies").select("*").eq("lead_id", l.id).order("received_at", { ascending: false }).limit(20); setRep((data as Reply[]) ?? []);
   }
-  async function saveEdit() {
-    if (!open) return; const patch = Object.fromEntries(Object.entries(edit).filter(([, v]) => v !== undefined));
+  async function persistEdit(): Promise<boolean> {
+    if (!open) return false; const patch = Object.fromEntries(Object.entries(edit).filter(([, v]) => v !== undefined));
+    if (!Object.keys(patch).length) return true;
     if (patch.email) patch.email = String(patch.email).trim().toLowerCase();
     const { error } = await supabase.from("dealer_leads").update(patch).eq("id", open.id);
-    if (error) return setMsg({ k: "bad", t: error.code === "23505" ? "That e-mail is already on the list." : error.message });
-    setMsg({ k: "ok", t: "Saved." }); setOpen(null); load();
+    if (error) { setMsg({ k: "bad", t: error.code === "23505" ? "That e-mail is already on the list." : error.message }); return false; }
+    return true;
   }
+  async function saveEdit() { if (await persistEdit()) { setMsg({ k: "ok", t: "Saved." }); setOpen(null); load(); } }
+  async function approveOpen() {
+    if (!open || !(await persistEdit())) return;
+    const l = { ...open, ...edit } as Lead;
+    if (!l.email || !l.subject || !l.body) return setMsg({ k: "bad", t: "Add an e-mail address, subject and message first." });
+    await approveLeads([l]);
+  }
+  useEffect(() => { if (!open && !paste) return; const k = (e: KeyboardEvent) => { if (e.key === "Escape") { setOpen(null); setPaste(false); } }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [open, paste]);
   async function saveSettings() {
     const { error } = await supabase.rpc("set_lead_settings", { reply_to: setf.reply_to.trim() || null, daily_cap: Number(setf.daily_cap) || 25 });
     setMsg(error ? { k: "bad", t: error.message } : { k: "ok", t: "Saved. Approved leads are released within 10 minutes." }); load();
@@ -135,14 +145,14 @@ function Inner({ isSuper }: { isSuper: boolean }) {
         <button className="btn out" disabled={busy !== "" || ![...sel].length} onClick={() => mark("Converted", [...sel])}>Mark converted</button>
         <span className="mini">{sel.size} ticked</span></p>
       <div style={{ overflowX: "auto" }}><table><thead><tr><th><input type="checkbox" aria-label="Tick all" checked={shown.length > 0 && shown.every((l) => sel.has(l.id))} onChange={(e) => setSel(e.target.checked ? new Set(shown.map((l) => l.id)) : new Set())} /></th><th>Dealer</th><th>Contact</th><th>Area</th><th>Status</th><th>Sent</th><th>Reply and next step</th><th /></tr></thead>
-        <tbody>{shown.map((l) => <tr key={l.id}>
-          <td><input type="checkbox" aria-label={`Tick ${l.business}`} checked={sel.has(l.id)} onChange={() => toggle(l.id)} /></td>
+        <tbody>{shown.map((l) => <tr key={l.id} className="clk" onClick={() => openLead(l)}>
+          <td onClick={(e) => e.stopPropagation()}><input type="checkbox" aria-label={`Tick ${l.business}`} checked={sel.has(l.id)} onChange={() => toggle(l.id)} /></td>
           <td><b>{l.business}</b>{l.name && <div className="mini">{l.name}</div>}<div className="mini">{l.source === "ai_search" ? <>AI found · {l.source_url ? <a href={l.source_url} target="_blank" rel="noopener noreferrer">source page</a> : "no link"}</> : "Added by staff"}</div></td>
           <td>{l.email ?? <span className="mini">no e-mail</span>}{l.phone && <div className="mini">{l.phone}</div>}{l.wa_at && <div className="mini">WhatsApp opened {when(l.wa_at)}</div>}</td>
           <td>{l.district}</td><td><Badge kind={statusKind(l.status)}>{statusLabel(l.status)}</Badge></td><td>{when(l.sent_at)}</td>
           <td>{l.last_reply_at && <div className="mini">Replied {when(l.last_reply_at)}</div>}{l.next_step && <div><b>{l.next_step}</b></div>}{l.next_step_note && <div className="mini">{l.next_step_note}</div>}</td>
-          <td style={{ whiteSpace: "nowrap" }}>{waBtn(l)} <button className="btn sm out" onClick={() => openLead(l)}>Open</button></td></tr>)}
-          {shown.length === 0 && <tr><td colSpan={8} className="mini">Nothing here yet.</td></tr>}</tbody></table></div>
+          <td style={{ whiteSpace: "nowrap" }} onClick={(e) => e.stopPropagation()}>{waBtn(l)} <button className="btn sm out" onClick={() => openLead(l)}>Open</button></td></tr>)}
+          {shown.length === 0 && <tr><td colSpan={8} className="mini" style={{ padding: 18, textAlign: "center" }}>{leads.length === 0 ? "No dealers yet. Use Find dealers with AI above, or Add my own list." : "No dealers match these filters."}</td></tr>}</tbody></table></div>
     </div>
 
     {isSuper && <div className="card flat" style={{ marginTop: 10 }}>
@@ -153,28 +163,63 @@ function Inner({ isSuper }: { isSuper: boolean }) {
       <p><button className="btn" onClick={saveSettings}>Save settings</button></p></div>}
 
     {paste && <div className="mod-bg" role="dialog" aria-modal="true" aria-label="Add my own list" onClick={() => setPaste(false)}><div className="modal" onClick={(e) => e.stopPropagation()}>
-      <h2>Add my own list</h2>
-      <p className="mini">One dealer per line: business, contact name, e-mail, phone (separate with commas). Lines with neither an e-mail nor a phone are skipped. Use only business contacts.</p>
-      <label className="mini">Area<select value={pDist} onChange={(e) => setPDist(e.target.value)}>{DISTRICTS.map((d) => <option key={d}>{d}</option>)}</select></label>
-      <textarea rows={8} style={{ width: "100%", marginTop: 6 }} value={pText} onChange={(e) => setPText(e.target.value)} placeholder={"Acme Hygiene Supplies, R. Shah, sales@acme.in, 98765 43210"} />
+      <header><h2 style={{ margin: 0 }}>Add my own list</h2><button className="x" aria-label="Close" onClick={() => setPaste(false)}>×</button></header>
+      <div className="body">
+        <p className="mini" style={{ marginTop: 0 }}>One dealer per line: <b>business, contact name, e-mail, phone</b> (separate with commas). Lines with neither an e-mail nor a phone are skipped. Use only business contacts.</p>
+        <div className="field"><label htmlFor="p-area">Area</label><select id="p-area" value={pDist} onChange={(e) => setPDist(e.target.value)}>{DISTRICTS.map((d) => <option key={d}>{d}</option>)}</select></div>
+        <div className="field"><label htmlFor="p-list">Dealers</label><textarea id="p-list" rows={8} value={pText} onChange={(e) => setPText(e.target.value)} placeholder={"Acme Hygiene Supplies, R. Shah, sales@acme.in, 98765 43210"} /><small>{pText.split("\n").filter((x) => x.trim()).length} line(s)</small></div>
+      </div>
       <footer><button className="btn out" onClick={() => setPaste(false)}>Cancel</button><button className="btn" disabled={busy === "paste" || !pText.trim()} onClick={addPasted}>{busy === "paste" ? "Adding…" : "Add to the list"}</button></footer></div></div>}
 
-    {open && <div className="mod-bg" role="dialog" aria-modal="true" aria-label="Dealer" onClick={() => setOpen(null)}><div className="modal wide" onClick={(e) => e.stopPropagation()}>
-      <div className="row"><h2 style={{ margin: 0 }}>{open.business}</h2><div className="sp" /><Badge kind={statusKind(open.status)}>{statusLabel(open.status)}</Badge></div>
-      {open.source === "ai_search" && <p className="mini">Found by the AI{open.source_url && <> on <a href={open.source_url} target="_blank" rel="noopener noreferrer">this page</a></>}. Check the details against the page before approving.</p>}
-      <div className="grid g2" style={{ marginTop: 6 }}>
-        {([["business", "Business"], ["name", "Contact name"], ["email", "E-mail"], ["phone", "Phone"], ["products", "Deals in"]] as [keyof Lead, string][]).map(([k, n]) => <label key={k} className="mini">{n}<input value={field(k)} disabled={locked && k === "email"} onChange={(e) => setEdit({ ...edit, [k]: e.target.value })} /></label>)}
-        <label className="mini">Next step<select value={field("next_step")} onChange={(e) => setEdit({ ...edit, next_step: e.target.value })}><option value="">{field("next_step") || "Choose"}</option>{NEXT_CHOICES.map((n) => <option key={n}>{n}</option>)}</select></label></div>
-      <label className="mini" style={{ display: "block", marginTop: 6 }}>Note<input style={{ width: "100%" }} value={field("next_step_note")} onChange={(e) => setEdit({ ...edit, next_step_note: e.target.value })} /></label>
-      <label className="mini" style={{ display: "block", marginTop: 6 }}>First e-mail: subject<input style={{ width: "100%" }} value={field("subject")} disabled={locked} onChange={(e) => setEdit({ ...edit, subject: e.target.value })} /></label>
-      <label className="mini" style={{ display: "block", marginTop: 6 }}>First e-mail: message {locked ? "(already approved, so locked)" : "(a STOP line is added automatically)"}<textarea rows={9} style={{ width: "100%" }} value={field("body")} disabled={locked} onChange={(e) => setEdit({ ...edit, body: e.target.value })} /></label>
-      {rep.length > 0 && <><h3>Replies</h3>{rep.map((r) => <div key={r.id} className="check"><div style={{ flex: 1 }}><b>{when(r.received_at)}</b> {r.ai_note && <span className="mini">· {r.ai_note}</span>}<div className="mini" style={{ whiteSpace: "pre-wrap" }}>{r.body}</div></div></div>)}</>}
-      <footer style={{ flexWrap: "wrap" }}>
-        {waBtn(open, false)}
-        {["Sent", "Queued", "Approved", "Not interested", "Found"].includes(open.status) && <button className="btn out" onClick={() => mark("Replied", [open.id])}>They replied (no e-mail)</button>}
-        {open.status === "Rejected" && <button className="btn out" onClick={() => mark("Found", [open.id])}>Put back to review</button>}
-        {open.status !== "Converted" && open.status !== "Opted out" && <button className="btn out" onClick={() => mark("Converted", [open.id])}>Mark converted</button>}
-        <div className="sp" /><button className="btn out" onClick={() => setOpen(null)}>Close</button><button className="btn" disabled={Object.keys(edit).length === 0} onClick={saveEdit}>Save changes</button></footer></div></div>}
+    {open && (() => {
+      const stage = ["Found", "Approved", "Queued", "Sent", "Replied", "Converted"].indexOf(open.status);
+      const steps = ["Found", "Approved", "Sent", "Replied"]; const cur = stage < 0 ? -1 : [0, 1, 1, 2, 3, 3][stage];
+      const email = field("email"), phone = field("phone"); const canApprove = open.status === "Found" && !!email.trim() && !!field("subject") && !!field("body");
+      const num = waNumber(phone); const wl = waLink(phone, waMessage({ name: field("name") || null, district: open.district }));
+      return <div className="mod-bg" role="dialog" aria-modal="true" aria-label="Dealer" onClick={() => setOpen(null)}><div className="modal wide" onClick={(e) => e.stopPropagation()}>
+        <header style={{ alignItems: "flex-start" }}>
+          <div style={{ minWidth: 0 }}>
+            <h2 style={{ margin: 0 }}>{open.business}</h2>
+            <div className="mini" style={{ marginTop: 2 }}>{open.district}{open.source === "ai_search" ? " · found by AI" : " · added by staff"}{open.source_url && <> · <a href={open.source_url} target="_blank" rel="noopener noreferrer">open source page ↗</a></>}</div>
+          </div>
+          <div className="sp" /><Badge kind={statusKind(open.status)}>{statusLabel(open.status)}</Badge><button className="x" aria-label="Close" style={{ marginLeft: 6 }} onClick={() => setOpen(null)}>×</button>
+        </header>
+        <div className="body">
+          {cur >= 0 && <div className="steps" aria-label="Progress" style={{ marginTop: 0 }}>{steps.map((n, i) => <div key={n} className={"step" + (i < cur ? " done" : i === cur ? " cur" : "")}><i>{i < cur ? "✓" : i + 1}</i>{n === "Found" ? "To review" : n === "Approved" ? "Sending" : n}</div>)}</div>}
+          {open.source === "ai_search" && open.status === "Found" && <div className="note ai">The AI took these details from the source page. Open it and check the e-mail and phone before you approve.</div>}
+          {open.status === "Found" && !email.trim() && <div className="note">No e-mail yet. {num ? "You can WhatsApp or call them, or type an e-mail below to enable sending." : "Add an e-mail or a mobile number to reach them."}</div>}
+          <div className="row" style={{ gap: 8, flexWrap: "wrap", margin: "4px 0 12px" }}>
+            {wl && <a className="btn" style={{ background: "#25D366", borderColor: "#25D366", color: "#073b1c" }} href={wl} target="_blank" rel="noopener noreferrer" onClick={() => wa(open)}>WhatsApp {phone}</a>}
+            {phone && <a className="btn out" href={`tel:${phone.replace(/[^0-9+]/g, "")}`}>Call</a>}
+            {open.wa_at && <span className="mini">WhatsApp opened {when(open.wa_at)}</span>}
+            {phone && !num && <span className="mini">WhatsApp needs an Indian mobile number</span>}
+          </div>
+
+          <h3 style={{ margin: "6px 0" }}>Contact</h3>
+          <div className="frm2">
+            {([["business", "Business", "text"], ["name", "Contact name", "text"], ["email", "E-mail", "email"], ["phone", "Phone", "tel"], ["products", "Deals in", "text"]] as [keyof Lead, string, string][]).map(([k, n, t]) => <div key={k} className="field"><label htmlFor={`l-${k}`}>{n}</label><input id={`l-${k}`} type={t} value={field(k)} disabled={locked && k === "email"} onChange={(e) => setEdit({ ...edit, [k]: e.target.value })} />{locked && k === "email" && <small>Locked once approved</small>}</div>)}
+            <div className="field"><label htmlFor="l-next">Next step</label><select id="l-next" value={field("next_step")} onChange={(e) => setEdit({ ...edit, next_step: e.target.value })}><option value="">{field("next_step") || "Choose"}</option>{NEXT_CHOICES.map((n) => <option key={n}>{n}</option>)}</select></div>
+          </div>
+          <div className="field"><label htmlFor="l-note">Note</label><input id="l-note" value={field("next_step_note")} placeholder="Anything the team should remember" onChange={(e) => setEdit({ ...edit, next_step_note: e.target.value })} /></div>
+
+          <h3 style={{ margin: "14px 0 6px" }}>First e-mail{email.trim() && <span className="mini" style={{ fontWeight: 400 }}> · to {email}</span>}</h3>
+          {locked && <p className="mini" style={{ margin: "0 0 6px" }}>Already approved, so the e-mail is locked.</p>}
+          <div className="field"><label htmlFor="l-subj">Subject</label><input id="l-subj" value={field("subject")} disabled={locked} onChange={(e) => setEdit({ ...edit, subject: e.target.value })} /></div>
+          <div className="field"><label htmlFor="l-body">Message</label><textarea id="l-body" rows={9} value={field("body")} disabled={locked} onChange={(e) => setEdit({ ...edit, body: e.target.value })} />{!locked && <small>A STOP line is added automatically at the end.</small>}</div>
+
+          {rep.length > 0 && <><h3 style={{ margin: "14px 0 6px" }}>Replies</h3>{rep.map((r) => <div key={r.id} className="note ok" style={{ borderColor: "var(--turq)", background: "#e3f3f4" }}><b>{when(r.received_at)}</b>{r.ai_note && <span className="mini"> · {r.ai_note}</span>}<div className="mini" style={{ whiteSpace: "pre-wrap", marginTop: 4 }}>{r.body}</div></div>)}</>}
+        </div>
+        <footer>
+          {["Sent", "Queued", "Approved", "Not interested", "Found"].includes(open.status) && <button className="btn out sm" onClick={() => mark("Replied", [open.id])}>They replied (no e-mail)</button>}
+          {open.status === "Rejected" && <button className="btn out sm" onClick={() => mark("Found", [open.id])}>Put back to review</button>}
+          {["Found", "Approved"].includes(open.status) && <button className="btn red sm" onClick={() => mark("Rejected", [open.id])}>Not a fit</button>}
+          {open.status !== "Converted" && open.status !== "Opted out" && <button className="btn out sm" onClick={() => mark("Converted", [open.id])}>Mark converted</button>}
+          <div className="sp" />
+          <button className="btn out" onClick={() => setOpen(null)}>Close</button>
+          <button className="btn out" disabled={Object.keys(edit).length === 0} onClick={saveEdit}>Save changes</button>
+          {open.status === "Found" && <button className="btn" disabled={!canApprove || busy !== ""} title={canApprove ? "" : "Needs an e-mail address, subject and message"} onClick={approveOpen}>Approve &amp; send</button>}
+        </footer></div></div>;
+    })()}
   </>);
 }
 export default function Page() { return <Shell page="outreach">{(p) => <Inner isSuper={p.role === "super_admin"} />}</Shell>; }

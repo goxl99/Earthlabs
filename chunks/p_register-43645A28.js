@@ -213,6 +213,17 @@ export async function orderTile(el) {
     const b = el.querySelector("[data-ordgo]"); if (b) b.onclick = e => { e.stopPropagation(); window.__nav = { page: "sales", tab: "orderbook" }; location.hash = "#/sales"; };
   } catch (e) { el.innerHTML = '<span class="muted small">Order amount in hand is not available for your role.</span>'; }
 }
+const approx = x => { x = n(x); return x >= 1e7 ? "₹" + (x / 1e7).toFixed(2) + " Cr" : x >= 1e5 ? "₹" + (x / 1e5).toFixed(2) + " L" : x >= 1e3 ? "₹" + (x / 1e3).toFixed(1) + " K" : "₹" + Math.round(x); };
+// headline tile for the Production dashboard: approx order value in hand, click opens Sales > Orders in hand
+export async function orderStat(el) {
+  try {
+    const B = await loadOrderBook();
+    el.title = "Click to see the orders"; el.setAttribute("role", "link"); el.tabIndex = 0; el.classList.add("dv-link");
+    el.innerHTML = `<div class="stat-l">Order value in hand</div><div class="stat-v">~${approx(B.value)}</div><div class="stat-s">${B.orders.length} open order${B.orders.length === 1 ? "" : "s"} · ${approx(B.total)} with GST</div>`;
+    const go = () => { window.__nav = { page: "sales", tab: "orderbook" }; location.hash = "#/sales"; };
+    el.onclick = e => { e.stopPropagation(); go(); }; el.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); go(); } };
+  } catch (e) { el.remove(); }
+}
 export async function ordersInHand(el) {
   el.innerHTML = '<p class="muted">Loading…</p>';
   let B, today = iso(new Date());

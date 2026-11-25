@@ -1,10 +1,10 @@
-// Builds the Dealer MOU text from the approved template. Staff can edit every field and then the full text before the PDF is made.
+// Builds the Dealer Agreement text from the approved template. Staff can edit every field and then the full text before the PDF is made.
 import { MOU_TEMPLATE_TEXT } from "./mouTemplateText";
 
 export type MouField = { key: string; label: string; group: "Parties" | "Signatories" | "Territory and term" | "Targets (Schedule B)" | "Money and clauses"; hint?: string; kind?: "text" | "area" | "select"; options?: string[] };
 export const NA = "Not applicable";
 export const MOU_FIELDS: MouField[] = [
-  { key: "mou_date", label: "MOU date", group: "Parties", hint: "e.g. 24 November 2026" },
+  { key: "mou_date", label: "Agreement date", group: "Parties", hint: "e.g. 24 November 2026" },
   { key: "dealer_name", label: "Dealer legal name", group: "Parties" },
   { key: "dealer_form", label: "Type of entity", group: "Parties", kind: "select", options: ["proprietorship", "partnership", "LLP", "private limited company", "individual"] },
   { key: "reg_no", label: "Registration number", group: "Parties", hint: "Write Not applicable if none" },
@@ -58,17 +58,19 @@ export function defaultValues(p: { name?: string; contact_name?: string; distric
 }
 
 const NONCOMPETE = "**11.5 Competing products.** During the Term the Dealer shall not distribute directly competing herbal or industrial hand-wash products in the Territory without the Company's written consent.";
-export function buildMou(v: Values): { text: string; missing: string[] } {
+/** Fills {{placeholders}} in any agreement text from the fields. Blanks show as ________ and are reported. */
+export function fillText(raw: string, v: Values): { text: string; missing: string[] } {
   const dep = (v.security_deposit ?? "").trim();
   const all: Values = { ...v,
     security_deposit_text: dep && dep.toLowerCase() !== "not applicable" ? `A refundable deposit of ₹${dep} is payable on signing and is refundable, without interest, after termination and settlement of all dues.` : "Not applicable.",
     noncompete_clause: v.noncompete === "No" ? "**11.5 Competing products.** Not applicable." : NONCOMPETE };
   const missing: string[] = [];
-  const text = MOU_TEMPLATE_TEXT.replace(/\{\{(\w+)\}\}/g, (_, k: string) => {
+  const text = raw.replace(/\{\{(\w+)\}\}/g, (_, k: string) => {
     const val = (all[k] ?? "").trim();
     if (!val && !COMPUTED.includes(k)) { missing.push(k); return "________"; }
     return val;
   });
   return { text, missing: [...new Set(missing)] };
 }
+export const buildMou = (v: Values) => fillText(MOU_TEMPLATE_TEXT, v);
 export const missingLabels = (keys: string[]) => keys.map((k) => MOU_FIELDS.find((f) => f.key === k)?.label ?? k);

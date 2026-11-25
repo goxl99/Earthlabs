@@ -15,9 +15,9 @@ const NEXT: Record<string, string> = {
   "Documents submitted": "We have your documents and are checking them.",
   "More info needed": "We need something corrected. See the note below and use the Documents tab.",
   "Field verification": "Your documents are cleared. We will contact you for a meeting or field visit.",
-  "Agreement pending": "You are approved. Watch your e-mail and phone for the MOU (agreement) from Leegality and sign it. Your login ID and password follow once it is signed.",
-  "MOU signed": "Both sides have signed your MOU. EarthLabs is approving the signed copy. Your certificate, login ID and password will be e-mailed next.",
-  "Approved": "Your MOU is signed and approved. Your login ID and password were e-mailed to you. Sign in from the sign-in page.",
+  "Agreement pending": "You are approved. Watch your e-mail and phone for the Dealer Agreement from Leegality and sign it. Your login ID and password follow once it is signed.",
+  "MOU signed": "Both sides have signed your Dealer Agreement. EarthLabs is approving the signed copy. Your certificate, login ID and password will be e-mailed next.",
+  "Approved": "Your Dealer Agreement is signed and approved. Your login ID and password were e-mailed to you. Sign in from the sign-in page.",
   "Rejected": "This application was not approved.",
 };
 export default function Track() {
@@ -27,10 +27,16 @@ export default function Track() {
   async function loadDocs() { const r = await callFn("application-docs", { action: "list", ref: ref.trim(), email: mail }); setDs(r.ok ? (r.data as unknown as DocState) : null); }
   async function go() {
     setErr(""); setNote(null);
-    const { data, error } = await supabase.rpc("track_application", { ref: ref.trim(), mail });
+    // The status lookup and the document list do not depend on each other, so they run together.
+    const [{ data, error }, d] = await Promise.all([supabase.rpc("track_application", { ref: ref.trim(), mail }), callFn("application-docs", { action: "list", ref: ref.trim(), email: mail })]);
     if (error) { setErr("Check the reference and e-mail"); setRow(undefined); return; }
-    const r = (data as Row[])[0] ?? null; setRow(r); setDs(null);
-    if (r) { await loadDocs(); setTab(["Documents requested", "More info needed"].includes(r.status) ? "docs" : "status"); }
+    const r = (data as Row[])[0] ?? null; setRow(r); setDs(r && d.ok ? (d.data as unknown as DocState) : null);
+    if (r) setTab(["Documents requested", "More info needed"].includes(r.status) ? "docs" : "status");
+  }
+  // Quiet refresh in the background after an action: never blanks the screen and never clears the message just shown.
+  async function refresh() {
+    const [t] = await Promise.all([supabase.rpc("track_application", { ref: ref.trim(), mail }), loadDocs()]);
+    const r = ((t.data as Row[] | null) ?? [])[0]; if (r) setRow(r);
   }
   async function upload(kind: string, f: File | undefined) {
     if (!f) return; setNote(null); setBusy(kind);
@@ -39,7 +45,10 @@ export default function Track() {
     const { error } = await supabase.storage.from("application-docs").uploadToSignedUrl(String(s.data?.path), String(s.data?.token), f, { contentType: f.type || undefined });
     if (error) { setBusy(""); return setNote({ ok: false, t: "The upload did not go through. Please try again." }); }
     const c = await callFn("application-docs", { action: "confirm", ref: ref.trim(), email: mail, kind, path: s.data?.path, file_name: f.name, size: f.size });
-    setBusy(""); setNote(c.ok ? { ok: true, t: `${kind}: uploaded` } : { ok: false, t: c.error ?? "Upload failed" }); await loadDocs();
+    setBusy(""); setNote(c.ok ? { ok: true, t: `${kind}: uploaded` } : { ok: false, t: c.error ?? "Upload failed" });
+    // Show the file as uploaded straight away; the list is re-read in the background.
+    if (c.ok) setDs((x) => x && { ...x, docs: [...x.docs.filter((d) => d.kind !== kind), { kind, file_name: f.name, status: "Uploaded", note: null, uploaded_at: new Date().toISOString() }] });
+    void loadDocs();
   }
   async function na(kind: string) {
     const reason = (await askReason(`"${kind}" does not apply to me`, "Why does it not apply to you? (for example: new business, no separate premises)", "Submit")) ?? ""; if (reason.trim().length < 3) return;
@@ -50,7 +59,8 @@ export default function Track() {
     setBusy("submit"); setNote(null);
     const r = await callFn("application-docs", { action: "submit", ref: ref.trim(), email: mail });
     setBusy(""); if (!r.ok) return setNote({ ok: false, t: r.error ?? "Could not submit" });
-    setNote({ ok: true, t: "Documents submitted. We will e-mail you the result." }); await go();
+    // Confirm at once; the e-mail is sent by the system in the background and the status is re-read quietly.
+    setNote({ ok: true, t: "Documents submitted. We will e-mail you the result." }); setRow((x) => x && { ...x, status: "Documents submitted" }); setDs((x) => x && { ...x, can_upload: false }); setTab("status"); void refresh();
   }
   const docOf = (k: string) => ds?.docs.find((d) => d.kind === k);
   const showDocs = !!row && !!ds && (ds.can_upload || ds.docs.length > 0);

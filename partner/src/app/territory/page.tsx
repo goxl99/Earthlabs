@@ -5,6 +5,9 @@ import Shell from "@/components/Shell";
 import { supabase } from "@/lib/supabase";
 import { Badge, Kpi, Msg } from "@/components/ui";
 import { askForm, notify } from "@/lib/dialog";
+import Coverage, { useCoverageData } from "@/components/Coverage";
+import { coverage } from "@/lib/coverage";
+import { fmtL } from "@/lib/potential";
 import { GJ, CATS, MST_LABEL, dist, drillSet, fitTo, potential, pos, distFill, exclConflict, type Lvl, type VB, type ColorMode } from "@/lib/geo";
 
 type P = { id: string; name: string; type_code: string; status: string; district: string; exclusive: boolean; contact_name: string | null; phone: string | null; email: string | null };
@@ -27,8 +30,9 @@ function Inner({ canAssign }: { canAssign: boolean }) {
     setApps((b.data as A[]) ?? []); setVs((c.data as V[]) ?? []);
   }, []);
   useEffect(() => { load(); }, [load]);
+  const cov = useCoverageData(ps.length + apps.length);
 
-  const info = useCallback((n: string) => {
+  const info =useCallback((n: string) => {
     const act = ps.filter((p) => p.district === n && p.status === "Active"), all = ps.filter((p) => p.district === n && p.status !== "Terminated");
     const ap = apps.filter((a) => a.district === n && a.status !== "Rejected");
     return { act, all, apps: ap, vacant: act.length === 0 };
@@ -88,6 +92,11 @@ function Inner({ canAssign }: { canAssign: boolean }) {
     : dn ? (() => { const d = dist(dn)!, i = info(dn), inds = GJ.ind.filter((x) => x.d === dn), tw = GJ.towns.filter((x) => x.d === dn);
       return (<><h2>{dn}</h2><div className="row" style={{ margin: "6px 0" }}><span className="chip" style={{ background: "#13595a" }}>CLUSTER {d.cl}</span><span className="chip" style={{ background: "#7b543b" }}>CIRCLE {d.ci}</span><span className="chip" style={{ background: "#314452" }}>MASTER CIRCLE {d.mc}</span></div>
         {i.vacant && <div className="note">No active partner in {dn} yet{i.apps.length ? ` · ${i.apps.length} applicant(s)` : ""}. Market potential score {potential(dn)}.</div>}
+        {(() => { const c = coverage([dn], cov.counts, cov.pot); return <table className="t" style={{ margin: "8px 0" }}><tbody>
+          <tr><td>Potential</td><td>{fmtL(c.potential)} litres / day</td></tr>
+          <tr><td>Required</td><td>{c.dealers.required} dealers · {c.distributors.required} distributor</td></tr>
+          <tr><td>Onboarded</td><td>{c.dealers.onboarded} dealers · {c.distributors.onboarded} distributors</td></tr>
+          <tr><td>Pending</td><td>{c.dealers.pending} dealers · {c.distributors.pending} distributors</td></tr></tbody></table>; })()}
         <h3>Partners ({i.all.length})</h3>{i.all.map((p) => <div className="check" key={p.id}><div style={{ flex: 1 }}><button className="lk" onClick={() => setPick("p:" + p.id)}>{p.name}</button><div className="mini">{CATS[p.type_code]?.s} · {p.id}</div></div>{stBadge(p.status)}</div>)}{i.all.length === 0 && <p className="mini">None</p>}
         <h3 style={{ marginTop: 10 }}>Applicants ({i.apps.length})</h3>{i.apps.map((a) => <div className="check" key={a.id}><div style={{ flex: 1 }}><button className="lk" onClick={() => setPick("a:" + a.id)}>{a.business_name}</button><div className="mini">{CATS[a.type_code]?.s}</div></div>{stBadge(a.status)}</div>)}{i.apps.length === 0 && <p className="mini">None</p>}
         <h3 style={{ marginTop: 10 }}>Local markets</h3><div className="mini">{tw.slice(0, 18).map((t, j) => <span key={t.n}>{j > 0 && " · "}<button className="lk" onClick={() => pickTown(dn, t.n)}>{t.n}</button></span>)}</div>
@@ -113,6 +122,7 @@ function Inner({ canAssign }: { canAssign: boolean }) {
         <select aria-label="Status" value={st} onChange={(e) => setSt(e.target.value)}>{[["all", "All statuses"], ["applicant", "Applicants (incl. verified)"], ["approved", "Approved, agreement pending"], ["active", "Active"], ["suspended", "Suspended"], ["rejected", "Rejected"]].map((o) => <option key={o[0]} value={o[0]}>{o[1]}</option>)}</select>
         <select aria-label="Colour by" value={color} onChange={(e) => setColor(e.target.value as ColorMode)}>{[["status", "Colour: coverage"], ["cluster", "Colour: cluster"], ["circle", "Colour: circle"], ["master", "Colour: master circle"], ["potential", "Colour: market potential"]].map((o) => <option key={o[0]} value={o[0]}>{o[1]}</option>)}</select>
         <label className="row mini" style={{ gap: 5, textTransform: "none", letterSpacing: 0, fontWeight: 400 }}><input type="checkbox" checked={vend} onChange={(e) => setVend(e.target.checked)} /> Vendors layer</label></div></div>
+    <Coverage lvl={lvl} data={cov} onLvl={(L) => { setLvl(L); setTown(""); setPick(L.d ? "d:" + L.d : null); setVb(fitTo(drillSet(L))); }} />
     <div className="grid g21" style={{ alignItems: "start" }}><div>
       <div className="mapwrap"><div style={{ position: "absolute", right: 10, top: 10, display: "flex", flexDirection: "column", gap: 6, zIndex: 2 }}><button className="btn" aria-label="Zoom in" onClick={() => zoom(0.7)}>+</button><button className="btn" aria-label="Zoom out" onClick={() => zoom(1 / 0.7)}>−</button><button className="btn sm" onClick={reset}>Reset</button></div>
         <svg className="gm" viewBox={vb.join(" ")} role="img" aria-label="Map of Gujarat districts with partner and applicant markers">

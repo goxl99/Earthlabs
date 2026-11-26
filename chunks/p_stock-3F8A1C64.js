@@ -33,7 +33,7 @@ let TAB = "stock";
 
 export async function stockPage(el) {
   const canB = hasRole("qc_officer", "admin");
-  const [st, mv, rm, pq, cp, cf, bl, lp, vv] = await Promise.all([
+  const [st, mv, rm, pq, cp, cf, bl, lp, vv, rs] = await Promise.all([
     sb.from("raw_material_status").select("*").order("name"),
     sb.from("raw_material_stock").select("*, raw_materials(name,unit), batches(temp_ref,batch_code)")
       .order("created_at", { ascending: false }).limit(100),
@@ -46,7 +46,9 @@ export async function stockPage(el) {
       .order("created_at", { ascending: false }).limit(150) : Promise.resolve({ data: [] }),
     canB ? sb.from("v_last_purchase").select("*") : Promise.resolve({ data: [] }),
     canB ? sb.from("v_rm_value").select("raw_material_id,rate,rate_unit,value,no_rate") : Promise.resolve({ data: [] }),
+    canB ? sb.from("v_rm_rate_stats").select("*") : Promise.resolve({ data: [] }),
   ]);
+  const RS = Object.fromEntries((rs.error ? [] : rs.data || []).map(r => [r.raw_material_id, r]));   // average / low / high rate per item (needs db/rate_stats.sql)
   if (st.error || pq.error) {
     el.innerHTML = '<div class="notice err">Raw material stock and purchasing are not fully set up in the database yet. ' +
       'Ask the administrator to run db/raw_material_inventory.sql and db/raw_material_purchasing.sql, then reload.</div>';
@@ -203,8 +205,11 @@ export async function stockPage(el) {
       $("#lv").innerHTML = table([
         { h: "Item", v: r => r.name }, { h: "Type", v: r => TY(r) },
         { h: "On hand", html: r => `<b class="${r.on_hand <= 0 ? "dev" : ""}">${fmt(r.on_hand, r.unit)}</b>` },
-        ...(canB ? [{ h: "Latest rate", v: r => VAL[r.raw_material_id]?.rate ? `${INR(VAL[r.raw_material_id].rate)} / ${VAL[r.raw_material_id].rate_unit}` : "No bill yet" },
-          { h: "Value", v: r => VAL[r.raw_material_id]?.no_rate ?? true ? "–" : INR(VAL[r.raw_material_id].value) }] : []),
+        ...(canB ? [{ h: "Latest rate", html: r => { const v = VAL[r.raw_material_id], e = byId[r.raw_material_id]?.est_rate;
+            return v?.rate ? `${INR(v.rate)} / ${esc(v.rate_unit)}` : e != null ? `${INR(e)} / ${esc(r.unit)}<br><small class="dev">estimate – no bill yet</small>` : "No bill yet"; } },
+          { h: "Average rate", html: r => { const a = RS[r.raw_material_id]; return a ? `<b>${INR(a.avg_rate)}</b> / ${esc(a.unit)}<br><small class="muted">${a.bills > 1 ? `low ${INR(a.min_rate)} · high ${INR(a.max_rate)} · ` : ""}${a.bills} bill${a.bills === 1 ? "" : "s"}</small>` : "–"; } },
+          { h: "Value", html: r => { const v = VAL[r.raw_material_id]; if (!v) return "–"; return v.no_rate ? (Number(v.value) > 0 ? `${INR(v.value)}<br><small class="dev">estimate</small>` : "–") : INR(v.value); } },
+          { h: "", html: r => `<button class="btn ghost sm ar" data-id="${r.raw_material_id}">Add rate</button>` }] : []),
         { h: "On order", v: r => r.on_order > 0 ? fmt(r.on_order, r.unit) : "–" },
         { h: "Minimum", v: r => r.min_level > 0 ? fmt(r.min_level, r.unit) : "–" },
         { h: "Cover", v: r => r.batches_cover == null ? "–" : num(r.batches_cover, 1) + " batches" },
@@ -227,6 +232,57 @@ export async function stockPage(el) {
             };
           } });
       });
+    // ---------- Add a rate: from a bill (file attached, counts in the average) or a market estimate ----------
+    const openRate = r => {
+      const m0 = byId[r.raw_material_id] || {}, UN = r.category === "packaging" ? ["pcs"] : ["kg", "g", "L", "mL"], today = new Date().toISOString().slice(0, 10);
+      const def = UN.includes(r.unit) ? r.unit : UN[0];
+      modal("Add rate – " + r.name, `<form id="rf2" class="form-grid">
+        <label class="full">What are you adding?<select name="mode" id="rmode"><option value="bill">A price from a bill (attach the bill)</option>${isAdmin ? '<option value="est">A market estimate – no bill yet</option>' : ""}</select></label>
+        <label>Rate (₹ per unit)<input name="rate" type="number" step="any" min="0" required></label>
+        <label>Per<select name="unit">${UN.map(u => `<option ${u === def ? "selected" : ""}>${u}</option>`).join("")}</select></label>
+        <div class="full muted small" id="rhelp"></div>
+        <div id="rbill" class="full form-grid">
+          <label>Supplier<input name="supplier" required></label><label>Bill no.<input name="invoice_no"></label>
+          <label>Bill date<input name="invoice_date" type="date" value="${today}"></label>
+          <label>Quantity on the bill<input name="qty" type="number" step="any" min="0" placeholder="Used to weight the average"></label>
+          <label class="full">Bill file (photo or PDF)<input name="file" type="file" accept="application/pdf,image/*"></label>
+          <label class="full">Note<input name="notes" placeholder="e.g. market rate was high this week"></label>
+        </div>
+        <div class="full row end"><button class="btn" id="rsave">Save rate</button></div></form>`, {
+        onMount: (m, close) => {
+          const sync = () => { const bill = $("#rmode", m).value === "bill"; $("#rbill", m).classList.toggle("hide", !bill);
+            $$("#rbill [name=supplier]", m).forEach(i => i.required = bill);
+            $("#rhelp", m).textContent = bill ? "This records the price only. It does not add stock. Every bill price is counted in the average rate, so prices that move with the market are averaged out."
+              : "An estimate is used for costing until a bill is added. It is not part of the average, and a bill price replaces it."; };
+          $("#rmode", m).onchange = sync; sync();
+          $("#rf2", m).onsubmit = async e => {
+            e.preventDefault(); const f = new FormData(e.target), rate = Number(f.get("rate")), unit = f.get("unit");
+            if (!(rate > 0)) return toast("Enter a rate above zero", "err");
+            $("#rsave", m).disabled = true;
+            if (f.get("mode") === "est") {
+              // estimate is stored per the item's own unit
+              let per = rate; try { const k = { kg: 1, g: 0.001, L: 1, mL: 0.001, pcs: 1 }; if (k[unit] && k[r.unit]) per = rate / (k[unit] / k[r.unit]); } catch (_) {}
+              const ok = await run(sb.rpc("set_est_rate", { p_rm: r.raw_material_id, p_rate: per }), "Estimate saved");
+              if (ok == null) { $("#rsave", m).disabled = false; return; } close(); reload(); return;
+            }
+            const qty = f.get("qty") === "" ? null : Number(f.get("qty")), file = f.get("file");
+            let path = null, fname = null;
+            if (file && file.size) {
+              if (file.size > 15 * 1024 * 1024) { $("#rsave", m).disabled = false; return toast("File is too large (max 15 MB)", "err"); }
+              const ext = (file.name.split(".").pop() || "jpg").toLowerCase().replace(/[^a-z0-9]/g, "");
+              path = `${new Date().getFullYear()}/${crypto.randomUUID()}.${ext}`; fname = file.name;
+              const { error: ue } = await sb.storage.from("supplier-bills").upload(path, file, { contentType: file.type || undefined });
+              if (ue) { $("#rsave", m).disabled = false; return toast("Upload failed: " + ue.message, "err"); }
+            }
+            const header = { supplier: f.get("supplier"), invoice_no: f.get("invoice_no"), invoice_date: f.get("invoice_date") || null, file_path: path, file_name: fname, notes: f.get("notes"), total: qty ? +(qty * rate).toFixed(2) : null, subtotal: qty ? +(qty * rate).toFixed(2) : null };
+            const lines = [{ raw_material_id: r.raw_material_id, description: r.name, qty, unit, rate, amount: qty ? +(qty * rate).toFixed(2) : null }];
+            const ok = await run(sb.rpc("save_supplier_invoice", { p_header: header, p_lines: lines }), "Rate saved");
+            if (ok == null) { if (path) await sb.storage.from("supplier-bills").remove([path]); $("#rsave", m).disabled = false; return; }
+            close(); reload();
+          };
+        } });
+    };
+    $$(".ar", sp).forEach(b => b.onclick = () => openRate(S.find(x => x.raw_material_id === b.dataset.id)));
     };
     $("#mv").innerHTML = table([
       { h: "Date", v: r => dtfmt(r.created_at) },

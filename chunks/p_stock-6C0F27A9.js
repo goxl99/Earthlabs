@@ -636,7 +636,7 @@ export async function stockPage(el) {
 
   const tPrice = async () => {
     sp.innerHTML = '<p class="muted">Loading…</p>';
-    try { const m = await import("./p_epdmsprice-7A31C0E2.js"); await m.pricingTab(sp, { go: reload }); }
+    try { const m = await import("./p_epdmsprice-B54E92D0.js"); await m.pricingTab(sp, { go: reload }); }
     catch (e) { sp.innerHTML = `<div class="notice err">Could not load: ${esc(e.message || String(e))}</div>`; }
   };
 

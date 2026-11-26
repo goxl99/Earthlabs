@@ -26,8 +26,8 @@ const fmt = (q, u) => {
 };
 const MOVE = { receipt: "Received", adjustment: "Adjustment", consumption: "Used in batch" };
 const PO_STATUS = { ordered: "Ordered", partial: "Part received", received: "Received", cancelled: "Cancelled" };
-const TABS = [["stock", "Stock"], ["reorder", "Reorder"], ["orders", "Purchase orders"], ["bills", "Bills"], ["capacity", "FG capacity & planner"], ["products", "Products & range"], ["budget", "Costing budget"]];
-const LABTABS = ["bills", "products", "budget"];   // visible to admin and QA/QC only
+const TABS = [["stock", "Stock"], ["reorder", "Reorder"], ["orders", "Purchase orders"], ["bills", "Bills"], ["capacity", "FG capacity & planner"], ["products", "Products & range"], ["budget", "Costing budget"], ["pricing", "Products & pricing"]];
+const LABTABS = ["bills", "products", "budget", "pricing"];   // visible to admin and QA/QC only
 const wa = text => window.open("https://wa.me/?text=" + encodeURIComponent(text), "_blank", "noopener");
 let TAB = "stock";
 
@@ -578,5 +578,11 @@ export async function stockPage(el) {
     } catch (e) { sp.innerHTML = `<div class="notice err">Could not load: ${esc(e.message || String(e))}</div>`; }
   };
 
-  ({ stock: tStock, reorder: tReorder, orders: tOrders, bills: tBills, capacity: tCap, products: () => tLab("products"), budget: () => tLab("budget") }[TAB] || tStock)();
+  const tPrice = async () => {
+    sp.innerHTML = '<p class="muted">Loading…</p>';
+    try { const m = await import("./p_epdmsprice-7A31C0E2.js"); await m.pricingTab(sp, { go: reload }); }
+    catch (e) { sp.innerHTML = `<div class="notice err">Could not load: ${esc(e.message || String(e))}</div>`; }
+  };
+
+  ({ stock: tStock, reorder: tReorder, orders: tOrders, bills: tBills, capacity: tCap, products: () => tLab("products"), budget: () => tLab("budget"), pricing: tPrice }[TAB] || tStock)();
 }

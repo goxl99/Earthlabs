@@ -26,7 +26,8 @@ const fmt = (q, u) => {
 };
 const MOVE = { receipt: "Received", adjustment: "Adjustment", consumption: "Used in batch" };
 const PO_STATUS = { ordered: "Ordered", partial: "Part received", received: "Received", cancelled: "Cancelled" };
-const TABS = [["stock", "Stock"], ["reorder", "Reorder"], ["orders", "Purchase orders"], ["bills", "Bills"], ["capacity", "FG capacity & planner"]];
+const TABS = [["stock", "Stock"], ["reorder", "Reorder"], ["orders", "Purchase orders"], ["bills", "Bills"], ["capacity", "FG capacity & planner"], ["products", "Products & range"], ["budget", "Costing budget"]];
+const LABTABS = ["bills", "products", "budget"];   // visible to admin and QA/QC only
 const wa = text => window.open("https://wa.me/?text=" + encodeURIComponent(text), "_blank", "noopener");
 let TAB = "stock";
 
@@ -58,9 +59,9 @@ export async function stockPage(el) {
   const canOrder = hasRole("qc_officer", "admin"), isAdmin = hasRole("admin");
   const VAL = Object.fromEntries((vv.data || []).map(r => [r.raw_material_id, r]));
   const BILLS = bl.data || [], billsOk = !bl.error, lastP = Object.fromEntries((lp.data || []).map(r => [r.raw_material_id, r]));
-  const tabsList = TABS.filter(([k]) => k !== "bills" || canOrder);
+  const tabsList = TABS.filter(([k]) => !LABTABS.includes(k) || canOrder);
   const nv = window.__nav; if (nv && nv.page === "stock") { window.__nav = null; if (nv.tab) TAB = nv.tab; }
-  if (TAB === "bills" && !canOrder) TAB = "stock";
+  if (LABTABS.includes(TAB) && !canOrder) TAB = "stock";
   const byId = Object.fromEntries(mats.map(m => [m.id, m]));
   const isLow = r => r.below_min || r.below_cover;
   const why = r => [r.below_min ? "below minimum" : "", r.below_cover ? `under ${cover} batches of cover` : ""].filter(Boolean).join(", ");
@@ -568,5 +569,14 @@ export async function stockPage(el) {
     });
   };
 
-  ({ stock: tStock, reorder: tReorder, orders: tOrders, bills: tBills, capacity: tCap }[TAB] || tStock)();
+  // ---------- Products & range / Costing budget (new-product lab) ----------
+  const tLab = async which => {
+    sp.innerHTML = '<p class="muted">Loading…</p>';
+    try {
+      const m = await import("./p_prodlab-5C09DB77.js");
+      await (which === "products" ? m.productsTab : m.budgetTab)(sp, { mats, VAL, canWrite: canOrder, company, go: reload });
+    } catch (e) { sp.innerHTML = `<div class="notice err">Could not load: ${esc(e.message || String(e))}</div>`; }
+  };
+
+  ({ stock: tStock, reorder: tReorder, orders: tOrders, bills: tBills, capacity: tCap, products: () => tLab("products"), budget: () => tLab("budget") }[TAB] || tStock)();
 }

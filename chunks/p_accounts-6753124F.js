@@ -24,7 +24,7 @@ export const guessSub = (cat, text) => {
 const MODES = [["bank", "Bank transfer"], ["upi", "UPI"], ["cash", "Cash"], ["cheque", "Cheque"], ["other", "Other"]];
 const MODE = Object.fromEntries(MODES);
 const PAYERS = ["Company", "Gaurang", "Viraj"];
-let TAB = "overview", SUB = "all", SUB2 = "all";
+let TAB = "overview", SUB = "all", SUB2 = "all", UT = "base";   // UT = which Unit economics sub-tab is open
 const UNITS = /^(kg|kgs|kilo|kilogram|kilograms|g|gm|gms|gram|grams|l|ltr|ltrs|lt|litre|litres|liter|liters|ml|millilitre|milliliter|pcs|pc|nos|no|piece|pieces|unit|units|each)$/i;
 const ASSET_TYPES = [["machinery", "Machinery", 10], ["drums_containers", "Drums & containers", 10], ["vehicle", "Vehicle", 15], ["furniture", "Furniture & fittings", 10], ["computer", "Computers & electronics", 30], ["tools", "Tools & equipment", 15], ["building", "Building / civil", 5], ["other", "Other", 0]];
 const ATYPE = Object.fromEntries(ASSET_TYPES.map(a => [a[0], a[1]])), ADEP = Object.fromEntries(ASSET_TYPES.map(a => [a[0], a[2]]));
@@ -846,7 +846,8 @@ export async function accountsPage(el) {
   };
 
   // =================== UNIT ECONOMICS TAB ===================
-  const unitecon = async () => {
+  // The sachet & bottle model. It draws into whatever element it is given (the Unit economics sub-tab body).
+  const uniteconBase = async av => {
     const saved = await get(sb.from("unit_econ").select("*")), A = { sachet: {}, bottle: {} };
     saved.forEach(r => { A[r.product][r.key] = r.value == null ? "" : Number(r.value); });
     const N = { sachet: "Sachet 5 ml", bottle: "Bottle 250 ml" }, PCT = new Set(["gst", "retailer", "distributor", "scheme", "returns", "overfill", "loss", "wastage", "commission", "marketing", "baddebt", "interest", "target_cm"]);
@@ -925,6 +926,17 @@ export async function accountsPage(el) {
     $("#ueaskai", av).innerHTML = `<div class="card"><h3>Ask the AI about your unit economics</h3><p class="muted small">Opens the AI chat, which can read your saved assumptions, real costs and orders. Press <b>Save</b> first so it sees your latest numbers.</p><div class="aic-chips">${UQ.map(([l], i) => `<button class="chip" data-q="${i}">${esc(l)}</button>`).join("")}</div></div>`;
     $$("#ueaskai [data-q]", av).forEach(b => b.onclick = () => askAI(UQ[+b.dataset.q][1]));
     aiPanel($("#ueai", av), "unit_economics", async () => { read(); const snap = (await sb.rpc("business_snapshot")).data || {}, act = (await sb.rpc("unit_econ_actuals")).data || null; return { actuals_from_real_data: act, unit_economics: Object.fromEntries(["sachet", "bottle"].map(k => [N[k], { assumptions: A[k], result: Object.fromEntries(Object.entries(ueModel(A[k])).filter(([, v]) => typeof v === "number" && isFinite(v)).map(([a, b]) => [a, Math.round(b * 10000) / 10000])) }])), business: snap }; });
+  };
+
+  // Unit economics = two sub-tabs: the existing sachet & bottle model, and the New SKU lab (compare bottles and shapes)
+  const unitecon = async () => {
+    av.innerHTML = `<div class="tabs wrapt">${[["base", "Sachet & bottle"], ["lab", "New SKU lab"]].map(([k, t]) => `<button class="tab sm ${k === UT ? "on" : ""}" data-u="${k}">${t}</button>`).join("")}</div><div id="uex"><p class="muted">Loading…</p></div>`;
+    $$("[data-u]", av).forEach(b => b.onclick = () => { UT = b.dataset.u; unitecon(); });
+    const host = $("#uex", av);
+    if (UT === "lab") {
+      try { const m = await import("./p_prodlab-5C09DB77.js"); await m.skuLab(host, { ueModel, UE, askAI: prompt => window.dispatchEvent(new CustomEvent("ask-ai", { detail: { prompt } })) }); }
+      catch (e) { host.innerHTML = `<div class="notice err">Could not load: ${esc(e.message || String(e))}</div>`; }
+    } else await uniteconBase(host);
   };
 
   try { await ({ overview, account, ledger, expenses, assets, earlier, bank, profit, unit: unitecon }[TAB])(); } catch (e) { fail(e); }

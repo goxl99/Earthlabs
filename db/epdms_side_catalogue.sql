@@ -1,4 +1,4 @@
--- EPDMS database (project dkkwlipkhvuigkgjwizn).  DRAFT – NOT APPLIED.  Review first; run after db/epdms_catalogue.sql is live in Batch.
+-- EPDMS database (project dkkwlipkhvuigkgjwizn).  Run after db/epdms_catalogue.sql is live in Batch (it is).
 -- Sends the full Products & pricing set to Batch every time anything in it changes.  EPDMS stays the master.
 -- Nothing secret is sent: settings whose key looks like a secret / token / key / password / link are left out.
 
@@ -22,12 +22,16 @@ begin
   perform net.http_post(
     url     := l.url || '/rest/v1/rpc/epdms_receive_catalogue',
     headers := jsonb_build_object('Content-Type', 'application/json', 'apikey', l.anon_key, 'Authorization', 'Bearer ' || l.anon_key),
-    body    := jsonb_build_object('p_secret', l.secret, 'p_data', build_catalogue_payload()));
+    body    := jsonb_build_object('p_secret', l.secret, 'p_data', build_catalogue_payload()),
+    timeout_milliseconds := 8000);
 end $$;
 revoke all on function public.push_catalogue(), public.build_catalogue_payload() from public, anon, authenticated;
 
 create or replace function public.trg_push_catalogue() returns trigger language plpgsql security definer set search_path = public as $$
-begin perform push_catalogue(); return null; end $$;
+begin
+  begin perform push_catalogue(); exception when others then null; end;   -- a failed push must never block a pricing edit
+  return null;
+end $$;
 
 do $$ declare t text; begin
   foreach t in array array['skus','sku_margins','margin_slabs','sku_access','schemes','settings'] loop

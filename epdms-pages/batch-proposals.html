@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Batch proposals – EarthLabs EPDMS</title>
+<style>
+  body{font-family:system-ui,Segoe UI,Roboto,sans-serif;background:#fffdf2;color:#243238;margin:0}
+  main{max-width:960px;margin:24px auto;padding:0 16px}
+  h1{color:#155a5a;font-size:22px;margin:0 0 4px} .muted{color:#6b7a80;font-size:13px}
+  .card{background:#fff;border:1px solid #e3e0cc;border-radius:10px;padding:14px;margin:12px 0}
+  input,button{font:inherit;padding:8px 10px;border-radius:8px;border:1px solid #c9c6b0} input{width:100%;box-sizing:border-box;margin:4px 0 10px}
+  button{background:#155a5a;color:#fff;border:0;cursor:pointer} button.ghost{background:#fff;color:#155a5a;border:1px solid #155a5a} button.no{background:#fff;color:#b3261e;border:1px solid #b3261e}
+  button:disabled{opacity:.5} .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center} .grow{flex:1;min-width:180px}
+  .err{background:#fde8e6;color:#8c1d18;padding:10px;border-radius:8px;margin:10px 0} .ok{color:#1b6e3a} .bad{color:#b3261e}
+  small{color:#6b7a80} .tag{display:inline-block;background:#e6f2f1;color:#155a5a;border-radius:10px;padding:1px 8px;font-size:12px}
+</style></head><body><main>
+<h1>Batch proposals</h1>
+<div class="muted">Changes proposed from Batch Management. Only a Super Admin can approve or reject them. Approving applies the change in EPDMS.</div>
+<div id="app"></div>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const SUPABASE_URL = "https://dkkwlipkhvuigkgjwizn.supabase.co";
+const SUPABASE_KEY = "sb_publishable_Cp4I8rvFjNeFqbqdS5sKEQ_nFWh_U1t";   // public key, safe in a web page
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+const app = document.getElementById("app");
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+const INR = n => n == null ? "–" : "₹" + Number(n).toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const when = t => t ? new Date(t).toLocaleString("en-IN") : "";
+
+const summary = r => { const p = r.payload || {};
+  if (r.kind === "sku_new") return `<b>New SKU ${esc(p.sku)}</b> – ${esc(p.name)}<br><small>${esc(p.category)} · MRP ${INR(p.mrp)} · ${p.unit_ml ? esc(p.unit_ml) + " ml × " : ""}${esc(p.pack_size)} per carton · HSN ${esc(p.hsn || "340130")} · MOQ ${esc(p.moq || 5)}<br>It will be created as a <b>draft</b>. You still set margins and make it active.</small>`;
+  if (r.kind === "price_change") return `<b>MRP of ${esc(p.sku)}</b>: ${p.current_mrp != null ? INR(p.current_mrp) + " → " : ""}<b>${INR(p.mrp)}</b>`;
+  return `<b>Margin of ${esc(p.sku)} for ${esc(p.type_code)}</b>: ${p.current_pct != null ? esc(p.current_pct) + "% → " : ""}<b>${esc(p.margin_pct)}%</b>`; };
+
+function login(msg) {
+  app.innerHTML = `<div class="card"><h3>Sign in with your EPDMS Super Admin account</h3>${msg ? `<div class="err">${esc(msg)}</div>` : ""}
+    <form id="lf"><label>Email<input name="email" type="email" required autocomplete="username"></label>
+    <label>Password<input name="password" type="password" required autocomplete="current-password"></label><button>Sign in</button></form></div>`;
+  document.getElementById("lf").onsubmit = async e => { e.preventDefault(); const f = new FormData(e.target);
+    const { error } = await sb.auth.signInWithPassword({ email: f.get("email"), password: f.get("password") });
+    if (error) return login(error.message); start(); };
+}
+
+async function start() {
+  const { data: { session } } = await sb.auth.getSession();
+  if (!session) return login();
+  const { data: me, error: pe } = await sb.from("profiles").select("role").eq("id", session.user.id).maybeSingle();
+  if (pe || !me || me.role !== "super_admin") { app.innerHTML = `<div class="card"><div class="err">This page is for a Super Admin. You are signed in as ${esc(session.user.email)}${me ? " (" + esc(me.role) + ")" : ""}.</div><button class="ghost" id="so">Sign out</button></div>`;
+    document.getElementById("so").onclick = async () => { await sb.auth.signOut(); login(); }; return; }
+  list(session.user.email);
+}
+
+async function list(email) {
+  const { data, error } = await sb.from("batch_proposals").select("*").order("proposed_at", { ascending: false });
+  if (error) { app.innerHTML = `<div class="err">Could not load: ${esc(error.message)}</div>`; return; }
+  const pend = data.filter(r => r.status === "pending"), done = data.filter(r => r.status !== "pending");
+  app.innerHTML = `<div class="row"><span class="muted grow">Signed in as ${esc(email)}</span><button class="ghost" id="rf">Refresh</button><button class="ghost" id="so">Sign out</button></div>
+    <h3>Waiting for your decision (${pend.length})</h3><div id="msg"></div>
+    ${pend.length ? pend.map(r => `<div class="card" data-id="${r.id}"><div>${summary(r)}</div>
+      <div class="muted">Proposed ${esc(when(r.proposed_at))}${r.proposed_by ? " by " + esc(r.proposed_by) : ""}${r.note ? "<br>Note: " + esc(r.note) : ""}</div>
+      <div class="row" style="margin-top:10px"><input class="grow dn" placeholder="Reason / note (optional)"><button class="ap">Approve</button><button class="no rj">Reject</button></div></div>`).join("") : '<div class="card muted">Nothing is waiting.</div>'}
+    <h3>Decided</h3>${done.length ? done.map(r => `<div class="card"><div>${summary(r)}</div><div class="muted"><span class="${r.status === "approved" ? "ok" : "bad"}">${r.status === "approved" ? "✔ Approved" : "✖ Rejected"}</span> ${esc(when(r.decided_at))}${r.decision_note ? " – " + esc(r.decision_note) : ""}</div></div>`).join("") : '<div class="card muted">No decisions yet.</div>'}`;
+  document.getElementById("rf").onclick = () => list(email);
+  document.getElementById("so").onclick = async () => { await sb.auth.signOut(); login(); };
+  document.querySelectorAll(".card[data-id]").forEach(c => {
+    const decide = async ok => { c.querySelectorAll("button").forEach(b => b.disabled = true);
+      const { error } = await sb.rpc("decide_batch_proposal", { p_id: Number(c.dataset.id), p_approve: ok, p_note: c.querySelector(".dn").value || null });
+      if (error) { document.getElementById("msg").innerHTML = `<div class="err">Not applied: ${esc(error.message)}</div>`; c.querySelectorAll("button").forEach(b => b.disabled = false); return; }
+      list(email); };
+    c.querySelector(".ap").onclick = () => decide(true); c.querySelector(".rj").onclick = () => decide(false); });
+}
+start();
+</script></body></html>

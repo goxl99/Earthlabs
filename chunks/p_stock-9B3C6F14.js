@@ -196,6 +196,7 @@ export async function stockPage(el) {
       <label>…of this batch size (L)<input name="rm_ref_batch_l" type="number" step="any" min="1" value="${refL}"></label>
       <div class="row end"><button class="btn ghost">Save rule</button></div></form>` : ""}
     <div class="stats" id="tv"></div>
+    <h3>Stock in hand by type</h3><div id="hb"></div>
     <h3>Current stock</h3><div id="lv"></div>
     <h3>Recent movements</h3><div id="mv"></div>
     <p class="muted small">An item is flagged Low when it is below its minimum level or can't cover ${cover} batches of ${refL} L.
@@ -209,6 +210,22 @@ export async function stockPage(el) {
         <div class="stat"><div class="stat-l">Total stock value</div><div class="stat-v">${INR(rawV + pkV)}</div>${noRate ? `<div class="stat-s">${noRate} item(s) in stock have no purchase rate yet</div>` : ""}</div>
         <div class="stat"><div class="stat-l">Stock in hand (items)</div><div class="stat-v">${inHandRm + inHandPk}</div><div class="stat-s">${inHandRm} raw material${inHandRm === 1 ? "" : "s"} · ${inHandPk} packaging item${inHandPk === 1 ? "" : "s"} with stock on hand</div></div>
         ${neg ? `<div class="stat bad"><div class="stat-l">Items below zero</div><div class="stat-v">${neg}</div><div class="stat-s">Stock not recorded. Add the bills or correct the entries.</div></div>` : ""}`;
+    }
+    {
+      // Stock in hand grouped by type (raw material, bottle, sachet, box, carrier box, pack, other), at latest purchase rate
+      const G = {}, order = ["Raw material", ...Object.values(PACK)];
+      S.filter(r => Number(r.on_hand) > 0).forEach(r => {
+        const k = TY(r), g = G[k] || (G[k] = { n: 0, q: 0, v: 0 }), q = Number(r.on_hand);
+        g.n++; g.v += Number(VAL[r.raw_material_id]?.value) || 0;
+        g.q += k === "Raw material" ? (SMALL(r.unit) ? q / 1000 : q) : q;
+      });
+      const rows = order.filter(k => G[k]).map(k => ({ t: k, ...G[k] }));
+      const tot = rows.reduce((a, r) => ({ n: a.n + r.n, v: a.v + r.v }), { n: 0, v: 0 });
+      $("#hb").innerHTML = table([
+        { h: "Type", html: r => `<b>${esc(r.t)}</b>` }, { h: "Items in stock", v: r => r.n },
+        { h: "Quantity in hand", v: r => r.t === "Raw material" ? `${num(r.q, 2)} kg / L` : `${num(r.q, 0)} pcs` },
+        ...(canB ? [{ h: "Value at plant (latest purchase rate)", html: r => INR(r.v) }] : []),
+      ], rows, { empty: "Nothing in stock yet." }) + (canB && rows.length ? `<p class="muted small">Total stock in hand: <b>${tot.n}</b> items${canB ? ` · <b>${INR(tot.v)}</b>` : ""}. Raw material litres and kg are added together (1 kg = 1 L, as in the formulations).</p>` : "");
     }
     const drawLevels = () => {
       const term = ($("#q").value || "").toLowerCase(), ty = $("#ty").value;

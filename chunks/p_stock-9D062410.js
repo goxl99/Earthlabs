@@ -26,10 +26,11 @@ const fmt = (q, u) => {
 };
 const MOVE = { receipt: "Received", adjustment: "Adjustment", consumption: "Used in batch" };
 const PO_STATUS = { ordered: "Ordered", partial: "Part received", received: "Received", cancelled: "Cancelled" };
-const TABS = [["stock", "Stock"], ["flow", "Ordered vs in hand"], ["reorder", "Reorder"], ["orders", "Purchase orders"], ["bills", "Bills"], ["capacity", "FG capacity & planner"], ["products", "Products & range"], ["budget", "Costing budget"], ["pricing", "Products & pricing"]];
+const TABS = [["stock", "Stock"], ["rawmat", "Raw material"], ["pack", "Packaging material"], ["reorder", "Reorder"], ["orders", "Purchase orders"], ["bills", "Bills"], ["capacity", "FG capacity & planner"], ["products", "Products & range"], ["budget", "Costing budget"], ["pricing", "Products & pricing"]];
 const LABTABS = ["bills", "products", "budget", "pricing"];   // visible to admin and QA/QC only
 const wa = text => window.open("https://wa.me/?text=" + encodeURIComponent(text), "_blank", "noopener");
 let TAB = "stock";
+let FLT = "";   // packaging type chosen by clicking a row in the "Stock in hand by type" box
 
 export async function stockPage(el) {
   const canB = hasRole("qc_officer", "admin");
@@ -170,6 +171,11 @@ export async function stockPage(el) {
   // ---------- Stock flow: received vs used vs in hand, catch-up banner, physical count, item history ----------
   const FL = Object.fromEntries((fl.error ? [] : fl.data || []).map(r => [r.raw_material_id, r]));
   const GAPS = gp.error ? [] : gp.data || [];
+  // rate per the item's own unit: latest bill rate, else the estimate (same basis as the stat cards)
+  const KU = { kg: 1, g: 0.001, L: 1, mL: 0.001, pcs: 1 };
+  const rateU = r => { const v = VAL[r.raw_material_id];
+    if (v?.rate) { const x = KU[v.rate_unit], y = KU[r.unit]; if (x && y) return Number(v.rate) / (x / y); }
+    const e = byId[r.raw_material_id]?.est_rate; return e != null ? Number(e) : null; };
   const drawGaps = box => {
     if (!box || !canOrder || !GAPS.length) return;
     box.innerHTML = `<div class="notice err"><b>Stock in hand is overstated.</b> Filling was recorded for these packaging items but never taken off stock: ${
@@ -261,7 +267,7 @@ export async function stockPage(el) {
     <h3>Recent movements</h3><div id="mv"></div>
     <p class="muted small">An item is flagged Low when it is below its minimum level or can't cover ${cover} batches of ${refL} L.
     Stock is deducted with actual quantities when a batch is sent to QA/QC and returned if it is sent back or rejected. Packaging is deducted when filling is recorded.<br>
-    <b>Stock in hand = Received − Used ± corrections.</b> Billed or ordered quantities are never the same as stock in hand: see the “Ordered vs in hand” tab for the full split of each item.</p>`;
+    <b>Stock in hand = Received − Used ± corrections.</b> Billed or ordered quantities are never the same as stock in hand: click a type in the box above, or open the Raw material / Packaging material tabs, to see the split for each item.</p>`;
     if (canB) {
       const val = r => Number(VAL[r.raw_material_id]?.value) || 0, rawV = S.filter(r => r.category !== "packaging").reduce((t, r) => t + val(r), 0), pkV = S.filter(r => r.category === "packaging").reduce((t, r) => t + val(r), 0);
       const noRate = S.filter(r => Number(r.on_hand) > 0 && (VAL[r.raw_material_id]?.no_rate ?? true)).length, neg = S.filter(r => Number(r.on_hand) < 0).length;
@@ -276,10 +282,6 @@ export async function stockPage(el) {
       // Stock in hand grouped by type: what the bills ordered, what was used, opening stock / corrections, and what is left (with approximate value).
       // Ordered and in-hand are valued at the same rate (latest bill rate, or your estimate where there is no bill yet), so the two always agree.
       const hasFlow = !fl.error;
-      const KU = { kg: 1, g: 0.001, L: 1, mL: 0.001, pcs: 1 };
-      const rateU = r => { const v = VAL[r.raw_material_id];
-        if (v?.rate) { const x = KU[v.rate_unit], y = KU[r.unit]; if (x && y) return Number(v.rate) / (x / y); }
-        const e = byId[r.raw_material_id]?.est_rate; return e != null ? Number(e) : null; };
       const G = {}, order = ["Raw material", ...Object.values(PACK)];
       S.forEach(r => {
         const f = FL[r.raw_material_id] || {}, rec = Number(f.received_total) || 0, used = Number(f.used_total) || 0, adj = Number(f.adjust_total) || 0, oh = Number(r.on_hand) || 0;
@@ -294,7 +296,7 @@ export async function stockPage(el) {
       const tot = rows.reduce((a, r) => ({ n: a.n + r.n, v: a.v + r.ohV, rv: a.rv + r.recV }), { n: 0, v: 0, rv: 0 });
       const qf = (t, v) => t === "Raw material" ? `${num(v, 2)} kg / L` : `${num(v, 0)} pcs`;
       $("#hb").innerHTML = table([
-        { h: "Type", html: r => `<b>${esc(r.t)}</b>` },
+        { h: "Type", html: r => hasFlow ? `<a href="#" class="tl" data-t="${esc(r.t)}" title="See each item"><b>${esc(r.t)}</b> ›</a>` : `<b>${esc(r.t)}</b>` },
         ...(hasFlow ? [
           { h: "Ordered (from bills)", html: r => `${qf(r.t, r.rec)}${canB && r.recV ? `<br><small class="muted">${INR(r.recV)}</small>` : ""}` },
           { h: "Used in batches & filling", v: r => r.used ? "− " + qf(r.t, r.used) : "–" },
@@ -304,6 +306,8 @@ export async function stockPage(el) {
         ...(canB ? [{ h: "Value in hand (approx.)", html: r => `<b>${INR(r.ohV)}</b>${r.noRate ? `<br><small class="dev">${r.noRate} item(s) have no rate yet</small>` : ""}` }] : []),
       ], rows, { empty: "Nothing in stock yet." }) + (canB && rows.length ? `<p class="muted small">Total stock in hand: <b>${tot.n}</b> items · <b>${INR(tot.v)}</b>${hasFlow ? ` (from <b>${INR(tot.rv)}</b> ordered on bills)` : ""}.
         <b>In hand = Ordered − Used ± Opening stock / corrections.</b> Values use the latest bill rate, or your estimate where there is no bill yet. Raw material litres and kg are added together (1 kg = 1 L, as in the formulations). Finished goods that are delivered do not change this: raw material and packaging are used up when a batch is made and when it is filled.</p>` : "");
+      $$(".tl", $("#hb", sp)).forEach(a => a.onclick = e => { e.preventDefault(); const t = a.dataset.t;
+        if (t === "Raw material") TAB = "rawmat"; else { TAB = "pack"; FLT = t; } stockPage(el); });
     }
     const drawLevels = () => {
       const term = ($("#q").value || "").toLowerCase(), ty = $("#ty").value;
@@ -463,34 +467,42 @@ export async function stockPage(el) {
     };
   };
 
-  // ---------- Ordered vs in hand: the full split per item ----------
-  const tFlow = () => {
-    if (fl.error) { sp.innerHTML = '<div class="notice err">The received / used split is not set up in the database yet. Ask the administrator to run db/stock_flow.sql, then reload.</div>'; return; }
-    sp.innerHTML = `<p class="muted small"><b>Received</b> = everything added from bills and receipts (entries that were undone are removed). <b>Used</b> = what batches and filling have taken off.
-      <b>Stock in hand = Received + corrections − Used.</b> Open orders are not stock until they are received.</p>
-      <div class="toolbar"><input id="fq" type="search" placeholder="Search item…">
-        <select id="fty"><option value="">All items</option><option value="raw">Raw materials</option><option value="packaging">Packaging</option></select></div>
-      <div id="gapb"></div><div id="fl"></div>`;
+  // ---------- Raw material / Packaging material tabs: per item ordered, used, in hand ----------
+  const tKind = kind => {
+    const isRaw = kind === "raw";
+    if (fl.error) { sp.innerHTML = '<div class="notice err">The ordered / used split is not set up in the database yet. Ask the administrator to run db/stock_flow.sql, then reload.</div>'; return; }
+    sp.innerHTML = `<p class="muted small"><b>Ordered</b> = what your bills added to stock. <b>Used</b> = what batches${isRaw ? "" : " and filling"} have taken off.
+      <b>In hand = Ordered − Used ± opening stock / corrections.</b> Open purchase orders are not stock until received.</p>
+      <div class="toolbar"><input id="fq" type="search" placeholder="Search ${isRaw ? "raw material" : "packaging"}…">${isRaw ? "" :
+        `<select id="fty"><option value="">All packaging</option>${Object.values(PACK).map(t => `<option ${t === FLT ? "selected" : ""}>${t}</option>`).join("")}</select>`}</div>
+      <div id="gapb"></div><div class="stats" id="fs"></div><div id="fl"></div>`;
     drawGaps($("#gapb", sp));
+    if (!isRaw) $("#fty", sp).onchange = () => { FLT = $("#fty", sp).value; draw(); };
     const draw = () => {
-      const term = ($("#fq", sp).value || "").toLowerCase(), ty = $("#fty", sp).value;
-      const rows = S.filter(r => (!term || r.name.toLowerCase().includes(term)) && (!ty || (ty === "raw" ? r.category !== "packaging" : r.category === "packaging")))
-        .map(r => ({ ...r, ...(FL[r.raw_material_id] || {}), on_hand: r.on_hand, on_order: r.on_order }));
+      const term = ($("#fq", sp).value || "").toLowerCase(), ty = isRaw ? "" : ($("#fty", sp).value || "");
+      const rows = S.filter(r => (r.category === "packaging") !== isRaw && (!term || r.name.toLowerCase().includes(term)) && (!ty || TY(r) === ty))
+        .map(r => { const f = FL[r.raw_material_id] || {}, rt = canB ? rateU(r) : null, rec = Number(f.received_total) || 0, used = Number(f.used_total) || 0, oh = Number(r.on_hand) || 0;
+          return { ...r, ...f, on_hand: r.on_hand, on_order: r.on_order, rt, recV: rt != null ? rec * rt : 0, usedV: rt != null ? used * rt : 0, ohV: rt != null ? oh * rt : 0 }; });
+      if (canB) { const t = rows.reduce((a, r) => ({ rec: a.rec + r.recV, used: a.used + r.usedV, oh: a.oh + r.ohV }), { rec: 0, used: 0, oh: 0 });
+        $("#fs", sp).innerHTML = `<div class="stat"><div class="stat-l">Ordered from bills (value)</div><div class="stat-v">${INR(t.rec)}</div></div>
+          <div class="stat"><div class="stat-l">Used (value)</div><div class="stat-v">${INR(t.used)}</div></div>
+          <div class="stat good"><div class="stat-l">In hand now (value)</div><div class="stat-v">${INR(t.oh)}</div><div class="stat-s">${rows.length} item${rows.length === 1 ? "" : "s"} shown · latest bill rate, or your estimate</div></div>`; }
       $("#fl", sp).innerHTML = table([
-        { h: "Item", html: r => `<b>${esc(r.name)}</b><br><small class="muted">${esc(TY(r))}</small>` },
-        { h: "Ordered on purchase orders", v: r => Number(r.po_ordered) ? fmt(r.po_ordered, r.unit) : "–" },
-        { h: "Received (bills & receipts)", v: r => fmt(r.received_total, r.unit) },
-        { h: "Used in batches & filling", v: r => Number(r.used_total) ? "− " + fmt(r.used_total, r.unit) : "–" },
-        { h: "Corrections / stock-take", html: r => { const a = Number(r.adjust_total) || 0; return a ? `<span class="${a < 0 ? "dev" : ""}">${a > 0 ? "+" : "−"} ${fmt(Math.abs(a), r.unit)}</span>` : "–"; } },
-        { h: "Stock in hand now", html: r => `<b class="${Number(r.on_hand) <= 0 ? "dev" : ""}">${fmt(r.on_hand, r.unit)}</b>` },
-        { h: "Still on order", v: r => r.on_order > 0 ? fmt(r.on_order, r.unit) : "–" },
-        { h: "Last received", v: r => r.last_received ? dfmt(r.last_received) : "–" },
+        { h: "Item", html: r => `<b>${esc(r.name)}</b>${isRaw ? "" : `<br><small class="muted">${esc(TY(r))}</small>`}` },
+        { h: "Ordered (from bills)", html: r => (Number(r.received_total) ? fmt(r.received_total, r.unit) : "–") + (canB && r.recV ? `<br><small class="muted">${INR(r.recV)}</small>` : "") },
+        { h: "Used", html: r => Number(r.used_total) ? "− " + fmt(r.used_total, r.unit) + (canB && r.usedV ? `<br><small class="muted">${INR(r.usedV)}</small>` : "") : "–" },
+        { h: "Opening stock / corrections", html: r => { const a = Number(r.adjust_total) || 0; return a ? `<span class="${a < 0 ? "dev" : ""}">${a > 0 ? "+" : "−"} ${fmt(Math.abs(a), r.unit)}</span>` : "–"; } },
+        { h: "In hand now", html: r => `<b class="${Number(r.on_hand) <= 0 ? "dev" : ""}">${fmt(r.on_hand, r.unit)}</b>` },
+        ...(canB ? [{ h: "Value in hand (approx.)", html: r => r.rt == null ? '<small class="dev">no rate yet</small>' : `<b>${INR(r.ohV)}</b>` }] : []),
+        { h: "Open order", v: r => r.on_order > 0 ? fmt(r.on_order, r.unit) : "–" },
+        { h: "Status", html: r => Number(r.on_hand) < 0 ? '<span class="dev">⚠ Negative – check entries</span>' : Number(r.on_hand) === 0 ? '<span class="dev">✖ Out of stock</span>'
+            : isLow(r) ? `<span class="dev">⚠ Low – ${why(r)}</span>` : '<span class="okc">✔ OK</span>' },
         { h: "", html: r => `<button class="btn ghost sm hi" data-id="${r.raw_material_id}">History</button>${isAdmin ? ` <button class="btn ghost sm ct" data-id="${r.raw_material_id}">Count stock</button>` : ""}` },
-      ], rows, { empty: "No items." });
+      ], rows, { empty: isRaw ? "No raw materials." : "No packaging items." });
       $$(".hi", sp).forEach(b => b.onclick = () => openHist(S.find(x => x.raw_material_id === b.dataset.id)));
       $$(".ct", sp).forEach(b => b.onclick = () => openCount(S.find(x => x.raw_material_id === b.dataset.id)));
     };
-    draw(); $("#fq", sp).oninput = draw; $("#fty", sp).onchange = draw;
+    draw(); $("#fq", sp).oninput = draw;
   };
 
   // ---------- Reorder tab ----------
@@ -796,5 +808,5 @@ export async function stockPage(el) {
     catch (e) { sp.innerHTML = `<div class="notice err">Could not load: ${esc(e.message || String(e))}</div>`; }
   };
 
-  ({ stock: tStock, flow: tFlow, reorder: tReorder, orders: tOrders, bills: tBills, capacity: tCap, products: () => tLab("products"), budget: () => tLab("budget"), pricing: tPrice }[TAB] || tStock)();
+  ({ stock: tStock, rawmat: () => tKind("raw"), pack: () => tKind("pack"), reorder: tReorder, orders: tOrders, bills: tBills, capacity: tCap, products: () => tLab("products"), budget: () => tLab("budget"), pricing: tPrice }[TAB] || tStock)();
 }

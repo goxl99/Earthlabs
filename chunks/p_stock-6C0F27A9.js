@@ -169,7 +169,15 @@ export async function stockPage(el) {
     sp.innerHTML = `
     <div class="toolbar"><input id="q" type="search" placeholder="Search item…">
       <select id="ty"><option value="">All items</option><option value="raw">Raw materials</option><option value="packaging">Packaging</option></select>
-      ${canOrder ? '<button class="btn" id="addb">＋ Add stock</button>' : ""}</div>
+      ${canOrder ? '<button class="btn" id="addb">＋ Add stock</button>' : ""}${isAdmin ? ' <button class="btn ghost" id="nib">＋ New item</button>' : ""}</div>
+    ${isAdmin ? `<div class="card hide" id="nic"><h3>New item (raw material or packaging)</h3>
+      <form id="nif" class="form-grid">
+        <label>Item name<input name="name" required></label>
+        <label>Type<select name="type" id="nity"><option value="raw">Raw material</option>${Object.entries(PACK).map(([k, v]) => `<option value="${k}">${v}</option>`).join("")}</select></label>
+        <label>Unit<select name="unit" id="niun"><option>kg</option><option>g</option><option>L</option><option>mL</option></select></label>
+        <label>Opening stock in hand (optional)<input name="qty" type="number" step="any" min="0"></label>
+        <div><button class="btn" id="nisb">Save item</button> <button type="button" class="btn ghost" id="nic2">Cancel</button></div>
+      </form></div>` : ""}
     ${canOrder ? `<div class="card hide" id="addc"><h3>Add stock</h3>
       <form id="sf" class="form-grid">
         <label>Raw material<select name="raw_material_id" id="rmsel" required><option value="">Select…</option>
@@ -315,6 +323,23 @@ export async function stockPage(el) {
       if (await run(sb.from("app_settings").upsert([{ key: "rm_cover_batches", value: String(f.rm_cover_batches) },
         { key: "rm_ref_batch_l", value: String(f.rm_ref_batch_l) }]), "Rule saved")) reload();
     };
+    if (isAdmin) {
+      $("#nib").onclick = () => $("#nic").classList.toggle("hide");
+      $("#nic2").onclick = () => $("#nic").classList.add("hide");
+      $("#nity").onchange = () => { $("#niun").innerHTML = ($("#nity").value === "raw" ? ["kg", "g", "L", "mL"] : ["pcs"]).map(u => `<option>${u}</option>`).join(""); };
+      $("#nif").onsubmit = async e => {
+        e.preventDefault();
+        const f = Object.fromEntries(new FormData(e.target)), nm = (f.name || "").trim(), q = Number(f.qty) || 0;
+        if (!nm) return toast("Enter the item name", "err");
+        $("#nisb").disabled = true;
+        const { data: ins, error } = await sb.from("raw_materials").insert({ name: nm, unit: f.unit,
+          ...(f.type === "raw" ? { category: "raw", pack_type: null } : { category: "packaging", pack_type: f.type }) }).select().single();
+        if (error) { $("#nisb").disabled = false; return toast(error.message, "err"); }
+        if (q > 0) await run(sb.from("raw_material_stock").insert({ raw_material_id: ins.id, movement: "receipt", qty: q, note: "Opening stock" }), "Item and opening stock saved");
+        else toast("Item added");
+        $("#nisb").disabled = false; reload();
+      };
+    }
     if (!canOrder) return;
     $("#addb").onclick = () => $("#addc").classList.toggle("hide");
     $("#sfc").onclick = () => $("#addc").classList.add("hide");

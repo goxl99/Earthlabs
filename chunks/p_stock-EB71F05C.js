@@ -273,20 +273,37 @@ export async function stockPage(el) {
         ${neg ? `<div class="stat bad"><div class="stat-l">Items below zero</div><div class="stat-v">${neg}</div><div class="stat-s">Stock not recorded. Add the bills or correct the entries.</div></div>` : ""}`;
     }
     {
-      // Stock in hand grouped by type (raw material, bottle, sachet, box, carrier box, pack, other), at latest purchase rate
+      // Stock in hand grouped by type: what the bills ordered, what was used, opening stock / corrections, and what is left (with approximate value).
+      // Ordered and in-hand are valued at the same rate (latest bill rate, or your estimate where there is no bill yet), so the two always agree.
+      const hasFlow = !fl.error;
+      const KU = { kg: 1, g: 0.001, L: 1, mL: 0.001, pcs: 1 };
+      const rateU = r => { const v = VAL[r.raw_material_id];
+        if (v?.rate) { const x = KU[v.rate_unit], y = KU[r.unit]; if (x && y) return Number(v.rate) / (x / y); }
+        const e = byId[r.raw_material_id]?.est_rate; return e != null ? Number(e) : null; };
       const G = {}, order = ["Raw material", ...Object.values(PACK)];
-      S.filter(r => Number(r.on_hand) > 0).forEach(r => {
-        const k = TY(r), g = G[k] || (G[k] = { n: 0, q: 0, v: 0 }), q = Number(r.on_hand);
-        g.n++; g.v += Number(VAL[r.raw_material_id]?.value) || 0;
-        g.q += k === "Raw material" ? (SMALL(r.unit) ? q / 1000 : q) : q;
+      S.forEach(r => {
+        const f = FL[r.raw_material_id] || {}, rec = Number(f.received_total) || 0, used = Number(f.used_total) || 0, adj = Number(f.adjust_total) || 0, oh = Number(r.on_hand) || 0;
+        if (!rec && !used && !adj && !oh) return;
+        const k = TY(r), g = G[k] || (G[k] = { n: 0, rec: 0, used: 0, adj: 0, oh: 0, recV: 0, ohV: 0, noRate: 0 });
+        const sc = k === "Raw material" && SMALL(r.unit) ? 1 / 1000 : 1, rt = canB ? rateU(r) : null;
+        if (oh > 0) g.n++;
+        g.rec += rec * sc; g.used += used * sc; g.adj += adj * sc; g.oh += oh * sc;
+        if (rt != null) { g.recV += rec * rt; g.ohV += oh * rt; } else if (canB && (oh || rec)) g.noRate++;
       });
       const rows = order.filter(k => G[k]).map(k => ({ t: k, ...G[k] }));
-      const tot = rows.reduce((a, r) => ({ n: a.n + r.n, v: a.v + r.v }), { n: 0, v: 0 });
+      const tot = rows.reduce((a, r) => ({ n: a.n + r.n, v: a.v + r.ohV, rv: a.rv + r.recV }), { n: 0, v: 0, rv: 0 });
+      const qf = (t, v) => t === "Raw material" ? `${num(v, 2)} kg / L` : `${num(v, 0)} pcs`;
       $("#hb").innerHTML = table([
-        { h: "Type", html: r => `<b>${esc(r.t)}</b>` }, { h: "Items in stock", v: r => r.n },
-        { h: "Quantity in hand", v: r => r.t === "Raw material" ? `${num(r.q, 2)} kg / L` : `${num(r.q, 0)} pcs` },
-        ...(canB ? [{ h: "Value at plant (latest purchase rate)", html: r => INR(r.v) }] : []),
-      ], rows, { empty: "Nothing in stock yet." }) + (canB && rows.length ? `<p class="muted small">Total stock in hand: <b>${tot.n}</b> items${canB ? ` · <b>${INR(tot.v)}</b>` : ""}. Raw material litres and kg are added together (1 kg = 1 L, as in the formulations).</p>` : "");
+        { h: "Type", html: r => `<b>${esc(r.t)}</b>` },
+        ...(hasFlow ? [
+          { h: "Ordered (from bills)", html: r => `${qf(r.t, r.rec)}${canB && r.recV ? `<br><small class="muted">${INR(r.recV)}</small>` : ""}` },
+          { h: "Used in batches & filling", v: r => r.used ? "− " + qf(r.t, r.used) : "–" },
+          { h: "Opening stock / corrections", html: r => r.adj ? `<span class="${r.adj < 0 ? "dev" : ""}">${r.adj > 0 ? "+" : "−"} ${qf(r.t, Math.abs(r.adj))}</span>` : "–" },
+        ] : []),
+        { h: "Stock in hand now", html: r => `<b class="${r.oh < 0 ? "dev" : ""}">${qf(r.t, r.oh)}</b><br><small class="muted">${r.n} item${r.n === 1 ? "" : "s"} in stock</small>` },
+        ...(canB ? [{ h: "Value in hand (approx.)", html: r => `<b>${INR(r.ohV)}</b>${r.noRate ? `<br><small class="dev">${r.noRate} item(s) have no rate yet</small>` : ""}` }] : []),
+      ], rows, { empty: "Nothing in stock yet." }) + (canB && rows.length ? `<p class="muted small">Total stock in hand: <b>${tot.n}</b> items · <b>${INR(tot.v)}</b>${hasFlow ? ` (from <b>${INR(tot.rv)}</b> ordered on bills)` : ""}.
+        <b>In hand = Ordered − Used ± Opening stock / corrections.</b> Values use the latest bill rate, or your estimate where there is no bill yet. Raw material litres and kg are added together (1 kg = 1 L, as in the formulations). Finished goods that are delivered do not change this: raw material and packaging are used up when a batch is made and when it is filled.</p>` : "");
     }
     const drawLevels = () => {
       const term = ($("#q").value || "").toLowerCase(), ty = $("#ty").value;

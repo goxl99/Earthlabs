@@ -195,9 +195,11 @@ export async function stockPage(el) {
     if (canB) {
       const val = r => Number(VAL[r.raw_material_id]?.value) || 0, rawV = S.filter(r => r.category !== "packaging").reduce((t, r) => t + val(r), 0), pkV = S.filter(r => r.category === "packaging").reduce((t, r) => t + val(r), 0);
       const noRate = S.filter(r => Number(r.on_hand) > 0 && (VAL[r.raw_material_id]?.no_rate ?? true)).length, neg = S.filter(r => Number(r.on_hand) < 0).length;
+      const inHandRm = S.filter(r => r.category !== "packaging" && Number(r.on_hand) > 0).length, inHandPk = S.filter(r => r.category === "packaging" && Number(r.on_hand) > 0).length;
       $("#tv").innerHTML = `<div class="stat good"><div class="stat-l">Raw material at site (value)</div><div class="stat-v">${INR(rawV)}</div><div class="stat-s">Quantity on hand × latest purchase rate</div></div>
         <div class="stat"><div class="stat-l">Packaging at site (value)</div><div class="stat-v">${INR(pkV)}</div></div>
         <div class="stat"><div class="stat-l">Total stock value</div><div class="stat-v">${INR(rawV + pkV)}</div>${noRate ? `<div class="stat-s">${noRate} item(s) in stock have no purchase rate yet</div>` : ""}</div>
+        <div class="stat"><div class="stat-l">Stock in hand (items)</div><div class="stat-v">${inHandRm + inHandPk}</div><div class="stat-s">${inHandRm} raw material${inHandRm === 1 ? "" : "s"} · ${inHandPk} packaging item${inHandPk === 1 ? "" : "s"} with stock on hand</div></div>
         ${neg ? `<div class="stat bad"><div class="stat-l">Items below zero</div><div class="stat-v">${neg}</div><div class="stat-s">Stock not recorded. Add the bills or correct the entries.</div></div>` : ""}`;
     }
     const drawLevels = () => {

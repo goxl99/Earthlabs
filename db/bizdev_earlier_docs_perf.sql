@@ -1,0 +1,6 @@
+-- Applied to the project as migration "bizdev_earlier_docs_perf".
+-- 1. Business development labels: meals, gifts, travel, samples (+ expenses.prospect, set_expense_prospect, save_expense accepts the new labels)
+-- 2. earlier_sales keeps file_path, lines, doc_no; save_earlier_sale saves them and the customer's GSTIN / address
+-- 3. Speed: indexes on sales_orders(customer_id), tax_invoices(order_id), challans(order_id), challan_lines(batch_id), customer_payments(paid_on),
+--    earlier_sales(customer_id, sale_date), raw_material_stock(invoice_id, created_at), expenses(supplier_invoice_id), bank_txns(status);
+--    six duplicate indexes dropped. Edge function read-earlier-sale deployed (reads an invoice / PO photo or PDF).
